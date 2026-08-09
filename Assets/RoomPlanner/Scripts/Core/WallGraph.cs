@@ -44,8 +44,27 @@ namespace RoomPlanner.Walls
         public WallOffsetMode Offset = WallOffsetMode.Outer;
         public WallJoin Join = WallJoin.Miter;
 
-        /// <summary>Reference point on the "inside" — decides which way thickness grows.</summary>
-        public Vector3 Interior;
+        /// <summary>
+        /// Which side of the centerline the thickness grows on: +1 = along the A→B right
+        /// normal, -1 = the other way.
+        ///
+        /// Deliberately a SIGN, not an "interior point": a world-space reference is re-evaluated
+        /// on every rebuild, so an L-shaped run would pick opposite sides for its two legs, and
+        /// dragging a node could silently turn a wall inside out. The side is decided once, when
+        /// the wall is drawn (<see cref="SetSideFromInterior"/>), and then stays put.
+        /// </summary>
+        public float SideSign = 1f;
+
+        /// <summary>Decide the side once, from where the user stood when drawing this wall.</summary>
+        public void SetSideFromInterior(Vector3 interior)
+        {
+            Vector3 d = B.Position - A.Position;
+            d.y = 0f;
+            if (d.sqrMagnitude < 1e-8f) return;
+            d.Normalize();
+            var rightNormal = new Vector3(d.z, 0f, -d.x);
+            SideSign = Vector3.Dot(rightNormal, Midpoint - interior) >= 0f ? 1f : -1f;
+        }
 
         internal WallSegment(int id, WallNode a, WallNode b)
         {
@@ -80,7 +99,7 @@ namespace RoomPlanner.Walls
             BaseHeight = s.BaseHeight;
             Offset = s.Offset;
             Join = s.Join;
-            Interior = s.Interior;
+            SideSign = s.SideSign;
         }
 
         public override string ToString() => $"Seg#{Id}({A.Id}->{B.Id}) len={Length:0.##}";
