@@ -2,6 +2,7 @@ using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Measure;
 using RoomPlanner.Tools;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.Walls
 {
@@ -251,11 +252,59 @@ namespace RoomPlanner.Walls
                 }
             }
 
+            // Floor outlines are snap targets too (step C5): drawing walls along the slab you
+            // just laid down is the main workflow, and the outline is exactly the room boundary.
+            // Index stays -1 for these — a floor edge is not a wall to split.
+            AddFloorSnapCandidates(p, ref finder, corners, edges);
+
             if (!finder.Found) return false;
             result = finder.Point;
             // only an EDGE hit gets split into a T-junction; a corner is already a shared node
             if (finder.Kind == SnapKind.Edge && finder.Index >= 0) edgeSegment = graph.Segments[finder.Index];
             return true;
+        }
+
+        // Floors are found through the scene registry rather than a serialized reference, so the
+        // wall tool needs no wiring to the floor tool. GetComponent is cached: this runs per
+        // frame while the cursor moves (coding rule 4.1).
+        private readonly System.Collections.Generic.List<Floors.Floor> _floorCache = new();
+        private int _floorCacheStamp = -1;
+
+        /// <summary>
+        /// Offer the corners and edges of every visible floor outline as snap candidates.
+        /// Public so the behaviour can be tested directly — it is the point of Phase C.
+        /// </summary>
+        public void AddFloorSnapCandidates(Vector3 p, ref SnapFinder finder, bool corners, bool edges)
+        {
+            var model = SceneModel.Instance;
+            if (model == null || (!corners && !edges)) return;
+
+            if (_floorCacheStamp != model.Items.Count) RefreshFloorCache(model);
+
+            for (int f = 0; f < _floorCache.Count; f++)
+            {
+                var slab = _floorCache[f];
+                if (slab == null || !slab.gameObject.activeSelf) continue;   // deleted slabs don't magnet
+                var outline = slab.Outline;
+                for (int i = 0; i < outline.Count; i++)
+                {
+                    if (corners) finder.TryCorner(p, outline[i]);
+                    if (edges) finder.TryEdge(p, outline[i], outline[(i + 1) % outline.Count]);
+                }
+            }
+        }
+
+        private void RefreshFloorCache(SceneModel model)
+        {
+            _floorCacheStamp = model.Items.Count;
+            _floorCache.Clear();
+            for (int i = 0; i < model.Items.Count; i++)
+            {
+                var item = model.Items[i];
+                if (item == null || !item.IsAlive || item.Kind != SelectableKind.Floor) continue;
+                var slab = item.Transform.GetComponent<Floors.Floor>();
+                if (slab != null) _floorCache.Add(slab);
+            }
         }
 
         /// <summary>A node is only a snap target while at least one wall on it is visible.</summary>

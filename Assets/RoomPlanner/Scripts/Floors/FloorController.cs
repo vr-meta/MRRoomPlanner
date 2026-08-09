@@ -8,9 +8,13 @@ using RoomPlanner.Editing;
 namespace RoomPlanner.Floors
 {
     /// <summary>
-    /// Floor tool: place a rectangular slab by two corners on the current Level, with thickness
-    /// (Thk). The floorplan image and its placement (scale/rotation/offset) belong to the
-    /// Blueprint tool — this controller only reads them when (re)building slabs.
+    /// Floor tool: draw a CLOSED OUTLINE on the current Level — trigger adds a corner, clicking
+    /// the first corner again (or B, once there are three) closes the ring and builds the slab
+    /// (docs/design/17-floor-outline.md). Real flats are rarely rectangular, and the outline is
+    /// what walls will snap to.
+    ///
+    /// The floorplan image and its placement (scale/rotation/offset) belong to the Blueprint
+    /// tool — this controller only reads them when (re)building slabs.
     /// </summary>
     public class FloorController : MonoBehaviour, ITool
     {
@@ -23,8 +27,14 @@ namespace RoomPlanner.Floors
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private BlueprintController blueprint;   // plan placement source
 
+        /// <summary>Click this close to the first point to close the outline (metres).</summary>
+        [SerializeField] private float closeRadius = 0.15f;
+
+        /// <summary>Default thickness for NEW slabs. Its own — a slab is not a wall (step C4).</summary>
+        [SerializeField] private float defaultThickness = 0.2f;
+
         private readonly List<Floor> _floors = new();
-        private Vector3? _cornerA;
+        private readonly List<Vector3> _pts = new();      // outline being drawn
         private float _planScaleApplied = float.NaN;
         private float _planRotApplied, _planOffXApplied, _planOffZApplied;
         private SettingsSchema _settings;
@@ -40,8 +50,8 @@ namespace RoomPlanner.Floors
                     () => $"{manager.Level * 100f:0} cm",
                     () => manager.AdjustLevel(-0.1f), () => manager.AdjustLevel(0.1f))
                 .Stepper("thk", "Thickness",
-                    () => $"{manager.WallThickness * 100f:0} cm",
-                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f));
+                    () => $"{defaultThickness * 100f:0} cm",
+                    () => AdjustDefaultThickness(-0.02f), () => AdjustDefaultThickness(0.02f));
             return _settings;
         }
 
@@ -49,7 +59,7 @@ namespace RoomPlanner.Floors
 
         public void OnDeactivate()
         {
-            _cornerA = null;
+            CancelOutline();
             if (reticle != null) reticle.gameObject.SetActive(false);
             if (previewLine != null) previewLine.enabled = false;
         }
@@ -76,33 +86,91 @@ namespace RoomPlanner.Floors
 
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = cursor; }
 
-            if (previewLine != null)
-            {
-                if (_cornerA.HasValue) DrawRect(_cornerA.Value, cursor, level);
-                else previewLine.enabled = false;
-            }
+            // Hovering the first point closes the ring — show that by looping the preview.
+            bool canClose = _pts.Count >= 3 &&
+                            Vector3.Distance(cursor, _pts[0]) <= closeRadius;
+            if (canClose && reticle != null) reticle.position = _pts[0];
+
+            DrawOutlinePreview(cursor, canClose);
 
             if (input.ConfirmPressed())
             {
-                if (!_cornerA.HasValue) _cornerA = cursor;
-                else { CreateFloor(_cornerA.Value, cursor, level); _cornerA = null; }
+                if (canClose) CloseOutline(level);
+                else _pts.Add(cursor);
             }
 
             if (input.ClearPressed())
             {
-                if (_cornerA.HasValue) _cornerA = null;   // cancel current rectangle
-                // No blind LIFO delete (UX v2 P0.3): deleting a slab is the Select tool's job;
-                // B on empty is the Esc gesture.
+                // B closes a ring that already has enough points, otherwise it cancels;
+                // on an empty outline it is the Esc gesture (UX v2 P0.3).
+                if (_pts.Count >= 3) CloseOutline(level);
+                else if (_pts.Count > 0) CancelOutline();
                 else if (manager != null) manager.ActivateTool("select");
             }
         }
 
-        private void CreateFloor(Vector3 a, Vector3 b, float level)
+        private void CloseOutline(float level)
+        {
+            if (_pts.Count >= 3)
+            {
+                // Drawn entirely inside an existing slab? Then it is a hole in that slab —
+                // a stairwell, not a second floor floating inside the first. No extra mode or
+                // button: it is what the gesture already means.
+                var host = FindEnclosingSlab(_pts, level);
+                if (host == null || !host.AddHole(_pts)) CreateFloor(_pts, level);
+            }
+            CancelOutline();
+        }
+
+        /// <summary>The visible slab on this level that fully contains the drawn ring, if any.</summary>
+        private Floor FindEnclosingSlab(List<Vector3> ring, float level)
+        {
+            foreach (var f in _floors)
+            {
+                if (f == null || !f.gameObject.activeSelf) continue;
+                if (Mathf.Abs(f.Level - level) > 1e-3f) continue;      // a different storey
+                bool allInside = true;
+                foreach (var p in ring)
+                    if (!Polygon.Contains(f.Outline, p)) { allInside = false; break; }
+                if (allInside) return f;
+            }
+            return null;
+        }
+
+        private void CancelOutline()
+        {
+            _pts.Clear();
+            if (previewLine != null) previewLine.enabled = false;
+        }
+
+        /// <summary>Polyline through the placed points plus a rubber band to the cursor.</summary>
+        private void DrawOutlinePreview(Vector3 cursor, bool closing)
+        {
+            if (previewLine == null) return;
+            if (_pts.Count == 0) { previewLine.enabled = false; return; }
+
+            previewLine.enabled = true;
+            previewLine.loop = closing;
+            previewLine.positionCount = _pts.Count + (closing ? 0 : 1);
+            for (int i = 0; i < _pts.Count; i++) previewLine.SetPosition(i, _pts[i]);
+            if (!closing) previewLine.SetPosition(_pts.Count, cursor);
+        }
+
+        private void CreateFloor(List<Vector3> outline, float level)
         {
             var f = Instantiate(floorPrefab, transform);
+            f.BuildOutline(outline, level, Thickness(), Scale(), Rotation(), OffX(), OffZ());
+
+            // A crossed outline builds nothing; do not leave an invisible, unpickable slab
+            // registered in the scene (coding rule 2.4 — hidden is not alive).
+            if (f.Outline.Count < 3 || f.Area <= 0f)
+            {
+                Destroy(f.gameObject);
+                return;
+            }
+
             _floors.Add(f);
             if (sceneModel != null) sceneModel.Register(f.GetComponent<Selectable>());
-            f.Build(a, b, level, Thickness(), Scale(), Rotation(), OffX(), OffZ());
         }
 
         /// <summary>Force a plan re-apply on all slabs (called by the Blueprint tool after
@@ -121,21 +189,13 @@ namespace RoomPlanner.Floors
             if (s == _planScaleApplied && r == _planRotApplied && ox == _planOffXApplied && oz == _planOffZApplied) return;
             _planScaleApplied = s; _planRotApplied = r; _planOffXApplied = ox; _planOffZApplied = oz;
             foreach (var f in _floors)
-                if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), s, r, ox, oz);
+                if (f != null) f.SetPlanPlacement(s, r, ox, oz);   // keeps the outline
         }
 
-        private void DrawRect(Vector3 a, Vector3 b, float level)
-        {
-            previewLine.enabled = true;
-            previewLine.loop = true;
-            previewLine.positionCount = 4;
-            previewLine.SetPosition(0, new Vector3(a.x, level, a.z));
-            previewLine.SetPosition(1, new Vector3(b.x, level, a.z));
-            previewLine.SetPosition(2, new Vector3(b.x, level, b.z));
-            previewLine.SetPosition(3, new Vector3(a.x, level, b.z));
-        }
+        private void AdjustDefaultThickness(float delta) =>
+            defaultThickness = Mathf.Clamp(defaultThickness + delta, 0.02f, 1f);
 
-        private float Thickness() => manager != null ? manager.WallThickness : 0.2f;
+        private float Thickness() => defaultThickness;
         private float Scale() => blueprint != null ? blueprint.PlanScale : 5f;
         private float Rotation() => blueprint != null ? blueprint.PlanRotationDeg : 0f;
         private float OffX() => blueprint != null ? blueprint.PlanOffsetX : 0f;

@@ -38,3 +38,6 @@ ci-*.log
 /Build/
 
 ci-shots/
+
+# other agents work trees (embedded repos)
+.claude/worktrees/

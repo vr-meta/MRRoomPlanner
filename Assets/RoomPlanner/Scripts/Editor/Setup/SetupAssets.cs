@@ -31,9 +31,15 @@ namespace RoomPlanner.EditorTools
             Texture2D badgeTex = CreateRoundedBadgeTexture();
             ctx.BadgeMat = CreateBadgeMat("Measure_Badge", new Color(0.45f, 0.32f, 0.82f), badgeTex);
 
-            ctx.WallMat = CreateBadgeMat("Wall_Surface", new Color(0.60f, 0.75f, 1f, 0.45f), null);
+            // Concrete: one seamless procedural texture, applied with METRIC UVs
+            // (design/04-surfaces-materials.md), so the grain is the same size on a 1 m and a
+            // 10 m wall. Generated rather than imported — no binary assets in the repo.
+            Texture2D concreteTex = CreateConcreteTexture();
+            ctx.WallMat = CreateSurfaceMat("Wall_Surface", new Color(0.82f, 0.82f, 0.80f), concreteTex);
             ctx.WallEdgeMat = CreateMat("Wall_Edge", new Color(0.10f, 0.16f, 0.32f));
-            ctx.FloorMat = CreateFloorMat("Floor_Top", Color.white);
+            // The floor TOP is the blueprint surface: concrete is only its default look, and
+            // BlueprintController replaces the texture as soon as a plan is loaded.
+            ctx.FloorMat = CreateFloorMat("Floor_Top", new Color(0.78f, 0.78f, 0.76f), concreteTex);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
@@ -140,12 +146,107 @@ namespace RoomPlanner.EditorTools
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
-        private static Material CreateFloorMat(string name, Color color)
+        private static Material CreateFloorMat(string name, Color color, Texture2D tex = null)
         {
             var mat = new Material(UnlitShader());
             SetColor(mat, color);
+            ApplyTexture(mat, tex);
             if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>Opaque textured surface (walls). UVs are metric, so tiling stays at 1.</summary>
+        private static Material CreateSurfaceMat(string name, Color tint, Texture2D tex)
+        {
+            var mat = new Material(UnlitShader());
+            SetColor(mat, tint);
+            ApplyTexture(mat, tex);
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        private static void ApplyTexture(Material mat, Texture2D tex)
+        {
+            if (tex == null) return;
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
+            mat.mainTexture = tex;
+            mat.mainTextureScale = Vector2.one;   // scale lives in the metric UVs, not here
+        }
+
+        /// <summary>
+        /// Seamless concrete: a few octaves of PERIODIC value noise plus fine speckle. Periodic
+        /// means the lattice wraps, so the tile repeats without a visible seam — which matters
+        /// because metric UVs repeat it every metre across a whole flat.
+        /// Deterministic (hash, not Random) so re-running setup reproduces the same asset.
+        /// </summary>
+        private static Texture2D CreateConcreteTexture()
+        {
+            string path = $"{MatDir}/Surface_ConcreteTex.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int S = 256;
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, true)
+            {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                anisoLevel = 4,
+                name = "Surface_ConcreteTex",
+            };
+
+            var px = new Color[S * S];
+            for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float n = 0f, amp = 0.5f;
+                for (int lattice = 4; lattice <= 32; lattice *= 2)
+                {
+                    n += PeriodicNoise(x / (float)S * lattice, y / (float)S * lattice, lattice) * amp;
+                    amp *= 0.5f;
+                }
+                // fine grit: per-texel hash, kept subtle so it reads as concrete, not TV snow
+                float grit = (Hash(x * 73856093 ^ y * 19349663) - 0.5f) * 0.10f;
+
+                float shade = Mathf.Clamp01(0.72f + (n - 0.5f) * 0.35f + grit);
+                px[y * S + x] = new Color(shade, shade, shade * 0.99f, 1f);
+            }
+            tex.SetPixels(px);
+            tex.Apply();
+
+            AssetDatabase.CreateAsset(tex, path);
+            return tex;
+        }
+
+        /// <summary>Value noise on a lattice that wraps at `period` — hence tileable.</summary>
+        private static float PeriodicNoise(float x, float y, int period)
+        {
+            int x0 = Mathf.FloorToInt(x), y0 = Mathf.FloorToInt(y);
+            float fx = x - x0, fy = y - y0;
+            fx = fx * fx * (3f - 2f * fx);            // smoothstep
+            fy = fy * fy * (3f - 2f * fy);
+
+            float v00 = Lattice(x0, y0, period), v10 = Lattice(x0 + 1, y0, period);
+            float v01 = Lattice(x0, y0 + 1, period), v11 = Lattice(x0 + 1, y0 + 1, period);
+            return Mathf.Lerp(Mathf.Lerp(v00, v10, fx), Mathf.Lerp(v01, v11, fx), fy);
+        }
+
+        private static float Lattice(int x, int y, int period)
+        {
+            // wrapping the lattice index is what makes the result seamless
+            int wx = ((x % period) + period) % period;
+            int wy = ((y % period) + period) % period;
+            return Hash(wx * 374761393 ^ wy * 668265263 ^ period * 2147483647);
+        }
+
+        /// <summary>Deterministic 0..1 hash — no Random, so the generated asset is stable.</summary>
+        private static float Hash(int n)
+        {
+            unchecked
+            {
+                n = (n << 13) ^ n;
+                int m = (n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff;
+                return m / (float)0x7fffffff;
+            }
         }
 
         private static void SetColor(Material mat, Color color)

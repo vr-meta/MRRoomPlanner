@@ -165,8 +165,9 @@ namespace RoomPlanner.Editing
                 case SelectableKind.Floor:
                     if (_floor != null)
                     {
-                        Vector3 a = _floor.CornerA, b = _floor.CornerB;
-                        return $"{Mathf.Abs(b.x - a.x) * 100f:0} x {Mathf.Abs(b.z - a.z) * 100f:0} cm";
+                        // Area, not the bounding box: slabs are outlines now, and "4 x 5 m" for
+                        // an L-shaped room states a size the room does not have.
+                        return $"{_floor.Area:0.0} m², {_floor.Outline.Count} corners";
                     }
                     return "Floor";
                 default:

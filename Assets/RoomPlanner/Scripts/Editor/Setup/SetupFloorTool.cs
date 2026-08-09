@@ -42,6 +42,8 @@ namespace RoomPlanner.EditorTools
             root.AddComponent<MeshFilter>();
             root.AddComponent<MeshRenderer>().sharedMaterial = mat;
             root.AddComponent<Floor>();
+            root.AddComponent<FloorParameters>();   // per-instance thickness/level (C4)
+            root.AddComponent<FloorHandles>();      // draggable corners (C4)
             root.AddComponent<Selectable>();
 
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.SelectableLayer);   // picked by Select, ignored by surface raycaster
