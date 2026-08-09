@@ -242,6 +242,77 @@ namespace RoomPlanner.Tests
             finally { Object.DestroyImmediate(go); }
         }
 
+        // ---- holes (C6) ----
+
+        [Test]
+        public void AddHole_CutsTheSlab_AndReducesArea()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 4f), 0f, Thick, 5f, 0f, 0f);   // 24
+                var shaft = new List<Vector3> { P(2, 1), P(4, 1), P(4, 3), P(2, 3) };   // 4
+
+                Assert.IsTrue(floor.AddHole(shaft));
+                Assert.AreEqual(1, floor.Holes.Count);
+                Assert.AreEqual(20f, floor.Area, 1e-2f, "the stairwell is not floor area");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void AddHole_RefusesARingThatPokesOutside()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(4f, 0f, 3f), 0f, Thick, 5f, 0f, 0f);
+                var sticksOut = new List<Vector3> { P(3, 1), P(9, 1), P(9, 2), P(3, 2) };
+
+                Assert.IsFalse(floor.AddHole(sticksOut), "a hole through the edge is a notch, not a hole");
+                Assert.AreEqual(0, floor.Holes.Count);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void Holes_SurviveEditsAndMoveWithTheSlab()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 4f), 0f, Thick, 5f, 0f, 0f);
+                floor.AddHole(new List<Vector3> { P(2, 1), P(4, 1), P(4, 3), P(2, 3) });
+
+                floor.SetThickness(0.3f);
+                floor.SetPlanPlacement(3f, 15f, 1f, 1f);
+                Assert.AreEqual(1, floor.Holes.Count, "edits must not silently drop the hole");
+
+                floor.MoveBy(new Vector3(10f, 0f, 0f));
+                Assert.AreEqual(1, floor.Holes.Count);
+                Assert.AreEqual(12f, floor.Holes[0][0].x, 1e-3f, "the hole travels with the slab");
+                Assert.AreEqual(20f, floor.Area, 1e-2f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void RemoveHole_RestoresTheSolidSlab()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 4f), 0f, Thick, 5f, 0f, 0f);
+                floor.AddHole(new List<Vector3> { P(2, 1), P(4, 1), P(4, 3), P(2, 3) });
+
+                floor.RemoveHole(0);
+
+                Assert.AreEqual(0, floor.Holes.Count);
+                Assert.AreEqual(24f, floor.Area, 1e-2f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
         [Test]
         public void Rebuild_KeepsTheOutline()
         {

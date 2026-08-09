@@ -111,8 +111,30 @@ namespace RoomPlanner.Floors
 
         private void CloseOutline(float level)
         {
-            if (_pts.Count >= 3) CreateFloor(_pts, level);
+            if (_pts.Count >= 3)
+            {
+                // Drawn entirely inside an existing slab? Then it is a hole in that slab —
+                // a stairwell, not a second floor floating inside the first. No extra mode or
+                // button: it is what the gesture already means.
+                var host = FindEnclosingSlab(_pts, level);
+                if (host == null || !host.AddHole(_pts)) CreateFloor(_pts, level);
+            }
             CancelOutline();
+        }
+
+        /// <summary>The visible slab on this level that fully contains the drawn ring, if any.</summary>
+        private Floor FindEnclosingSlab(List<Vector3> ring, float level)
+        {
+            foreach (var f in _floors)
+            {
+                if (f == null || !f.gameObject.activeSelf) continue;
+                if (Mathf.Abs(f.Level - level) > 1e-3f) continue;      // a different storey
+                bool allInside = true;
+                foreach (var p in ring)
+                    if (!Polygon.Contains(f.Outline, p)) { allInside = false; break; }
+                if (allInside) return f;
+            }
+            return null;
         }
 
         private void CancelOutline()

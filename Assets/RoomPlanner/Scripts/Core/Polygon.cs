@@ -43,6 +43,14 @@ namespace RoomPlanner.Core
             return res;
         }
 
+        /// <summary>Copy the ring in clockwise order (hole walls face into the hole).</summary>
+        public static List<Vector3> ToClockwise(IReadOnlyList<Vector3> pts)
+        {
+            var res = new List<Vector3>(pts);
+            if (!IsClockwise(pts)) res.Reverse();
+            return res;
+        }
+
         /// <summary>
         /// Drop points that repeat or sit on a straight run — MR controllers produce both, and
         /// a duplicate point makes ear clipping produce degenerate triangles (rule 1.3).
@@ -138,13 +146,151 @@ namespace RoomPlanner.Core
                     clipped = true;
                     break;
                 }
-                // no ear found: the outline is self-intersecting or degenerate — stop rather
-                // than spin, and let the caller see the incomplete result as a refusal
-                if (!clipped) return new List<int>();
+                if (clipped) continue;
+
+                // No ear. A bridged hole leaves zero-area "spikes" at the seam (the same point
+                // appears twice), and those are never ears — drop one without emitting a
+                // triangle so the clipper can make progress.
+                int degenerate = -1;
+                for (int i = 0; i < idx.Count && degenerate < 0; i++)
+                {
+                    Vector3 a = pts[idx[(i + idx.Count - 1) % idx.Count]];
+                    Vector3 b = pts[idx[i]];
+                    Vector3 c = pts[idx[(i + 1) % idx.Count]];
+                    if (Mathf.Abs(Cross2(a, b, c)) <= Eps || Same(a, c)) degenerate = i;
+                }
+                if (degenerate >= 0) { idx.RemoveAt(degenerate); continue; }
+
+                // genuinely unusable (self-intersecting): refuse rather than spin
+                return new List<int>();
             }
 
             if (idx.Count == 3) { tris.Add(idx[0]); tris.Add(idx[1]); tris.Add(idx[2]); }
             return tris;
+        }
+
+        /// <summary>Inside the outline AND outside every hole — the actual solid area.</summary>
+        public static bool ContainsWithHoles(IReadOnlyList<Vector3> outer,
+            IReadOnlyList<IReadOnlyList<Vector3>> holes, Vector3 p)
+        {
+            if (!Contains(outer, p)) return false;
+            if (holes == null) return true;
+            foreach (var h in holes)
+                if (h != null && Contains(h, p)) return false;
+            return true;
+        }
+
+        /// <summary>Area of the outline minus its holes.</summary>
+        public static float AreaWithHoles(IReadOnlyList<Vector3> outer,
+            IReadOnlyList<IReadOnlyList<Vector3>> holes)
+        {
+            float a = Area(outer);
+            if (holes == null) return a;
+            foreach (var h in holes)
+                if (h != null) a -= Area(h);
+            return Mathf.Max(0f, a);
+        }
+
+        /// <summary>
+        /// Triangulate an outline with holes (stairwells, shafts).
+        ///
+        /// Ear clipping cannot see a hole, so each hole is first BRIDGED into the outer ring: a
+        /// seam is cut to a mutually visible outer vertex and traversed both ways, which turns
+        /// the whole thing into one simple polygon that ear clipping does understand. The seam's
+        /// two coincident edges are harmless — they only ever produce zero-area ears, which the
+        /// clipper already skips.
+        ///
+        /// Indices refer to <paramref name="merged"/>, not to the inputs, because bridging
+        /// rewrites the vertex order. Empty result (and an empty merged list) if the shape is
+        /// unusable — same refusal contract as <see cref="Triangulate"/>.
+        /// </summary>
+        public static List<int> TriangulateWithHoles(IReadOnlyList<Vector3> outer,
+            IReadOnlyList<IReadOnlyList<Vector3>> holes, out List<Vector3> merged)
+        {
+            merged = new List<Vector3>();
+            var outerCcw = ToCounterClockwise(Clean(outer));
+            if (outerCcw.Count < 3 || !IsSimple(outerCcw)) return new List<int>();
+
+            var usable = new List<List<Vector3>>();
+            if (holes != null)
+            {
+                foreach (var h in holes)
+                {
+                    var ring = Clean(h);
+                    if (ring.Count < 3 || !IsSimple(ring)) continue;      // ignore junk holes
+                    // holes run the OTHER way round, so the spliced ring stays simple
+                    if (!IsClockwise(ring)) ring.Reverse();
+                    usable.Add(ring);
+                }
+            }
+
+            merged = outerCcw;
+            if (usable.Count == 0) return Triangulate(merged);
+
+            // Bridge the rightmost hole first: its bridge cannot then be blocked by a hole
+            // further right that has not been merged yet.
+            usable.Sort((a, b) => MaxX(b).CompareTo(MaxX(a)));
+
+            foreach (var hole in usable)
+            {
+                if (!BridgeHole(merged, hole, out var spliced)) return new List<int>();
+                merged = spliced;
+            }
+            return Triangulate(merged);
+        }
+
+        private static float MaxX(IReadOnlyList<Vector3> pts)
+        {
+            float m = float.MinValue;
+            foreach (var p in pts) m = Mathf.Max(m, p.x);
+            return m;
+        }
+
+        /// <summary>
+        /// Cut the seam: from the hole's rightmost vertex to the nearest outer vertex it can
+        /// actually see, then walk the hole and come back. Fails (false) if no vertex is
+        /// visible, which means the hole is not properly inside the outline.
+        /// </summary>
+        private static bool BridgeHole(List<Vector3> ring, List<Vector3> hole, out List<Vector3> spliced)
+        {
+            spliced = null;
+
+            int m = 0;
+            for (int i = 1; i < hole.Count; i++) if (hole[i].x > hole[m].x) m = i;
+            Vector3 M = hole[m];
+
+            int best = -1;
+            float bestSqr = float.MaxValue;
+            for (int i = 0; i < ring.Count; i++)
+            {
+                float d = FlatSqrDistance(M, ring[i]);
+                if (d >= bestSqr) continue;
+                if (!SeamIsClear(M, ring[i], ring, hole)) continue;
+                bestSqr = d;
+                best = i;
+            }
+            if (best < 0) return false;
+
+            // outer[0..best] + hole starting at M + M again + outer[best] again + the rest
+            spliced = new List<Vector3>(ring.Count + hole.Count + 2);
+            for (int i = 0; i <= best; i++) spliced.Add(ring[i]);
+            for (int k = 0; k < hole.Count; k++) spliced.Add(hole[(m + k) % hole.Count]);
+            spliced.Add(M);
+            for (int i = best; i < ring.Count; i++) spliced.Add(ring[i]);
+            return true;
+        }
+
+        /// <summary>The seam must not cross any edge of the ring or of the hole itself.</summary>
+        private static bool SeamIsClear(Vector3 a, Vector3 b, List<Vector3> ring, List<Vector3> hole)
+        {
+            for (int i = 0; i < ring.Count; i++)
+                if (SegmentsCross(a, b, ring[i], ring[(i + 1) % ring.Count])) return false;
+            for (int i = 0; i < hole.Count; i++)
+                if (SegmentsCross(a, b, hole[i], hole[(i + 1) % hole.Count])) return false;
+
+            // and it must run through solid material, not across the hole's own interior
+            Vector3 mid = (a + b) * 0.5f;
+            return Contains(ring, mid) && !Contains(hole, mid);
         }
 
         // ---- internals ----
@@ -157,7 +303,12 @@ namespace RoomPlanner.Core
             foreach (int k in idx)
             {
                 if (k == i0 || k == i1 || k == i2) continue;
-                if (PointInTriangle(pts[k], a, b, c)) return false;
+                // Bridging a hole duplicates its seam vertices, so the SAME position appears
+                // under two indices. Testing such a twin "inside" the ear would reject every
+                // candidate and the whole polygon would fail to triangulate.
+                var q = pts[k];
+                if (Same(q, a) || Same(q, b) || Same(q, c)) continue;
+                if (PointInTriangle(q, a, b, c)) return false;
             }
             return true;
         }
@@ -181,6 +332,8 @@ namespace RoomPlanner.Core
             return ((d1 > Eps && d2 < -Eps) || (d1 < -Eps && d2 > Eps)) &&
                    ((d3 > Eps && d4 < -Eps) || (d3 < -Eps && d4 > Eps));
         }
+
+        private static bool Same(Vector3 a, Vector3 b) => FlatSqrDistance(a, b) < 1e-10f;
 
         private static float FlatSqrDistance(Vector3 a, Vector3 b)
         {

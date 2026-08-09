@@ -27,12 +27,16 @@ namespace RoomPlanner.Floors
         public float Level { get; private set; }
 
         private readonly List<Vector3> _outline = new();
+        private readonly List<List<Vector3>> _holes = new();
 
         /// <summary>
         /// The closed outline of the slab, in order, on the top plane. A rectangle is just the
         /// 4-point case (docs/design/17-floor-outline.md).
         /// </summary>
         public IReadOnlyList<Vector3> Outline => _outline;
+
+        /// <summary>Holes cut in the slab — stairwells, shafts (step C6).</summary>
+        public IReadOnlyList<IReadOnlyList<Vector3>> Holes => _holes;
 
         // Cached build parameters so the slab can rebuild itself after edits (move/resize).
         private float _thickness = 0.2f;
@@ -56,9 +60,22 @@ namespace RoomPlanner.Floors
             }
         }
 
+        /// <summary>
+        /// Snapshot of the rings. Every rebuild clears the live lists before refilling them, so
+        /// handing them straight back in would wipe the input mid-flight (coding rule 1.4).
+        /// </summary>
+        private List<Vector3> OutlineCopy() => new(_outline);
+
+        private List<IReadOnlyList<Vector3>> HolesCopy()
+        {
+            var copy = new List<IReadOnlyList<Vector3>>(_holes.Count);
+            foreach (var h in _holes) copy.Add(new List<Vector3>(h));
+            return copy;
+        }
+
         /// <summary>Rebuild from the current outline/level and cached parameters.</summary>
         public void Rebuild() =>
-            BuildOutline(new List<Vector3>(_outline), Level, _thickness,
+            BuildOutline(OutlineCopy(), HolesCopy(), Level, _thickness,
                 _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
 
         /// <summary>Translate the whole slab and rebuild in place.</summary>
@@ -66,7 +83,13 @@ namespace RoomPlanner.Floors
         {
             var moved = new List<Vector3>(_outline.Count);
             foreach (var p in _outline) moved.Add(p + delta);
-            BuildOutline(moved, Level + delta.y, _thickness,
+            var holes = HolesCopy();
+            foreach (var h in holes)
+            {
+                var ring = (List<Vector3>)h;
+                for (int i = 0; i < ring.Count; i++) ring[i] += delta;   // holes travel with the slab
+            }
+            BuildOutline(moved, holes, Level + delta.y, _thickness,
                 _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
         }
 
@@ -76,7 +99,7 @@ namespace RoomPlanner.Floors
         /// </summary>
         public void SetPlanPlacement(float planScale, float planRotationDeg, float planOriginX, float planOriginZ)
         {
-            BuildOutline(new List<Vector3>(_outline), Level, _thickness,
+            BuildOutline(OutlineCopy(), HolesCopy(), Level, _thickness,
                 planScale, planRotationDeg, planOriginX, planOriginZ);
         }
 
@@ -86,10 +109,40 @@ namespace RoomPlanner.Floors
         public void MoveCorner(int index, Vector3 position)
         {
             if (index < 0 || index >= _outline.Count) return;
-            var pts = new List<Vector3>(_outline);
+            var pts = OutlineCopy();
             position.y = Level;
             pts[index] = position;
-            BuildOutline(pts, Level, _thickness, _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
+            BuildOutline(pts, HolesCopy(), Level, _thickness,
+                _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
+        }
+
+        /// <summary>
+        /// Cut a hole in the slab (stairwell, shaft). Returns false when the ring is not usable
+        /// or does not sit fully inside the outline — a hole poking through the edge is not a
+        /// hole, and refusing beats producing a shape nobody can reason about (rule 1.3).
+        /// </summary>
+        public bool AddHole(IReadOnlyList<Vector3> hole)
+        {
+            var ring = Polygon.Clean(hole);
+            if (ring.Count < 3 || !Polygon.IsSimple(ring)) return false;
+            foreach (var p in ring)
+                if (!Polygon.Contains(_outline, p)) return false;
+
+            var holes = HolesCopy();
+            holes.Add(ring);
+            BuildOutline(OutlineCopy(), holes, Level, _thickness,
+                _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
+            return _holes.Count == holes.Count;      // false if the bridge could not be cut
+        }
+
+        /// <summary>Remove a hole by index (undo of AddHole).</summary>
+        public void RemoveHole(int index)
+        {
+            if (index < 0 || index >= _holes.Count) return;
+            var holes = HolesCopy();
+            holes.RemoveAt(index);
+            BuildOutline(OutlineCopy(), holes, Level, _thickness,
+                _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
         }
 
         /// <summary>Legacy signature (no plan rotation) — kept so existing callers/tests stand.</summary>
@@ -124,6 +177,15 @@ namespace RoomPlanner.Floors
         /// </summary>
         public void BuildOutline(IReadOnlyList<Vector3> outline, float level, float thickness,
             float planScale, float planRotationDeg, float planOriginX, float planOriginZ)
+            => BuildOutline(outline, null, level, thickness, planScale, planRotationDeg, planOriginX, planOriginZ);
+
+        /// <summary>
+        /// Build the slab with holes cut in it — stairwells, shafts (step C6). The holes are
+        /// parametric openings in the outline, never a boolean subtraction of meshes.
+        /// </summary>
+        public void BuildOutline(IReadOnlyList<Vector3> outline,
+            IReadOnlyList<IReadOnlyList<Vector3>> holes, float level, float thickness,
+            float planScale, float planRotationDeg, float planOriginX, float planOriginZ)
         {
             Ensure();
             Level = level;
@@ -138,16 +200,30 @@ namespace RoomPlanner.Floors
 
             _outline.Clear();
             _outline.AddRange(pts);
+
+            _holes.Clear();
+            if (holes != null)
+            {
+                foreach (var h in holes)
+                {
+                    var ring = Polygon.Clean(h);
+                    if (ring.Count < 3) continue;
+                    for (int i = 0; i < ring.Count; i++) ring[i] = new Vector3(ring[i].x, level, ring[i].z);
+                    _holes.Add(ring);
+                }
+            }
             UpdateCornersFromOutline();
 
-            var tris = pts.Count >= 3 && Polygon.IsSimple(pts) ? Polygon.Triangulate(pts) : new List<int>();
+            // The top/bottom faces come from the outline with its holes bridged in; the rings
+            // themselves stay intact for the side walls and for editing.
+            var tris = Polygon.TriangulateWithHoles(pts, _holes, out var faceVerts);
             if (tris.Count == 0)
             {
                 if (_collider != null) _collider.sharedMesh = null;
                 return;
             }
 
-            int n = pts.Count;
+            int n = faceVerts.Count;
             float top = level, bot = level - _thickness;
             // Negative scale = mirrored plan (legit); near-zero is guarded inside BlueprintMath.
             var placement = new BlueprintPlacement
@@ -164,18 +240,18 @@ namespace RoomPlanner.Floors
             var uv = new List<Vector2>(n * 6);
             var t = new List<int>();
 
-            // --- top ring 0..n-1: UV from the blueprint placement, so the plan aligns across slabs
+            // --- top face 0..n-1: UV from the blueprint placement, so the plan aligns across slabs
             for (int i = 0; i < n; i++)
             {
-                var p = new Vector3(pts[i].x, top, pts[i].z);
+                var p = new Vector3(faceVerts[i].x, top, faceVerts[i].z);
                 v.Add(p);
                 uv.Add(BlueprintMath.WorldToPlanUV(p, placement));
             }
-            // --- bottom ring n..2n-1: metric UV in the ground plane
+            // --- bottom face n..2n-1: metric UV in the ground plane
             for (int i = 0; i < n; i++)
             {
-                v.Add(new Vector3(pts[i].x, bot, pts[i].z));
-                uv.Add(new Vector2(pts[i].x / TileMeters, pts[i].z / TileMeters));
+                v.Add(new Vector3(faceVerts[i].x, bot, faceVerts[i].z));
+                uv.Add(new Vector2(faceVerts[i].x / TileMeters, faceVerts[i].z / TileMeters));
             }
 
             // Winding: a counter-clockwise ring (as Polygon defines it) triangulates with its
@@ -193,11 +269,33 @@ namespace RoomPlanner.Floors
 
             // --- sides: four fresh vertices per edge, U running around the perimeter in metres
             // (per-edge rather than per-corner, so the closing edge has no UV seam)
+            AddSideWalls(pts, v, uv, t, top, bot);
+            // Hole walls come from rings wound the OTHER way, so the same quad order makes them
+            // face INTO the hole — which is outward from the solid, exactly as required.
+            foreach (var hole in _holes) AddSideWalls(Polygon.ToClockwise(hole), v, uv, t, top, bot);
+
+            _mesh.SetVertices(v);
+            _mesh.SetUVs(0, uv);
+            _mesh.SetTriangles(t, 0);
+            _mesh.RecalculateNormals();
+            _mesh.RecalculateBounds();
+
+            if (_collider != null)
+            {
+                _collider.sharedMesh = null;
+                _collider.sharedMesh = _mesh;
+            }
+        }
+
+        private static void AddSideWalls(List<Vector3> ring, List<Vector3> v, List<Vector2> uv,
+            List<int> t, float top, float bot)
+        {
+            int n = ring.Count;
             float run = 0f;
             for (int i = 0; i < n; i++)
             {
                 int j = (i + 1) % n;
-                Vector3 a = pts[i], b = pts[j];
+                Vector3 a = ring[i], b = ring[j];
                 float len = Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
                 float uA = run / TileMeters, uB = (run + len) / TileMeters;
                 run += len;
@@ -211,18 +309,6 @@ namespace RoomPlanner.Floors
                 v.Add(new Vector3(a.x, bot, a.z)); uv.Add(new Vector2(uA, vBot));
 
                 Quad(t, baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3);   // outward
-            }
-
-            _mesh.SetVertices(v);
-            _mesh.SetUVs(0, uv);
-            _mesh.SetTriangles(t, 0);
-            _mesh.RecalculateNormals();
-            _mesh.RecalculateBounds();
-
-            if (_collider != null)
-            {
-                _collider.sharedMesh = null;
-                _collider.sharedMesh = _mesh;
             }
         }
 
@@ -241,18 +327,18 @@ namespace RoomPlanner.Floors
         }
 
         /// <summary>Area of the slab in square metres — shown in the inspector.</summary>
-        public float Area => Polygon.Area(_outline);
+        public float Area => Polygon.AreaWithHoles(_outline, _holes);
 
         /// <summary>Slab thickness, per instance (step C4).</summary>
         public float Thickness => _thickness;
 
         public void SetThickness(float thickness) =>
-            BuildOutline(new List<Vector3>(_outline), Level, thickness,
+            BuildOutline(OutlineCopy(), HolesCopy(), Level, thickness,
                 _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
 
         /// <summary>Move the whole slab to another storey level, keeping its shape.</summary>
         public void SetLevel(float level) =>
-            BuildOutline(new List<Vector3>(_outline), level, _thickness,
+            BuildOutline(OutlineCopy(), HolesCopy(), level, _thickness,
                 _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
 
         /// <summary>
