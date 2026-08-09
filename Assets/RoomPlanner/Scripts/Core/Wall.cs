@@ -110,7 +110,67 @@ namespace RoomPlanner.Walls
         }
 
         /// <summary>Rebuild the mesh from the current centerline and cached parameters.</summary>
-        public void Rebuild() => Build(_pts, _thickness, _height, _mode, _join, _interior);
+        public void Rebuild()
+        {
+            if (_segment != null) BuildSegment(_segment);
+            else Build(_pts, _thickness, _height, _mode, _join, _interior);
+        }
+
+        // ---- graph-backed mode (Phase B): one view = one WallSegment ----
+
+        private WallSegment _segment;
+
+        /// <summary>The graph segment this view draws, or null while in legacy polyline mode.</summary>
+        public WallSegment Segment => _segment;
+
+        /// <summary>
+        /// Draw ONE graph segment, with its ends shaped by whatever meets it at each node
+        /// (<see cref="WallMesh"/>). Replaces the polyline path for graph-backed walls; the
+        /// polyline <see cref="Build"/> stays for the legacy tool and its tests.
+        /// </summary>
+        public void BuildSegment(WallSegment s)
+        {
+            Ensure();
+            _segment = s;
+            _mesh.Clear();
+            if (_edges != null) _edges.Clear();
+
+            if (s == null || s.A == null || s.B == null || s.Length < MinSize)
+            {
+                if (_collider != null) _collider.sharedMesh = null;
+                return;
+            }
+
+            var f = WallMesh.BuildFootprint(s);
+            float height = Mathf.Max(Mathf.Abs(s.Height), MinSize);
+            Vector3 baseUp = Vector3.up * s.BaseHeight;
+
+            // Map the footprint onto the Inner/Outer pair the extruder expects. Which physical
+            // side is "outer" depends on SideSign, and mirroring the footprint flips triangle
+            // orientation — so the same sign drives `flip`, keeping every face pointing outward
+            // (coding rule 1.1).
+            bool towardPlus = s.SideSign >= 0f;
+            var sections = new List<Cross>(2)
+            {
+                towardPlus
+                    ? new Cross { Inner = f.ALeft + baseUp, Outer = f.ARight + baseUp }
+                    : new Cross { Inner = f.ARight + baseUp, Outer = f.ALeft + baseUp },
+                towardPlus
+                    ? new Cross { Inner = f.BLeft + baseUp, Outer = f.BRight + baseUp }
+                    : new Cross { Inner = f.BRight + baseUp, Outer = f.BLeft + baseUp },
+            };
+
+            // keep Points meaningful for callers that inspect the centerline
+            _pts.Clear();
+            _pts.Add(s.A.Position);
+            _pts.Add(s.B.Position);
+            _thickness = Mathf.Abs(s.Thickness);
+            _height = height;
+            _mode = s.Offset;
+            _join = s.Join;
+
+            Triangulate(sections, height, flip: !towardPlus);
+        }
 
         /// <summary>Collapse consecutive (near-)identical points — double-clicks in MR are common
         /// and would otherwise inject a degenerate normal into the footprint.</summary>
@@ -123,10 +183,27 @@ namespace RoomPlanner.Walls
         /// <summary>Translate the whole wall (centerline + interior reference) and rebuild in place.</summary>
         public void MoveBy(Vector3 delta)
         {
+            if (_segment != null)
+            {
+                // Graph-backed: move the NODES. Anything else attached to them shares those
+                // nodes and therefore follows — which is the point of the graph. Rebuilding
+                // those neighbours is the renderer's job (it knows all the views).
+                _segment.A.Position += delta;
+                if (_segment.B != _segment.A) _segment.B.Position += delta;
+                GeometryChanged?.Invoke(_segment);
+                Rebuild();
+                return;
+            }
             for (int i = 0; i < _pts.Count; i++) _pts[i] += delta;
             _interior += delta;
             Rebuild();
         }
+
+        /// <summary>
+        /// Raised after this view mutates shared graph state, so the owner can rebuild the
+        /// other walls that hang off the same nodes.
+        /// </summary>
+        public System.Action<WallSegment> GeometryChanged;
 
         // ---- footprint (cross-sections along the centerline) ----
 

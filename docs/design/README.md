@@ -19,6 +19,7 @@
 | 11 | [object-operations](11-object-operations.md) | Манипуляции по типам объектов (роадмап редактирования) ✅🔜 |
 | 12 | [coding-rules](12-coding-rules.md) | **Свод правил к коду** (из аудита 2026-08-09) ✅ |
 | 13 | [phase-b-wallgraph](13-phase-b-wallgraph.md) | **План Фазы B:** WallGraph и правка стен 🔜 |
+| 14 | [modularity](14-modularity.md) | **Модульность инструментов** (реестр, схема настроек, параллельные потоки) 🔜 |
 
 ## Порядок реализации
 
