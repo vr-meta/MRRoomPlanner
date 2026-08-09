@@ -30,6 +30,9 @@ namespace RoomPlanner.Floors
         /// <summary>Click this close to the first point to close the outline (metres).</summary>
         [SerializeField] private float closeRadius = 0.15f;
 
+        /// <summary>Default thickness for NEW slabs. Its own — a slab is not a wall (step C4).</summary>
+        [SerializeField] private float defaultThickness = 0.2f;
+
         private readonly List<Floor> _floors = new();
         private readonly List<Vector3> _pts = new();      // outline being drawn
         private float _planScaleApplied = float.NaN;
@@ -47,8 +50,8 @@ namespace RoomPlanner.Floors
                     () => $"{manager.Level * 100f:0} cm",
                     () => manager.AdjustLevel(-0.1f), () => manager.AdjustLevel(0.1f))
                 .Stepper("thk", "Thickness",
-                    () => $"{manager.WallThickness * 100f:0} cm",
-                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f));
+                    () => $"{defaultThickness * 100f:0} cm",
+                    () => AdjustDefaultThickness(-0.02f), () => AdjustDefaultThickness(0.02f));
             return _settings;
         }
 
@@ -167,7 +170,10 @@ namespace RoomPlanner.Floors
                 if (f != null) f.SetPlanPlacement(s, r, ox, oz);   // keeps the outline
         }
 
-        private float Thickness() => manager != null ? manager.WallThickness : 0.2f;
+        private void AdjustDefaultThickness(float delta) =>
+            defaultThickness = Mathf.Clamp(defaultThickness + delta, 0.02f, 1f);
+
+        private float Thickness() => defaultThickness;
         private float Scale() => blueprint != null ? blueprint.PlanScale : 5f;
         private float Rotation() => blueprint != null ? blueprint.PlanRotationDeg : 0f;
         private float OffX() => blueprint != null ? blueprint.PlanOffsetX : 0f;

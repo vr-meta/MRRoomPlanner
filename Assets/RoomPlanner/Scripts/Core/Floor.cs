@@ -243,6 +243,18 @@ namespace RoomPlanner.Floors
         /// <summary>Area of the slab in square metres — shown in the inspector.</summary>
         public float Area => Polygon.Area(_outline);
 
+        /// <summary>Slab thickness, per instance (step C4).</summary>
+        public float Thickness => _thickness;
+
+        public void SetThickness(float thickness) =>
+            BuildOutline(new List<Vector3>(_outline), Level, thickness,
+                _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
+
+        /// <summary>Move the whole slab to another storey level, keeping its shape.</summary>
+        public void SetLevel(float level) =>
+            BuildOutline(new List<Vector3>(_outline), level, _thickness,
+                _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
+
         /// <summary>
         /// Metres per texture tile for the sides and the underside (metric UVs,
         /// docs/design/04-surfaces-materials.md). The TOP is mapped by the blueprint placement
