@@ -15,6 +15,9 @@
 | 07 | [mep-layers](07-mep-layers.md) | Слои + инженерные сети (электрика/отопление/сантехника) 🧭 |
 | 08 | [interop](08-interop.md) | Импорт/экспорт: **IFC**, DWG, glTF 🧭 |
 | 09 | [project-structure](09-project-structure.md) | **Корневой:** Дом→Этажи→Комнаты, захват и сборка, Ingest 🔜 |
+| 10 | [controls](10-controls.md) | Карта кнопок (раскладка ввода) ✅ |
+| 11 | [object-operations](11-object-operations.md) | Манипуляции по типам объектов (роадмап редактирования) ✅🔜 |
+| 12 | [phase-b-wallgraph](12-phase-b-wallgraph.md) | **План Фазы B:** WallGraph и правка стен 🔜 |
 
 ## Порядок реализации
 
