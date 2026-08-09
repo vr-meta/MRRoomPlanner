@@ -218,13 +218,14 @@ namespace RoomPlanner.Walls
         private bool TrySnap(Vector3 p, out Vector3 result, out WallSegment edgeSegment,
             bool corners, bool edges)
         {
-            float best = snapDistance;
             result = default;
             edgeSegment = null;
-            bool found = false;
 
             var graph = Graph;
             if (graph == null) return false;
+
+            // shared policy (corners beat edges) — the tool only supplies its candidates
+            var finder = SnapFinder.WithRadius(snapDistance);
 
             if (corners)
             {
@@ -234,8 +235,7 @@ namespace RoomPlanner.Walls
                     var n = nodes[i];
                     if (n == _lastNode) continue;              // don't snap onto where we start
                     if (!HasVisibleSegment(n)) continue;
-                    float d = Vector3.Distance(p, n.Position);
-                    if (d < best) { best = d; result = n.Position; edgeSegment = null; found = true; }
+                    finder.TryCorner(p, n.Position);
                 }
             }
 
@@ -247,12 +247,15 @@ namespace RoomPlanner.Walls
                     var s = segs[i];
                     if (!renderer.IsVisible(s)) continue;
                     if (_lastNode != null && s.Has(_lastNode)) continue;   // not the wall we're extending
-                    Vector3 cp = MeasureMath.ClosestPointOnSegment(s.A.Position, s.B.Position, p);
-                    float d = Vector3.Distance(p, cp);
-                    if (d < best) { best = d; result = cp; edgeSegment = s; found = true; }
+                    finder.TryEdge(p, s.A.Position, s.B.Position, i);
                 }
             }
-            return found;
+
+            if (!finder.Found) return false;
+            result = finder.Point;
+            // only an EDGE hit gets split into a T-junction; a corner is already a shared node
+            if (finder.Kind == SnapKind.Edge && finder.Index >= 0) edgeSegment = graph.Segments[finder.Index];
+            return true;
         }
 
         /// <summary>A node is only a snap target while at least one wall on it is visible.</summary>

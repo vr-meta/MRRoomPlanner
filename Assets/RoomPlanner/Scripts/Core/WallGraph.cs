@@ -4,6 +4,20 @@ using UnityEngine;
 namespace RoomPlanner.Walls
 {
     /// <summary>
+    /// A door or window hosted by a wall segment: a position along the wall plus its size.
+    /// Parametric, never a boolean cut — the wall mesh is panelised around it (Phase D,
+    /// docs/design/03-openings.md). Defined here so segments can carry them from the start.
+    /// </summary>
+    public class WallOpening
+    {
+        public int Id;
+        public float AlongFraction = 0.5f;   // 0..1 from A to B
+        public float Width = 0.9f;
+        public float Height = 2.1f;
+        public float SillHeight;             // 0 for a door, ~0.9 for a window
+    }
+
+    /// <summary>
     /// A junction or endpoint shared by walls. Walls that meet share ONE node, which is what
     /// makes corners and T-junctions come out right without any CSG: move the node and every
     /// wall attached to it follows. See docs/design/02-walls.md.
@@ -96,6 +110,14 @@ namespace RoomPlanner.Walls
             d.y = 0f;
             return d.sqrMagnitude < 1e-8f ? Vector3.forward : d.normalized;
         }
+
+        /// <summary>
+        /// Doors and windows hosted by this wall, as a fraction along A→B plus their own size
+        /// (Phase D, docs/design/03-openings.md). Empty for now — the list exists so the mesh
+        /// builder and save format already have the hook, and splitting a wall knows it has to
+        /// think about them.
+        /// </summary>
+        public readonly List<WallOpening> Openings = new();
 
         /// <summary>Copy the editable parameters from another segment (used when splitting).</summary>
         internal void CopyParamsFrom(WallSegment s)
@@ -282,6 +304,59 @@ namespace RoomPlanner.Walls
             _nodes.Clear();
             _segments.Clear();
             // ids keep counting up: never reuse an id a saved file might still reference
+        }
+
+        /// <summary>
+        /// Closed rings of walls — the candidates for rooms (Phase E, docs/design/09).
+        /// Walks the graph from every node, following only nodes of degree 2, so a plain loop of
+        /// walls comes back as one ring. Junctions (degree 3+) end a walk: which way a room
+        /// continues through a T is a decision for the room detector, not for this primitive.
+        /// Each ring is returned once, starting from its lowest node id.
+        /// </summary>
+        public List<List<WallNode>> FindClosedLoops()
+        {
+            var loops = new List<List<WallNode>>();
+            var visited = new HashSet<WallSegment>();
+
+            foreach (var start in _nodes)
+            {
+                if (start.Degree != 2) continue;
+                foreach (var first in start.Segments)
+                {
+                    if (visited.Contains(first)) continue;
+
+                    var ring = new List<WallNode> { start };
+                    var prev = start;
+                    var seg = first;
+                    var used = new List<WallSegment> { seg };
+                    bool closed = false;
+
+                    while (true)
+                    {
+                        var next = seg.Other(prev);
+                        if (next == null) break;
+                        if (next == start) { closed = true; break; }
+                        if (next.Degree != 2) break;              // junction: not a plain ring
+                        ring.Add(next);
+
+                        WallSegment onward = null;
+                        foreach (var cand in next.Segments)
+                            if (cand != seg) { onward = cand; break; }
+                        if (onward == null || used.Contains(onward)) break;
+
+                        used.Add(onward);
+                        prev = next;
+                        seg = onward;
+                    }
+
+                    if (closed && ring.Count >= 3)
+                    {
+                        foreach (var s in used) visited.Add(s);
+                        loops.Add(ring);
+                    }
+                }
+            }
+            return loops;
         }
 
         internal static Vector3 ClosestPointOnSegment(Vector3 a, Vector3 b, Vector3 p)

@@ -298,6 +298,66 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(1, buf.Count, "the buffer is cleared before filling");
         }
 
+        // ---- B7 groundwork: openings hook and room loops ----
+
+        [Test]
+        public void Segment_CarriesAnOpeningsList_PreservedAcrossSplit()
+        {
+            var g = new WallGraph();
+            var wall = g.AddSegment(g.SnapOrCreateNode(P(0, 0)), g.SnapOrCreateNode(P(4, 0)));
+            Assert.IsNotNull(wall.Openings, "segments must be able to host doors/windows (Phase D)");
+            Assert.AreEqual(0, wall.Openings.Count);
+
+            var mid = g.SplitSegmentAt(wall, P(2, 0));
+            var tail = mid.Segments[0] == wall ? mid.Segments[1] : mid.Segments[0];
+            Assert.IsNotNull(tail.Openings, "both halves of a split wall can host openings");
+        }
+
+        [Test]
+        public void FindClosedLoops_FindsARectangularRoom()
+        {
+            var g = new WallGraph();
+            var a = g.SnapOrCreateNode(P(0, 0));
+            var b = g.SnapOrCreateNode(P(4, 0));
+            var c = g.SnapOrCreateNode(P(4, 3));
+            var d = g.SnapOrCreateNode(P(0, 3));
+            g.AddSegment(a, b); g.AddSegment(b, c); g.AddSegment(c, d); g.AddSegment(d, a);
+
+            var loops = g.FindClosedLoops();
+
+            Assert.AreEqual(1, loops.Count, "one room, reported once — not once per corner");
+            Assert.AreEqual(4, loops[0].Count);
+        }
+
+        [Test]
+        public void FindClosedLoops_IgnoresAnOpenRun()
+        {
+            var g = new WallGraph();
+            var a = g.SnapOrCreateNode(P(0, 0));
+            var b = g.SnapOrCreateNode(P(4, 0));
+            var c = g.SnapOrCreateNode(P(4, 3));
+            g.AddSegment(a, b); g.AddSegment(b, c);   // an L, not a room
+
+            Assert.AreEqual(0, g.FindClosedLoops().Count);
+        }
+
+        [Test]
+        public void FindClosedLoops_SkipsRingsThroughAJunction()
+        {
+            // a room with a wall tee-ing off it: the ring itself is no longer plain degree-2,
+            // and deciding how a room continues through a T belongs to the room detector
+            var g = new WallGraph();
+            var a = g.SnapOrCreateNode(P(0, 0));
+            var b = g.SnapOrCreateNode(P(4, 0));
+            var c = g.SnapOrCreateNode(P(4, 3));
+            var d = g.SnapOrCreateNode(P(0, 3));
+            g.AddSegment(a, b); g.AddSegment(b, c); g.AddSegment(c, d); g.AddSegment(d, a);
+            g.AddSegment(b, g.SnapOrCreateNode(P(7, 0)));   // stub off the corner
+
+            var loops = g.FindClosedLoops();
+            Assert.AreEqual(0, loops.Count, "not a plain ring any more");
+        }
+
         [Test]
         public void DirectionFrom_PointsAwayFromTheNode()
         {
