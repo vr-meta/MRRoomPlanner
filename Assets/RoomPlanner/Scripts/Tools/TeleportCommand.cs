@@ -19,14 +19,16 @@ namespace RoomPlanner.Tools
         private readonly WallGraphRenderer _walls;
         private readonly List<Floor> _floors;
         private readonly List<Stair> _stairs;
+        private readonly List<RoomPlanner.Import.MepView> _mep;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
-            List<Stair> stairs = null)
+            List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null)
         {
             _walls = walls;
             _floors = floors;
             _stairs = stairs;
+            _mep = mep;
             _delta = delta;
         }
 
@@ -49,6 +51,9 @@ namespace RoomPlanner.Tools
             if (_stairs != null)
                 foreach (var s in _stairs)
                     if (s != null) s.MoveBy(d);
+            if (_mep != null)
+                foreach (var m in _mep)
+                    if (m != null) m.MoveBy(d);
         }
 
         /// <summary>
@@ -70,6 +75,15 @@ namespace RoomPlanner.Tools
             var list = new List<Stair>();
             foreach (var s in Object.FindObjectsByType<Stair>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (s.Risers > 0) list.Add(s);
+            return list;
+        }
+
+        /// <summary>Every imported MEP fixture, hidden ones included.</summary>
+        public static List<RoomPlanner.Import.MepView> CollectMep()
+        {
+            var list = new List<RoomPlanner.Import.MepView>();
+            foreach (var m in Object.FindObjectsByType<RoomPlanner.Import.MepView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                list.Add(m);
             return list;
         }
     }

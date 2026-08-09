@@ -36,7 +36,7 @@ namespace RoomPlanner.EditorTools
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;
         public Material WallMat, WallEdgeMat, FloorMat;
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
-        public Material GroundMat, GlassMat, StairMat;
+        public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat;
     }
 }
 #endif

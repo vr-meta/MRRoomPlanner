@@ -38,8 +38,9 @@
    | `IfcWallStandardCase` `Axis` + `IfcMaterialLayerSetUsage` (толщина) + экструзия (высота) | `Wall` (лента, 2-точечная осевая) |
    | `IfcColumn` с `IfcRectangleProfileDef` | **короткий сегмент `Wall`** (ось = длинная сторона профиля через центр, толщина = короткая) — красится/выбирается как стена, нового типа объекта нет |
    | `IfcSlab` (профиль контура) | `Floor.BuildOutline` + толщина; `IfcOpeningElement` на плите / внутренние контуры профиля → `Floor.AddHole` |
-   | `IfcDoor`/`IfcWindow` через `IfcOpeningElement` (RelVoids/RelFills) | `WallOpening` на сегменте графа → панелизация v0 в `Wall.BuildSegment` (простенки/перемычка/откосы; окна — стеклянный сабмеш) |
-   | `IfcStairFlight` (подступёнки/проступи; Revit пишет размеры в футах) | параметрический `Stair` (Core): профиль-зигзаг → солид; ширина/направление — из bbox Brep-точек |
+   | `IfcDoor`/`IfcWindow` через `IfcOpeningElement` (RelVoids/RelFills) | `WallOpening` на сегменте графа → панелизация v0 в `Wall.BuildSegment` (простенки/перемычка/откосы; окна — стекло сабмешем 1 + рама, двери — рама + закрытое полотно, сабмеш 2 `Wall_Joinery`) |
+   | `IfcStairFlight` (подступёнки/проступи; Revit пишет размеры в футах) | параметрический `Stair` (Core), два типа: Solid (монолит) / Open (ступени на косоурах); ширина/направление — из bbox Brep-точек; ступени — цель телепорта |
+   | `IfcFlowTerminal` (сантехприборы) | запечённый меш цветом слоя `LayerPlumbing` (`MepView`, вершины локально вокруг origin); трубы/электрика — только когда есть в экспорте |
    - Проёмы в MVP **не вырезаем** (модуль Openings не готов) — стены сплошные; данные
      дверей/окон в файле полные, подключим Фазой D.
 4. **Координаты:** мм → м (×0.001); IFC right-handed Z-up → Unity Y-up:

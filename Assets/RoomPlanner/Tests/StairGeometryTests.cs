@@ -67,6 +67,34 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void OpenKindSharesFootprintButDiffersInBody()
+        {
+            _stair.Build(Vector3.zero, 0f, 1.2f, 13, 0.175f, 0.275f, StairKind.Solid);
+            var solidBounds = Mesh.bounds;
+            int solidTris = Mesh.triangles.Length;
+
+            _stair.Build(Vector3.zero, 0f, 1.2f, 13, 0.175f, 0.275f, StairKind.Open);
+            Assert.AreEqual(StairKind.Open, _stair.Kind);
+            var openBounds = Mesh.bounds;
+
+            Assert.AreEqual(solidBounds.size.y, openBounds.size.y, 1e-4, "same total height");
+            Assert.AreEqual(solidBounds.size.z, openBounds.size.z, 1e-4, "same run length");
+            Assert.AreEqual(solidBounds.size.x, openBounds.size.x, 1e-4, "same width");
+            Assert.AreNotEqual(solidTris, Mesh.triangles.Length, "different construction");
+        }
+
+        [Test]
+        public void OpenKindKeepsWalkableTreads()
+        {
+            _stair.Build(Vector3.zero, 0f, 1.2f, 13, 0.175f, 0.275f, StairKind.Open);
+            var col = _go.GetComponent<MeshCollider>();
+            // straight down onto the middle of the 6th tread (top at 6 × 0.175)
+            var ray = new Ray(new Vector3(0f, 5f, 5.5f * 0.275f), Vector3.down);
+            Assert.IsTrue(col.Raycast(ray, out var hit, 10f), "tread is there to stand on");
+            Assert.AreEqual(6 * 0.175f, hit.point.y, 1e-3, "landed on the tread top");
+        }
+
+        [Test]
         public void NormalizeStairSize_HandlesMmMetersAndRevitFeet()
         {
             // honest file units: 175 mm in a milli file

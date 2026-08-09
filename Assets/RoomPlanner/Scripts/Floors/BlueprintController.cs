@@ -53,6 +53,16 @@ namespace RoomPlanner.Floors
         public float PlanOffsetX => planOffsetX;
         public float PlanOffsetZ => planOffsetZ;
 
+        /// <summary>Restore the whole placement at once (project load) and rebuild floors.</summary>
+        public void SetPlacement(float scale, float rotationDeg, float offsetX, float offsetZ)
+        {
+            planScale = Mathf.Clamp(scale, 0.5f, 50f);
+            planRotationDeg = Mathf.Repeat(rotationDeg, 360f);
+            planOffsetX = offsetX;
+            planOffsetZ = offsetZ;
+            Refresh();
+        }
+
         public SettingsSchema GetSettings()
         {
             // Plan parameters are THIS tool's state — no ToolManager store involved.

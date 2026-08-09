@@ -22,6 +22,12 @@ namespace RoomPlanner.Core.Ifc
         public int StoreyIndex = -1;
         /// <summary>True when this segment came from a rectangular IfcColumn.</summary>
         public bool FromColumn;
+
+        // Optional per-segment overrides (project round-trip; -1/0 = importer defaults).
+        public int OffsetOverride = -1;   // WallOffsetMode
+        public int JoinOverride = -1;     // WallJoin
+        public float SideSignOverride;    // 0 = leave default
+        public float BaseHeight;
     }
 
     public sealed class ImportedSlab
@@ -61,6 +67,22 @@ namespace RoomPlanner.Core.Ifc
         public int Risers;
         public float RiserHeight;   // metres
         public float TreadDepth;    // metres
+        /// <summary>Open flight (treads on stringers) vs solid monolith. IFC gives no
+        /// reliable signal, so imports default to solid; project files keep the choice.</summary>
+        public bool Open;
+        public int StoreyIndex = -1;
+    }
+
+    /// <summary>
+    /// An MEP fixture (plumbing terminal etc.) as a baked mesh: IFC ships them as Breps,
+    /// not parameters. Vertices are LOCAL around Origin so the object moves by transform.
+    /// </summary>
+    public sealed class ImportedMep
+    {
+        public string Name;
+        public Vector3 Origin;                  // Unity world, metres
+        public List<Vector3> Vertices = new();  // local to Origin
+        public List<int> Triangles = new();
         public int StoreyIndex = -1;
     }
 
@@ -71,6 +93,7 @@ namespace RoomPlanner.Core.Ifc
         public List<ImportedSlab> Slabs = new();
         public List<ImportedOpening> Openings = new();
         public List<ImportedStair> Stairs = new();
+        public List<ImportedMep> Plumbing = new();
 
         // Honest import status: what the MVP subset could not represent (shown in UI).
         public int SkippedWalls;
@@ -78,5 +101,6 @@ namespace RoomPlanner.Core.Ifc
         public int SkippedSlabs;
         public int SkippedOpenings;
         public int SkippedStairs;
+        public int SkippedMep;
     }
 }

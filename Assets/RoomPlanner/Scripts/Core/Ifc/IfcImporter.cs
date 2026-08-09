@@ -23,7 +23,129 @@ namespace RoomPlanner.Core.Ifc
             ImportColumns(ctx, b);
             ImportSlabs(ctx, b);
             ImportStairs(ctx, b);
+            ImportPlumbing(ctx, b);
             return b;
+        }
+
+        // ---------------------------------------------------------------- MEP (plumbing)
+
+        /// <summary>
+        /// Sanitary fixtures (IfcFlowTerminal) as baked meshes — IFC ships them as Breps.
+        /// Pipes/wiring would be IfcFlowSegment / cable entities; this export has none, so
+        /// terminals are the whole visible plumbing layer for now (design/18 I12).
+        /// </summary>
+        private static void ImportPlumbing(Ctx c, ImportedBuilding b)
+        {
+            foreach (int id in c.F.OfType("IFCFLOWTERMINAL"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 7) { b.SkippedMep++; continue; }
+                var place = Placement(c, a[5]);
+
+                var verts = new List<Vector3>();
+                var tris = new List<int>();
+                if (!BrepWorldMesh(c, a[6], place, verts, tris) || verts.Count == 0)
+                {
+                    b.SkippedMep++;
+                    continue;
+                }
+
+                // bake local around the bbox centre so a teleport is a transform shift
+                Vector3 min = verts[0], max = verts[0];
+                foreach (var p in verts) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+                var origin = (min + max) * 0.5f;
+                for (int i = 0; i < verts.Count; i++) verts[i] -= origin;
+
+                b.Plumbing.Add(new ImportedMep
+                {
+                    Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
+                    Origin = origin,
+                    Vertices = verts,
+                    Triangles = tris,
+                    StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
+                });
+            }
+        }
+
+        /// <summary>
+        /// Triangulated FacetedBrep(s) of a Body representation (direct or one mapped-item
+        /// level), fan per polyloop, in Unity world space. Returns false if the body holds
+        /// no Brep geometry.
+        /// </summary>
+        private static bool BrepWorldMesh(Ctx c, StepValue pdsRef, Matrix4x4 place,
+            List<Vector3> verts, List<int> tris)
+        {
+            var items = FindRepresentation(c, pdsRef, "Body");
+            if (items == null) return false;
+            bool any = false;
+
+            void EmitBrep(int brepId, Matrix4x4 m)
+            {
+                var brep = c.F.Args(brepId);              // (Outer shell)
+                var shell = c.F.Deref(brep[0]);           // IFCCLOSEDSHELL((faces))
+                if (shell == null || shell.Count < 1 || shell[0].Kind != StepKind.List) return;
+                foreach (var faceRef in shell[0].Items)
+                {
+                    var face = c.F.Deref(faceRef);        // IFCFACE((bounds))
+                    if (face == null || face.Count < 1 || face[0].Kind != StepKind.List) continue;
+                    foreach (var boundRef in face[0].Items)
+                    {
+                        // outer bounds only — inner FACEBOUNDs are holes, rare on fixtures
+                        if (c.F.TypeOf(boundRef.Ref) != "IFCFACEOUTERBOUND") continue;
+                        var bound = c.F.Args(boundRef.Ref);   // (loop, orientation)
+                        var loop = c.F.Deref(bound[0]);       // IFCPOLYLOOP((points))
+                        if (loop == null || loop.Count < 1 || loop[0].Kind != StepKind.List) continue;
+                        bool reversed = bound.Count > 1 && bound[1].Kind == StepKind.Enum && bound[1].Text == "F";
+
+                        int start = verts.Count;
+                        foreach (var ptRef in loop[0].Items)
+                            verts.Add(ToUnity(c, m.MultiplyPoint3x4(Point(c, ptRef))));
+                        int n = verts.Count - start;
+                        for (int i = 1; i + 1 < n; i++)
+                        {
+                            // IFC loops are CCW seen from OUTSIDE (right-handed) — that maps
+                            // to clockwise in Unity's left-handed frame, which IS front-facing.
+                            if (reversed) { tris.Add(start); tris.Add(start + i + 1); tris.Add(start + i); }
+                            else { tris.Add(start); tris.Add(start + i); tris.Add(start + i + 1); }
+                        }
+                        any = true;
+                    }
+                }
+            }
+
+            foreach (var it in items)
+            {
+                if (it.Kind != StepKind.Ref) continue;
+                switch (c.F.TypeOf(it.Ref))
+                {
+                    case "IFCFACETEDBREP":
+                        EmitBrep(it.Ref, place);
+                        break;
+                    case "IFCMAPPEDITEM":
+                    {
+                        var mi = c.F.Args(it.Ref);
+                        var map = c.F.Deref(mi[0]);       // IFCREPRESENTATIONMAP(Origin, Rep)
+                        if (map == null || map.Count < 2) continue;
+                        var op = c.F.Deref(mi[1]);
+                        var opM = Matrix4x4.identity;
+                        if (op != null && op.Count >= 4)
+                        {
+                            float s = op[3].Kind == StepKind.Number ? op[3].AsFloat : 1f;
+                            opM = Matrix4x4.TRS(
+                                op[2].Kind == StepKind.Ref ? Point(c, op[2]) : Vector3.zero,
+                                Quaternion.identity, new Vector3(s, s, s));
+                        }
+                        var extra = opM * Axis2Placement3D(c, map[0]).inverse;
+                        var rep = c.F.Deref(map[1]);
+                        if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
+                        foreach (var inner in rep[3].Items)
+                            if (inner.Kind == StepKind.Ref && c.F.TypeOf(inner.Ref) == "IFCFACETEDBREP")
+                                EmitBrep(inner.Ref, place * extra);
+                        break;
+                    }
+                }
+            }
+            return any;
         }
 
         // ---------------------------------------------------------------- stairs

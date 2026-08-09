@@ -99,5 +99,23 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1f, slab.Outline[0].x, 1e-4f,
                 "a restored slab must reappear where the model IS, not where it was");
         }
+
+        [UnityTest]
+        public IEnumerator MepFixturesTeleportByTransform()
+        {
+            var (walls, _, model) = MakeScene();
+            var mepGo = Track(new GameObject("Basin"));
+            mepGo.transform.position = new Vector3(1f, 0.8f, 1f);
+            mepGo.AddComponent<RoomPlanner.Import.MepView>();
+            yield return null;
+
+            var delta = new Vector3(2f, -3f, 0.5f);
+            model.History.Execute(new TeleportCommand(walls, TeleportCommand.CollectFloors(), delta,
+                TeleportCommand.CollectStairs(), TeleportCommand.CollectMep()));
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(3f, -2.2f, 1.5f), mepGo.transform.position), 1e-5f);
+
+            model.History.Undo();
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(1f, 0.8f, 1f), mepGo.transform.position), 1e-5f);
+        }
     }
 }

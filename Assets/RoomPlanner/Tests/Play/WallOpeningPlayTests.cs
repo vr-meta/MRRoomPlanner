@@ -55,21 +55,28 @@ namespace RoomPlanner.Tests.Play
             view.GetComponent<MeshCollider>().Raycast(ray, out hit, 20f);
 
         [UnityTest]
-        public IEnumerator DoorwayIsAHole_PiersAndHeaderAreSolid()
+        public IEnumerator DoorwayCarriesFrameAndLeaf_PiersAndHeaderAreSolid()
         {
-            // 1 m door centred at 2 m: clear span x ∈ [1.5, 2.5], up to y = 2.1
+            // 1 m door centred at 2 m: opening span x ∈ [1.5, 2.5], up to y = 2.1.
+            // Since I12 the doorway is not an empty hole: a closed LEAF sits at the
+            // mid-plane (opening it is a Phase D interaction).
             var (view, _) = MakeWall(new WallOpening
             {
                 Id = 1, AlongFraction = 0.5f, Width = 1f, Height = 2.1f, SillHeight = 0f,
             });
             yield return null;
 
-            Assert.IsFalse(HitsWall(view, new Ray(new Vector3(2f, 1f, -2f), Vector3.forward), out _),
-                "a ray through the doorway must pass");
-            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(0.5f, 1f, -2f), Vector3.forward), out _),
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 1f, -2f), Vector3.forward), out var leafHit),
+                "the closed door leaf blocks the doorway");
+            Assert.AreEqual(0f, leafHit.point.z, 0.03f, "the leaf sits at the wall mid-plane");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(0.5f, 1f, -2f), Vector3.forward), out var pierHit),
                 "the pier beside the door is solid");
+            Assert.AreEqual(-0.1f, pierHit.point.z, 1e-3f, "the pier is hit at the wall FACE");
             Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 2.5f, -2f), Vector3.forward), out _),
                 "the header above the door is solid");
+
+            var mesh = view.GetComponent<MeshFilter>().sharedMesh;
+            Assert.Greater(mesh.GetTriangles(2).Length, 0, "frame + leaf live in the joinery submesh");
         }
 
         [UnityTest]
@@ -83,13 +90,15 @@ namespace RoomPlanner.Tests.Play
             yield return null;
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(2, mesh.subMeshCount);
+            Assert.AreEqual(3, mesh.subMeshCount);
             Assert.Greater(mesh.GetTriangles(1).Length, 0, "window pane lives in the glass submesh");
+            Assert.Greater(mesh.GetTriangles(2).Length, 0, "window frame lives in the joinery submesh");
 
-            // under-sill band is solid, and its top face sits at sill height
+            // under-sill band is solid, and its top face sits at sill height;
+            // z = 0.08 keeps the probe clear of the 100 mm deep frame bars around the mid-plane
             Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 0.45f, -2f), Vector3.forward), out _),
                 "under-sill band is solid");
-            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 2f, 0.05f), Vector3.down), out var sillHit),
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 2f, 0.08f), Vector3.down), out var sillHit),
                 "a downward ray inside the opening lands on the sill");
             Assert.AreEqual(0.9f, sillHit.point.y, 1e-3, "sill top at sill height");
         }
@@ -104,7 +113,8 @@ namespace RoomPlanner.Tests.Play
             yield return null;
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(0, mesh.GetTriangles(1).Length, "doors stay open — no pane");
+            Assert.AreEqual(0, mesh.GetTriangles(1).Length, "doors get a leaf, not a glass pane");
+            Assert.Greater(mesh.GetTriangles(2).Length, 0, "the leaf/frame live in joinery");
         }
 
         [UnityTest]
@@ -115,8 +125,9 @@ namespace RoomPlanner.Tests.Play
 
             Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 1f, -2f), Vector3.forward), out _));
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(2, mesh.subMeshCount, "empty glass submesh always present");
+            Assert.AreEqual(3, mesh.subMeshCount, "empty glass/joinery submeshes always present");
             Assert.AreEqual(0, mesh.GetTriangles(1).Length);
+            Assert.AreEqual(0, mesh.GetTriangles(2).Length);
             Assert.AreEqual(0, seg.Openings.Count);
         }
     }

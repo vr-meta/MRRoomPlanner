@@ -27,6 +27,7 @@ namespace RoomPlanner.Import
         [SerializeField] private FloorController floors;
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private Material stairMat;
+        [SerializeField] private Material plumbingMat;
 
         private const int SelectableLayer = 6;   // picked by Select, ignored by the surface raycaster
 
@@ -154,8 +155,12 @@ namespace RoomPlanner.Import
                     if (seg == null) continue;                 // degenerate stretch
                     seg.Thickness = Mathf.Max(0.01f, iw.Thickness);
                     seg.Height = Mathf.Max(0.05f, iw.Height);
-                    // The IFC axis IS the centerline — never offset to a face.
-                    seg.Offset = WallOffsetMode.Center;
+                    // The IFC axis IS the centerline — never offset to a face. Project
+                    // files carry the user's actual settings as overrides.
+                    seg.Offset = iw.OffsetOverride >= 0 ? (WallOffsetMode)iw.OffsetOverride : WallOffsetMode.Center;
+                    if (iw.JoinOverride >= 0) seg.Join = (WallJoin)iw.JoinOverride;
+                    if (iw.SideSignOverride != 0f) seg.SideSign = iw.SideSignOverride;
+                    seg.BaseHeight = iw.BaseHeight;
                     touched.Add(a);
                     touched.Add(b);
                     segments.Add((seg, iw.StoreyIndex));
@@ -193,23 +198,46 @@ namespace RoomPlanner.Import
                 var mr = go.AddComponent<MeshRenderer>();
                 if (stairMat != null) mr.sharedMaterial = stairMat;
                 var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
-                stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth);
+                stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
+                    st.Open ? RoomPlanner.Stairs.StairKind.Open : RoomPlanner.Stairs.StairKind.Solid);
                 var sel = go.AddComponent<Selectable>();
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
                 stairCount++;
             }
 
+            int mepCount = 0;
+            foreach (var mep in building.Plumbing)
+            {
+                var go = new GameObject($"Plumbing {mep.Name}");
+                go.transform.SetParent(transform, false);
+                go.transform.position = mep.Origin;
+                var mesh = new Mesh { name = "MepMesh" };
+                mesh.SetVertices(mep.Vertices);
+                mesh.SetTriangles(mep.Triangles, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                if (plumbingMat != null) mr.sharedMaterial = plumbingMat;
+                go.AddComponent<MepView>();
+                // Selectable only for the hide/show machinery (undo, storey filter) — no
+                // collider, so it is invisible to picking and never registered for it.
+                var sel = go.AddComponent<Selectable>();
+                _created.Add((sel, mep.StoreyIndex));
+                mepCount++;
+            }
+
             // One undo entry for the whole import (objects are already live → Record).
             if (sceneModel != null && _created.Count > 0)
                 sceneModel.History.Record(new ImportBatchCommand(CollectSelectables()));
 
-            int skipped = building.SkippedWalls + building.SkippedColumns
-                + building.SkippedSlabs + building.SkippedOpenings + building.SkippedStairs;
-            _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st"
+            int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs
+                + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
+            _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
-            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, "
-                + $"{openingCount} openings, {holeCount} holes, {stairCount} stairs, skipped {skipped}");
+            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
+                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
         }
 
         /// <summary>
@@ -249,6 +277,31 @@ namespace RoomPlanner.Import
                 count++;
             }
             return count;
+        }
+
+        /// <summary>
+        /// Remove EVERYTHING buildable from the scene (project load starts clean): the wall
+        /// graph with its views, every slab, stair and MEP fixture, plus the history —
+        /// commands referencing destroyed objects must never replay.
+        /// </summary>
+        public void ClearScene()
+        {
+            var graph = walls != null ? walls.Graph : null;
+            if (graph != null)
+            {
+                graph.Clear();
+                walls.Sync();                       // drops every orphaned view
+            }
+            foreach (var f in TeleportCommand.CollectFloors())
+                if (f != null) Destroy(f.gameObject);
+            foreach (var s in TeleportCommand.CollectStairs())
+                if (s != null) Destroy(s.gameObject);
+            foreach (var m in TeleportCommand.CollectMep())
+                if (m != null) Destroy(m.gameObject);
+            _created.Clear();
+            _building = null;
+            _storeyFilter = -1;
+            if (sceneModel != null) sceneModel.History.Clear();
         }
 
         private List<ISelectable> CollectSelectables()

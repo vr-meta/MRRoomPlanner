@@ -207,13 +207,18 @@ namespace RoomPlanner.Walls
             var uv = new List<Vector2>();
             var tris = new List<int>();
             var glass = new List<int>();
+            var joinery = new List<int>();   // frames + door leaves (submesh 2)
             var ev = new List<Vector3>();
             var ei = new List<int>();
             float baseY = a.Inner.y;
+            float thickness = Mathf.Max((a.Outer - a.Inner).magnitude, MinSize);
 
-            Vector3 I(float t, float y) => Vector3.Lerp(a.Inner, b.Inner, t) + Vector3.up * y;
-            Vector3 O(float t, float y) => Vector3.Lerp(a.Outer, b.Outer, t) + Vector3.up * y;
-            Vector3 M(float t, float y) => (I(t, y) + O(t, y)) * 0.5f;
+            // d = fraction across the thickness: 0 = inner surface, 1 = outer
+            Vector3 P(float t, float y, float d) => Vector3.Lerp(
+                Vector3.Lerp(a.Inner, b.Inner, t), Vector3.Lerp(a.Outer, b.Outer, t), d) + Vector3.up * y;
+            Vector3 I(float t, float y) => P(t, y, 0f);
+            Vector3 O(float t, float y) => P(t, y, 1f);
+            Vector3 M(float t, float y) => P(t, y, 0.5f);
 
             int Vert(Vector3 p, float u, float vv)
             {
@@ -250,6 +255,18 @@ namespace RoomPlanner.Walls
                 Face(tris, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t), VV(y1));
             void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
                 Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t), VV(y1));
+
+            // A free-standing joinery block (frame bar / door leaf): all six faces, each
+            // reusing the orientation of the corresponding verified wall-face pattern.
+            void Box(float t0, float t1, float y0, float y1, float d0, float d1)
+            {
+                Face(joinery, P(t0, y0, d0), P(t0, y1, d0), P(t1, y1, d0), P(t1, y0, d0), U(t0), VV(y0), U(t1), VV(y1));
+                Face(joinery, P(t0, y1, d1), P(t0, y0, d1), P(t1, y0, d1), P(t1, y1, d1), U(t0), VV(y1), U(t1), VV(y0));
+                Face(joinery, P(t0, y1, d0), P(t0, y1, d1), P(t1, y1, d1), P(t1, y1, d0), U(t0), VV(y1), U(t1), VV(y1));
+                Face(joinery, P(t0, y0, d1), P(t0, y0, d0), P(t1, y0, d0), P(t1, y0, d1), U(t0), VV(y0), U(t1), VV(y0));
+                Face(joinery, P(t0, y0, d1), P(t0, y1, d1), P(t0, y1, d0), P(t0, y0, d0), U(t0), VV(y0), U(t0), VV(y1));
+                Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1), VV(y1));
+            }
 
             void EdgeRect(System.Func<float, float, Vector3> at, float t0, float t1, float y0, float y1)
             {
@@ -321,6 +338,29 @@ namespace RoomPlanner.Walls
                         U(op.t1), VV(op.ys), U(op.t0), VV(op.yh));
                 }
 
+                // ---- joinery (design/18 I12): a frame hugging the reveal; doors get a leaf
+                float frameT = Mathf.Min(0.06f / Mathf.Max(centerlineLength, MinSize),
+                                         (op.t1 - op.t0) * 0.25f);        // 60 mm legs
+                float frameY = Mathf.Min(0.06f, (op.yh - op.ys) * 0.25f); // 60 mm head/sill bars
+                float frameHalf = Mathf.Min(0.05f, thickness * 0.45f) / thickness;
+                float fd0 = 0.5f - frameHalf, fd1 = 0.5f + frameHalf;
+
+                Box(op.t0, op.t0 + frameT, op.ys, op.yh, fd0, fd1);           // left leg
+                Box(op.t1 - frameT, op.t1, op.ys, op.yh, fd0, fd1);           // right leg
+                Box(op.t0 + frameT, op.t1 - frameT, op.yh - frameY, op.yh, fd0, fd1); // head
+                if (op.hasGlass)
+                {
+                    Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.ys + frameY, fd0, fd1); // sill board
+                }
+                else
+                {
+                    // door leaf: fills the frame, thinner than the wall, closed for now —
+                    // hinging/opening is a Phase D interaction
+                    float leafHalf = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
+                    Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY,
+                        0.5f - leafHalf, 0.5f + leafHalf);
+                }
+
                 cursor = op.t1;
             }
             if (cursor < 1f)          // final pier (or the whole wall if all openings clipped)
@@ -338,11 +378,12 @@ namespace RoomPlanner.Walls
             EdgeRect(I, 0f, 1f, 0f, height);
             EdgeRect(O, 0f, 1f, 0f, height);
 
-            _mesh.subMeshCount = 2;
+            _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(glass, 1);
+            _mesh.SetTriangles(joinery, 2);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 
@@ -576,13 +617,14 @@ namespace RoomPlanner.Walls
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
-            // Submesh 1 is the window glass — empty here, but always present so a renderer
-            // configured with [wall, glass] materials is valid for every wall.
-            _mesh.subMeshCount = 2;
+            // Submeshes 1/2 are window glass and joinery — empty here, but always present
+            // so a renderer configured with [wall, glass, joinery] is valid for every wall.
+            _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(new List<int>(), 1);
+            _mesh.SetTriangles(new List<int>(), 2);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 

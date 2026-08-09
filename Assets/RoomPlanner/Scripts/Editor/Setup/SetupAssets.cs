@@ -46,8 +46,13 @@ namespace RoomPlanner.EditorTools
 
             // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
+            // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone
+            ctx.JoineryMat = CreateMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f));
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
+            // plumbing fixtures wear their MEP layer color (design/07); double-sided —
+            // fixture Breps arrive with arbitrary winding quality
+            ctx.PlumbingMat = CreateFloorMat("MEP_Plumbing", UiColors.LayerPlumbing);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
