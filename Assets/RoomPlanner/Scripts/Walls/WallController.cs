@@ -1,17 +1,16 @@
-using System.Collections.Generic;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Measure;
 using RoomPlanner.Tools;
-using RoomPlanner.Editing;
 
 namespace RoomPlanner.Walls
 {
     /// <summary>
-    /// Инструмент стен: триггером ставим осевые точки полилинии (цепочка), стена генерится
-    /// процедурно с толщиной/высотой/смещением из ToolManager. B — завершить цепочку.
-    /// Переиспользует курсор (поверхность/воздух, глубина стиком), магнит к узлам, привязку
-    /// к оси (грип).
+    /// Wall tool: the trigger commits centerline points, B ends the chain. Points go into the
+    /// WallGraph — snapping onto an existing wall SPLITS it, so walls meeting at a point really
+    /// share a node and T-junctions are genuine (design/13-phase-b-wallgraph.md).
+    /// The tool owns no walls: WallGraphRenderer owns the graph and one view per segment.
+    /// Reuses the shared cursor (surface / mid-air with stick depth), node magnet and axis snap.
     /// </summary>
     public class WallController : MonoBehaviour, ITool
     {
@@ -19,19 +18,20 @@ namespace RoomPlanner.Walls
         [SerializeField] private MeasureInput input;
         [SerializeField] private SceneRaycaster raycaster;
         [SerializeField] private Transform reticle;
-        [SerializeField] private Wall wallPrefab;
+        [SerializeField] private WallGraphRenderer renderer;   // owns the graph and the wall views
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
-        [SerializeField] private SceneModel sceneModel;
         [SerializeField] private float snapDistance = 0.12f;
         [SerializeField] private float angleStepDeg = 15f;   // grip = snap wall direction to 15°
 
-        private readonly List<Wall> _walls = new();
-        private readonly List<Vector3> _pts = new();
-        private Wall _current;
-        private Vector3 _interior;
+        // Chain state. The walls themselves live in the graph (renderer owns them) — the tool
+        // only remembers where the current chain is attached (Phase B / B3).
+        private WallNode _lastNode;
+        private float _chainLevel;
         private float _cursorDistance = 2f;
         private SettingsSchema _settings;
+
+        private WallGraph Graph => renderer != null ? renderer.Graph : null;
 
         public string Id => "wall";
         public string PaletteLabel => "Wall";
@@ -94,8 +94,8 @@ namespace RoomPlanner.Walls
                 if (place == PlaceMode.Floor)
                 {
                     // Snap to the working level plane (menu Level) — reliable, no scan dependency,
-                    // no vertical drift. Active chain keeps the first point's level.
-                    float floorY = _pts.Count > 0 ? _pts[0].y : (manager != null ? manager.Level : 0f);
+                    // no vertical drift. Active chain keeps the level it started on.
+                    float floorY = _lastNode != null ? _chainLevel : (manager != null ? manager.Level : 0f);
                     if (RayToPlaneY(ray, floorY, out var fp)) cursor = fp;
                     else cursor.y = floorY;
                 }
@@ -107,21 +107,24 @@ namespace RoomPlanner.Walls
             bool edges = manager == null || manager.SnapEdge;
 
             Vector3 target = cursor;
-            if (_pts.Count > 0 && angleOn)
-                target = MeasureMath.SnapToAngleXZ(_pts[_pts.Count - 1], cursor, step);
+            if (_lastNode != null && angleOn)
+                target = MeasureMath.SnapToAngleXZ(_lastNode.Position, cursor, step);
 
-            if ((corners || edges) && TrySnapToNode(cursor, out var sp, corners, edges)) target = sp;
+            // Remember WHICH wall an edge-snap landed on: committing there splits it into a
+            // real T-junction rather than just dropping a point on top of it.
+            _snapEdge = null;
+            if ((corners || edges) && TrySnap(cursor, out var sp, out _snapEdge, corners, edges)) target = sp;
             else if (manager != null && manager.SnapGrid) target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
 
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = target; }
 
             if (previewLine != null)
             {
-                if (_pts.Count > 0)
+                if (_lastNode != null)
                 {
                     previewLine.enabled = true;
                     previewLine.positionCount = 2;
-                    previewLine.SetPosition(0, _pts[_pts.Count - 1]);
+                    previewLine.SetPosition(0, _lastNode.Position);
                     previewLine.SetPosition(1, target);
                 }
                 else previewLine.enabled = false;
@@ -131,36 +134,67 @@ namespace RoomPlanner.Walls
             if (input.ClearPressed()) FinishChain();
         }
 
+        private WallSegment _snapEdge;   // wall the cursor is snapped onto, if any
+
+        /// <summary>
+        /// Commit a point: resolve it to a graph node (splitting a wall we snapped onto, which
+        /// is what makes a real T-junction), then connect it to the previous one.
+        /// </summary>
         private void AddPoint(Vector3 p)
         {
-            if (_current == null)
+            var graph = Graph;
+            if (graph == null) return;
+
+            WallNode node = _snapEdge != null
+                ? graph.SplitSegmentAt(_snapEdge, p)          // tee into an existing wall
+                : graph.SnapOrCreateNode(p);
+            if (node == null) return;
+
+            if (_lastNode == null)
             {
-                _current = Instantiate(wallPrefab, transform);
-                _walls.Add(_current);
-                if (sceneModel != null) sceneModel.Register(_current.GetComponent<Selectable>());
-                _pts.Clear();
-                _interior = Camera.main != null ? Camera.main.transform.position : p; // где стоим = «внутри»
+                _lastNode = node;
+                _chainLevel = node.Position.y;
+                renderer.Sync();                              // a split may have added a wall
+                renderer.RebuildAround(node);
+                return;
             }
-            _pts.Add(p);
-            Rebuild();
+
+            var seg = graph.AddSegment(_lastNode, node);
+            if (seg != null)
+            {
+                ApplyDefaults(seg);
+                renderer.Sync();
+                renderer.RebuildAround(seg.A);
+                renderer.RebuildAround(seg.B);
+                _lastNode = node;                             // chain continues
+            }
+            else
+            {
+                // degenerate (same node / zero length) — keep drawing from where we are
+                renderer.Sync();
+                renderer.RebuildAround(node);
+            }
         }
 
-        private void Rebuild()
+        /// <summary>Stamp the menu defaults onto a freshly drawn wall, side decided once.</summary>
+        private void ApplyDefaults(WallSegment seg)
         {
-            if (_current != null && manager != null)
-                _current.Build(_pts, manager.WallThickness, manager.WallHeight, manager.OffsetMode, manager.Join, _interior);
+            if (manager != null)
+            {
+                seg.Thickness = manager.WallThickness;
+                seg.Height = manager.WallHeight;
+                seg.Offset = manager.OffsetMode;
+                seg.Join = manager.Join;
+            }
+            // where we stand is "inside" — resolved to a fixed side now, never recomputed
+            Vector3 interior = Camera.main != null ? Camera.main.transform.position : seg.Midpoint;
+            seg.SetSideFromInterior(interior);
         }
 
         private void FinishChain()
         {
-            if (_current != null && _pts.Count < 2)
-            {
-                if (sceneModel != null) sceneModel.Unregister(_current.GetComponent<Selectable>());
-                _walls.Remove(_current);
-                Destroy(_current.gameObject);
-            }
-            _current = null;
-            _pts.Clear();
+            _lastNode = null;
+            _snapEdge = null;
             if (previewLine != null) previewLine.enabled = false;
         }
 
@@ -175,44 +209,58 @@ namespace RoomPlanner.Walls
             return true;
         }
 
-        // Snap the new point to existing walls: corners (vertices) of any wall, and edges
-        // (closest point on a segment) of OTHER walls — enables T-junctions.
-        private bool TrySnapToNode(Vector3 p, out Vector3 result, bool corners, bool edges)
+        /// <summary>
+        /// Magnet the cursor to the graph: node corners first, then wall faces. When it lands
+        /// on a face, <paramref name="edgeSegment"/> names the wall — committing there splits
+        /// it into a real T-junction instead of leaving a point sitting on top of it.
+        /// Hidden (deleted) walls are skipped: invisible geometry must not magnet (rule 2.4).
+        /// </summary>
+        private bool TrySnap(Vector3 p, out Vector3 result, out WallSegment edgeSegment,
+            bool corners, bool edges)
         {
             float best = snapDistance;
             result = default;
+            edgeSegment = null;
             bool found = false;
-            foreach (var w in _walls)
+
+            var graph = Graph;
+            if (graph == null) return false;
+
+            if (corners)
             {
-                // Skip destroyed AND hidden (delete-command) walls — invisible geometry must
-                // not act as a snap magnet.
-                if (w == null || !w.gameObject.activeSelf) continue;
-                var pts = w.Points;
-                bool isCurrent = w == _current;
-
-                if (corners)
+                var nodes = graph.Nodes;
+                for (int i = 0; i < nodes.Count; i++)
                 {
-                    // corners (all walls; skip the point we're currently extending from)
-                    for (int i = 0; i < pts.Count; i++)
-                    {
-                        if (isCurrent && i == pts.Count - 1) continue;
-                        float d = Vector3.Distance(p, pts[i]);
-                        if (d < best) { best = d; result = pts[i]; found = true; }
-                    }
+                    var n = nodes[i];
+                    if (n == _lastNode) continue;              // don't snap onto where we start
+                    if (!HasVisibleSegment(n)) continue;
+                    float d = Vector3.Distance(p, n.Position);
+                    if (d < best) { best = d; result = n.Position; edgeSegment = null; found = true; }
                 }
+            }
 
-                // edges (other walls only, so the preview doesn't stick to itself)
-                if (edges && !isCurrent)
+            if (edges)
+            {
+                var segs = graph.Segments;
+                for (int i = 0; i < segs.Count; i++)
                 {
-                    for (int i = 0; i < pts.Count - 1; i++)
-                    {
-                        Vector3 cp = MeasureMath.ClosestPointOnSegment(pts[i], pts[i + 1], p);
-                        float d = Vector3.Distance(p, cp);
-                        if (d < best) { best = d; result = cp; found = true; }
-                    }
+                    var s = segs[i];
+                    if (!renderer.IsVisible(s)) continue;
+                    if (_lastNode != null && s.Has(_lastNode)) continue;   // not the wall we're extending
+                    Vector3 cp = MeasureMath.ClosestPointOnSegment(s.A.Position, s.B.Position, p);
+                    float d = Vector3.Distance(p, cp);
+                    if (d < best) { best = d; result = cp; edgeSegment = s; found = true; }
                 }
             }
             return found;
+        }
+
+        /// <summary>A node is only a snap target while at least one wall on it is visible.</summary>
+        private bool HasVisibleSegment(WallNode n)
+        {
+            for (int i = 0; i < n.Segments.Count; i++)
+                if (renderer.IsVisible(n.Segments[i])) return true;
+            return false;
         }
     }
 }

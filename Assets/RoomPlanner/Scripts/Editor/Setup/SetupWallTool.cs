@@ -15,6 +15,13 @@ namespace RoomPlanner.EditorTools
 
             ctx.WallTool = ctx.Rig.AddComponent<WallController>();
 
+            // owns the wall graph and one view per segment (design/13-phase-b-wallgraph.md)
+            var graphRenderer = ctx.Rig.AddComponent<WallGraphRenderer>();
+            var rso = new SerializedObject(graphRenderer);
+            rso.FindProperty("wallPrefab").objectReferenceValue = wallPrefab;
+            rso.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            rso.ApplyModifiedProperties();
+
             var wallPrevGo = new GameObject("WallPreview");
             wallPrevGo.transform.SetParent(ctx.Rig.transform, false);
             var wallPrev = wallPrevGo.AddComponent<LineRenderer>();
@@ -30,10 +37,9 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("input").objectReferenceValue = ctx.Input;
             so.FindProperty("raycaster").objectReferenceValue = ctx.Raycaster;
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
-            so.FindProperty("wallPrefab").objectReferenceValue = wallPrefab;
+            so.FindProperty("renderer").objectReferenceValue = graphRenderer;
             so.FindProperty("previewLine").objectReferenceValue = wallPrev;
             so.FindProperty("manager").objectReferenceValue = ctx.Manager;
-            so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.ApplyModifiedProperties();
         }
 
