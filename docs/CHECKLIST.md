@@ -105,7 +105,8 @@
 - [~] **Фаза A**: фундамент выбора — реализовано в коде, ожидает проверки на устройстве
   - [x] `Core/EditHistory` + `ICommand` (Execute/Record/Undo/Redo) + юнит-тесты (`EditHistoryTests`)
   - [x] Тесты геометрии: `Wall`/`Floor` `MoveBy`/`Rebuild` + round-trip (в `Wall/FloorGeometryTests`)
-  - [x] **PlayMode-сборка** `RoomPlanner.Tests.Play`: `SceneModel.TryPick` (пик лучом по коллайдерам, скип скрытых/не-Selectable) + `Move/DeleteCommand` через `EditHistory` (double `FakeSelectable`). Ядро выбора вынесено в asmdef `RoomPlanner.Editing`; `Selectable`/`SelectController` остаются в Assembly-CSharp
+  - [x] **PlayMode-сборка** `RoomPlanner.Tests.Play`: `SceneModel.TryPick` (пик лучом, ближний/скип скрытых/скип не-Selectable/промах) + `Move/DeleteCommand` через `EditHistory` (double `FakeSelectable`); **интеграция на реальных `Wall`/`Floor`** — рантайм `MeshCollider` пикается лучом, следует за `MoveBy`, восстанавливается по Undo, прячется по Delete (`GeometryPickingPlayTests`). Ядро выбора вынесено в asmdef `RoomPlanner.Editing`; `Selectable`/`SelectController` — в Assembly-CSharp
+  - [x] EditMode-математика: добавлены `RayPlaneY` (Select-drag/Floor) и `SnapToGridXZ`
   - [x] `RoomPlanner.Editing`: `ISelectable`/`Selectable` (авто-тип, tint-подсветка, hide=SetActive), `SceneModel` (реестр + история + `TryPick`), `MoveCommand`/`DeleteCommand`, `SelectController` (ITool, дефолтный инструмент)
   - [x] Геометрия: `Wall`/`Floor` кэшируют параметры + `Rebuild()`/`MoveBy()` + `MeshCollider`; `Measurement.MoveBy()`
   - [x] Слой `Selectable` (6): стены/полы выбираются, но не мешают лучу-поверхности; измерения — на слое 0 (маркеры сохраняют коллайдеры)
