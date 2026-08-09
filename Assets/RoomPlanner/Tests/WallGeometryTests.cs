@@ -85,12 +85,16 @@ namespace RoomPlanner.Tests
         [Test]
         public void Build_RoundCorner_AddsMoreVertsThanMiter()
         {
+            // Use Center mode so BOTH faces are offset: the convex face of the corner then has
+            // a non-zero radius and the Round arc actually inserts vertices. (In Outer mode the
+            // convex face can fall on the zero-offset drawn line, where an arc collapses to a
+            // point and Round == Miter — that's correct geometry, just not what this test checks.)
             var go = new GameObject("WallTest");
             try
             {
                 var wall = go.AddComponent<Wall>();
                 var pts = new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) };
-                wall.Build(pts, 0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Round, Interior);
+                wall.Build(pts, 0.2f, 2.7f, WallOffsetMode.Center, WallJoin.Round, Interior);
                 Assert.Greater(go.GetComponent<MeshFilter>().sharedMesh.vertexCount, 12);
             }
             finally { Object.DestroyImmediate(go); }
