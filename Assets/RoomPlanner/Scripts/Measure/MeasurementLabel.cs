@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Measure
 {
@@ -11,8 +12,18 @@ namespace RoomPlanner.Measure
     {
         [SerializeField] private TMP_Text text;
         [SerializeField] private Transform background;
+        [Tooltip("Сдвиг подписи к камере от линии, м (чтобы не тонула в стене).")]
+        [SerializeField] private float forwardOffset = 0.02f;
 
         private Transform _cam;
+        private Vector3 _anchor;
+
+        /// <summary>Опорная точка подписи (в мире). Реальную позицию смещаем к камере в LateUpdate.</summary>
+        public void SetAnchor(Vector3 world)
+        {
+            _anchor = world;
+            transform.position = world;
+        }
 
         public void SetDistance(float meters)
         {
@@ -30,11 +41,7 @@ namespace RoomPlanner.Measure
             }
         }
 
-        public static string FormatDistance(float meters)
-        {
-            float cm = meters * 100f;
-            return $"{cm:0} см"; // всегда в сантиметрах
-        }
+        public static string FormatDistance(float meters) => MeasureMath.FormatDistanceCm(meters);
 
         private void LateUpdate()
         {
@@ -43,9 +50,12 @@ namespace RoomPlanner.Measure
                 if (Camera.main == null) return;
                 _cam = Camera.main.transform;
             }
-            Vector3 dir = transform.position - _cam.position;
-            if (dir.sqrMagnitude > 0.0001f)
-                transform.rotation = Quaternion.LookRotation(dir);
+            Vector3 toCam = _cam.position - _anchor;
+            if (toCam.sqrMagnitude > 0.0001f)
+            {
+                transform.position = _anchor + toCam.normalized * forwardOffset; // чуть впереди линии
+                transform.rotation = Quaternion.LookRotation(-toCam);            // лицом к камере
+            }
         }
     }
 }

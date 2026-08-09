@@ -71,7 +71,7 @@ namespace RoomPlanner.Measure
                 Vector3 lineDir = (b - a).sqrMagnitude > 0.0001f ? (b - a).normalized : Vector3.right;
                 Vector3 up = Vector3.up - Vector3.Dot(Vector3.up, lineDir) * lineDir;
                 up = up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up; // вертикальная линия → фолбэк
-                label.transform.position = mid + up * 0.06f;
+                label.SetAnchor(mid + up * 0.05f);
                 label.SetDistance(Distance);
             }
         }

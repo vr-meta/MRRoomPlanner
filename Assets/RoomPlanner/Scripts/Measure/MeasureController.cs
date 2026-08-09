@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
+using RoomPlanner.Tools;
 
 namespace RoomPlanner.Measure
 {
@@ -14,7 +16,7 @@ namespace RoomPlanner.Measure
     /// • Совпавшие точки нескольких линий показываются одним маркером.
     /// • В режиме перетаскивания «+» скрыт (чтобы не мешал магнититься).
     /// </summary>
-    public class MeasureController : MonoBehaviour
+    public class MeasureController : MonoBehaviour, ITool
     {
         [SerializeField] private PointerProvider pointer;
         [SerializeField] private MeasureInput input;
@@ -22,11 +24,15 @@ namespace RoomPlanner.Measure
         [SerializeField] private Transform reticle;
         [SerializeField] private Measurement measurementPrefab;
         [SerializeField] private MeasureContinueButton continueButtonPrefab;
+        [SerializeField] private ToolManager manager;   // snap toggles (optional; on by default if null)
         [Tooltip("Радиус магнита к существующим концам, м.")]
         [SerializeField] private float snapDistance = 0.1f;
         [SerializeField] private int maxMeasurements = 40;
 
         private const float PlusGrace = 0.25f; // сколько «+» держится после ухода луча (чтобы успеть навестись)
+        private const float DepthSpeed = 1.5f; // м/с изменения глубины курсора в воздухе
+        private const float MinDepth = 0.2f;
+        private const float MaxDepth = 10f;
 
         private readonly List<Measurement> _measurements = new();
         private readonly List<Vector3> _keptPts = new();
@@ -39,12 +45,14 @@ namespace RoomPlanner.Measure
         private Vector3 _currentHit;
         private Vector3 _currentNormal;
         private bool _hasHit;
+        private Vector3 _cursorPoint;           // точка под прицелом: на поверхности или в воздухе
+        private float _cursorDistance = 2f;     // глубина курсора в воздухе, м
         private Component _hoverTarget;
         private MeasureContinueButton _hoverBtn;
 
         private void Start()
         {
-            Debug.Log($"[Measure] v7 started. prefab={(measurementPrefab != null)} contBtn={(continueButtonPrefab != null)}");
+            Debug.Log($"[Measure] v9 started. prefab={(measurementPrefab != null)} contBtn={(continueButtonPrefab != null)}");
             if (continueButtonPrefab != null)
             {
                 _plus = Instantiate(continueButtonPrefab, transform);
@@ -52,16 +60,40 @@ namespace RoomPlanner.Measure
             }
         }
 
-        private void Update()
+        public void OnActivate() { }
+
+        public void OnDeactivate()
+        {
+            if (_preview != null) { Destroy(_preview.gameObject); _preview = null; _pendingStart = null; }
+            _dragging = null;
+            HidePlus();
+            if (reticle != null) reticle.gameObject.SetActive(false);
+        }
+
+        public void Tick(bool blocked)
         {
             if (pointer == null || raycaster == null || input == null) return;
 
             DedupeMarkers();
+            if (blocked)
+            {
+                HidePlus();
+                if (reticle != null) reticle.gameObject.SetActive(false);
+                return;
+            }
 
             Ray ray = pointer.GetRay();
             _hasHit = raycaster.TryRaycast(ray, out _currentHit, out _currentNormal, out var hitObj);
             var plusHit = (_hasHit && hitObj != null) ? hitObj.GetComponentInParent<MeasureContinueButton>() : null;
             var handleHit = (_hasHit && hitObj != null) ? hitObj.GetComponentInParent<MeasurePointHandle>() : null;
+
+            // Курсор: на поверхности — точка попадания; в воздухе — вдоль луча на регулируемой глубине
+            // (стик вверх/вниз). При уходе с поверхности глубина продолжается от неё — без скачка.
+            if (_hasHit)
+                _cursorDistance = Vector3.Distance(ray.origin, _currentHit);
+            else
+                _cursorDistance = Mathf.Clamp(_cursorDistance + input.DepthAdjust() * DepthSpeed * Time.deltaTime, MinDepth, MaxDepth);
+            _cursorPoint = _hasHit ? _currentHit : ray.origin + ray.direction * _cursorDistance;
 
             // --- Перетаскивание точки: «+» скрыт ---
             if (_dragging != null)
@@ -75,8 +107,8 @@ namespace RoomPlanner.Measure
             // «Точка под прицелом» = попадание в коллайдер ИЛИ магнит-близость (как у ретикла),
             // чтобы клик рядом с точкой не начинал новую линию, а редактировал её.
             MeasurePointHandle effHandle = handleHit;
-            if (effHandle == null && !_pendingStart.HasValue && _hasHit)
-                effHandle = FindEndpointHandle(_currentHit);
+            if (effHandle == null && !_pendingStart.HasValue)
+                effHandle = FindEndpointHandle(_cursorPoint);
 
             UpdateHover(plusHit, effHandle);
 
@@ -92,17 +124,21 @@ namespace RoomPlanner.Measure
                 MaybeHidePlus();
             }
 
-            // --- Точка назначения: ось (грип) + магнит к концам ---
-            Vector3 target = _currentHit;
+            // --- Точка назначения: ось (грип) + магнит к концам (работает и в воздухе) ---
+            Vector3 target = _cursorPoint;
             if (_pendingStart.HasValue && input.SnapHeld())
-                target = SnapToAxis(_pendingStart.Value, _currentHit);
-            if (TrySnapToEndpoint(_currentHit, out var snapPt, _dragging != null ? _dragging.Owner : null))
+                target = SnapToAxis(_pendingStart.Value, _cursorPoint);
+
+            bool corners = manager == null || manager.SnapCorner;
+            if (corners && TrySnapToEndpoint(_cursorPoint, out var snapPt, null))
                 target = snapPt;
+            else if (manager != null && manager.SnapGrid)
+                target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
 
             if (reticle != null)
             {
                 reticle.gameObject.SetActive(true);
-                reticle.position = _hasHit ? target : ray.origin + ray.direction * 2f;
+                reticle.position = target;
             }
 
             // --- Удаление ---
@@ -113,10 +149,10 @@ namespace RoomPlanner.Measure
                 return;
             }
 
-            // --- Постановка / старт цепочки / старт таскания ---
+            // --- Постановка / старт цепочки / старт таскания (триггер — всегда, в т.ч. в воздухе) ---
             if (input.ConfirmPressed())
             {
-                if (_pendingStart.HasValue && _hasHit)
+                if (_pendingStart.HasValue)
                     PlacePoint(target);                                  // фиксация второй точки
                 else if (plusHit != null && plusHit == _plus)
                     StartChainFrom(_plusAnchor);                         // продолжить от наведённой точки
@@ -125,25 +161,25 @@ namespace RoomPlanner.Measure
                     _dragging = effHandle;                               // тащить точку (по коллайдеру или магниту)
                     if (effHandle.Owner != null) effHandle.Owner.SetInteractable(false);
                 }
-                else if (_hasHit)
+                else
                     PlacePoint(target);                                  // первая точка нового измерения
             }
 
             if (_pendingStart.HasValue && _preview != null)
-                _preview.Set(_pendingStart.Value, _hasHit ? target : _pendingStart.Value);
+                _preview.Set(_pendingStart.Value, target);
         }
 
         private void DoDrag()
         {
             if (input.ConfirmHeld())
             {
-                Vector3 t = _hasHit ? _currentHit : _dragging.transform.position;
+                Vector3 t = _cursorPoint;
                 if (input.SnapHeld() && _dragging.Owner != null)
                 {
                     Vector3 other = _dragging.IsEndA ? _dragging.Owner.PointB : _dragging.Owner.PointA;
                     t = SnapToAxis(other, t);
                 }
-                if (TrySnapToEndpoint(_currentHit, out var sp, _dragging.Owner)) t = sp;
+                if (TrySnapToEndpoint(_cursorPoint, out var sp, _dragging.Owner)) t = sp;
                 ApplyDrag(_dragging, t);
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
             }
@@ -326,14 +362,6 @@ namespace RoomPlanner.Measure
             return found;
         }
 
-        /// <summary>Привязка точки b к ближайшей мировой оси относительно a (вертикаль/горизонталь).</summary>
-        private static Vector3 SnapToAxis(Vector3 a, Vector3 b)
-        {
-            Vector3 d = b - a;
-            float ax = Mathf.Abs(d.x), ay = Mathf.Abs(d.y), az = Mathf.Abs(d.z);
-            if (ay >= ax && ay >= az) return a + new Vector3(0f, d.y, 0f);   // вертикаль
-            if (ax >= az) return a + new Vector3(d.x, 0f, 0f);               // горизонталь X
-            return a + new Vector3(0f, 0f, d.z);                             // горизонталь Z
-        }
+        private static Vector3 SnapToAxis(Vector3 a, Vector3 b) => MeasureMath.SnapToAxis(a, b);
     }
 }

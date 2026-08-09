@@ -14,5 +14,6 @@
 | 07 | [Слои и инженерные сети (MEP)](design/07-mep-layers.md) |
 | 08 | [Импорт/экспорт (IFC, DWG, glTF)](design/08-interop.md) |
 | 09 | [Структура проекта: Дом→Этажи→Комнаты, захват и сборка](design/09-project-structure.md) |
+| 10 | [Карта кнопок (controls)](design/10-controls.md) |
 
 Индекс и порядок реализации — [`docs/design/README.md`](design/README.md).
