@@ -147,6 +147,23 @@ namespace RoomPlanner.Tools
             }
             _grabbing = false;
 
+            // Global teleport (A): bring the aimed slab spot under your feet — the model
+            // moves, never the camera (passthrough; design/18 I6). Works from any tool.
+            if (!overMenu && sceneModel != null && input.TeleportPressed()
+                && (select == null || !select.IsDragging))
+            {
+                if (sceneModel.TryPick(ray, out var picked, out var point)
+                    && picked is Selectable sel && sel.Kind == SelectableKind.Floor)
+                {
+                    var head = Camera.main != null ? Camera.main.transform.position : ray.origin;
+                    var delta = BuildingNav.TeleportDelta(point, head);
+                    sceneModel.History.Execute(new TeleportCommand(
+                        GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
+                        TeleportCommand.CollectFloors(), delta));
+                    input.Pulse(0.4f, 0.02f);
+                }
+            }
+
             ITool act = ActiveTool();
             if (act != null) act.Tick(overMenu);
 

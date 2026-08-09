@@ -57,6 +57,15 @@ namespace RoomPlanner.Measure
             return OVRInput.GetDown(OVRInput.Button.Four);
         }
 
+        /// <summary>Teleport to the aimed floor spot — A (Button.One, right hand). Editor: T.</summary>
+        public bool TeleportPressed()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.T)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.One);
+        }
+
         /// <summary>Axis snap (vertical / horizontal) — GRIP held (either hand).</summary>
         public bool SnapHeld()
         {
