@@ -31,3 +31,8 @@ Thumbs.db
 .utmp/
 *_BurstDebugInformation_DoNotShip/
 TempAssembly.dll
+
+# CI / headless run artifacts
+TestResults-*.xml
+ci-*.log
+/Build/
