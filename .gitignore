@@ -36,3 +36,5 @@ TempAssembly.dll
 TestResults-*.xml
 ci-*.log
 /Build/
+
+ci-shots/
