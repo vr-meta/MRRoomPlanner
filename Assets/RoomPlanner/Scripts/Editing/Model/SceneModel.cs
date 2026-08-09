@@ -48,7 +48,9 @@ namespace RoomPlanner.Editing
             foreach (var h in hits)
             {
                 if (h.collider == null) continue;
-                var sel = h.collider.GetComponentInParent<Selectable>();
+                // interface lookup so this assembly needn't reference the concrete Selectable
+                // (which lives in Assembly-CSharp with Meta/TMP deps).
+                var sel = h.collider.GetComponentInParent<ISelectable>();
                 if (sel == null || sel.IsHidden) continue;
                 if (h.distance < best)
                 {
