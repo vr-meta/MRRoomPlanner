@@ -335,10 +335,18 @@ namespace RoomPlanner.Walls
 
         // ---- extrude cross-sections into a mesh (+edges) ----
 
+        /// <summary>
+        /// Metres per texture tile. Metric UVs (docs/design/04-surfaces-materials.md): U runs
+        /// ALONG the wall, V goes up, both in metres — so the same tile size looks identical on
+        /// a 1 m and a 10 m wall, with no stretching and no seams to hand-tune.
+        /// </summary>
+        public const float TileMeters = 1f;
+
         private void Triangulate(List<Cross> s, float height, bool flip)
         {
             int m = s.Count;
             var v = new List<Vector3>(m * 4);
+            var uv = new List<Vector2>(m * 4);
             var tris = new List<int>();
             var ev = new List<Vector3>(m * 4);
             var ei = new List<int>();
@@ -351,9 +359,23 @@ namespace RoomPlanner.Walls
                 else Quad(tris, a, b, c, d);
             }
 
+            float run = 0f;                 // distance travelled along the wall, in metres
+            Vector3 prevMid = Vector3.zero;
+
             for (int j = 0; j < m; j++)
             {
+                Vector3 mid = (s[j].Inner + s[j].Outer) * 0.5f;
+                if (j > 0) run += Vector3.Distance(new Vector3(mid.x, 0f, mid.z),
+                                                   new Vector3(prevMid.x, 0f, prevMid.z));
+                prevMid = mid;
+
+                float u = run / TileMeters;
+                float vBottom = s[j].Inner.y / TileMeters;
+                float vTop = (s[j].Inner.y + height) / TileMeters;
+
                 v.Add(s[j].Inner); v.Add(s[j].Outer); v.Add(s[j].Inner + up); v.Add(s[j].Outer + up);
+                uv.Add(new Vector2(u, vBottom)); uv.Add(new Vector2(u, vBottom));
+                uv.Add(new Vector2(u, vTop)); uv.Add(new Vector2(u, vTop));
                 ev.Add(s[j].Inner); ev.Add(s[j].Outer); ev.Add(s[j].Inner + up); ev.Add(s[j].Outer + up);
                 // verticals
                 ei.Add(j * 4 + 0); ei.Add(j * 4 + 2);
@@ -383,6 +405,7 @@ namespace RoomPlanner.Walls
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
             _mesh.SetVertices(v);
+            _mesh.SetUVs(0, uv);
             _mesh.SetTriangles(tris, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();

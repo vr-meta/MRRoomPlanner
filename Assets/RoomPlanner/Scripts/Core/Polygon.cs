@@ -110,6 +110,10 @@ namespace RoomPlanner.Core
         {
             var tris = new List<int>();
             if (pts == null || pts.Count < 3) return tris;
+            // Ear clipping happily "succeeds" on a crossed outline and returns triangles that
+            // overlap. Refuse here rather than relying on every caller to pre-check, or the
+            // contract above ("empty if unusable") would be a lie.
+            if (!IsSimple(pts)) return tris;
 
             // work on an index ring in CCW order
             int n = pts.Count;

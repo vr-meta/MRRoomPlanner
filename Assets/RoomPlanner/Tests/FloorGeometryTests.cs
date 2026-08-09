@@ -19,7 +19,10 @@ namespace RoomPlanner.Tests
 
                 var mesh = go.GetComponent<MeshFilter>().sharedMesh;
                 Assert.IsNotNull(mesh);
-                Assert.AreEqual(8, mesh.vertexCount); // 4 top + 4 bottom
+                // 6 per outline point: top ring + bottom ring + 4 own vertices per side quad.
+                // Sides need their own vertices so the top can carry blueprint UVs while the
+                // sides carry metric ones — and so the rim keeps a crisp normal.
+                Assert.AreEqual(24, mesh.vertexCount);
                 Assert.AreEqual(b, floor.CornerB);
                 Assert.AreEqual(0f, floor.Level, 1e-5f);
             }
