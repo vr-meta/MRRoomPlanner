@@ -127,8 +127,8 @@
   - [ ] (отложено) строковые `FindProperty` в MeasureSetup — обёртка с понятной ошибкой
   - [ ] (отложено) `TryEnableEffectMeshColliders` — сузить рефлексию до конкретного поля MRUK
 - [ ] **Прогон всех тестов** (EditMode+PlayMode, batchmode при закрытом редакторе) + **SetupRig** (состав рига изменился: коллайдеры панелей, RigMarker) + Ctrl+B и проверка на устройстве
-- [ ] **Фаза B**: `WallGraph` (узлы/сегменты) + правка стен + `SnapService` — **план и чек-лист: [`design/12-phase-b-wallgraph.md`](design/12-phase-b-wallgraph.md)**
-  - [ ] B1 — модель графа в `Core` (узлы/сегменты/сплит/id) + тесты
+- [ ] **Фаза B**: `WallGraph` (узлы/сегменты) + правка стен + `SnapService` — **план и чек-лист: [`design/13-phase-b-wallgraph.md`](design/13-phase-b-wallgraph.md)**
+  - [x] B1 — модель графа в `Core`: `WallNode`/`WallSegment`/`WallGraph` (снап-или-создать узел, `AddSegment` с защитой от нулевой длины/дублей, `SplitSegmentAt` = T-стык с проекцией на стену и сохранением параметров, удаление с чисткой осиротевших узлов, non-alloc `NeighborsOf`) + **20 тестов** (`WallGraphTests`)
   - [ ] B2 — меш сегмента с учётом соседей (miter/T/тупик) + тесты «не хуже текущего»
   - [ ] B3 — `WallController` пишет в граф; 1 компонент = 1 сегмент; убрать двойное владение (долг Фазы A)
   - [ ] B4 — параметры за экземпляр + инспектор выбранной стены (undo)

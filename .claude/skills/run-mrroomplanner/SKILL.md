@@ -123,6 +123,13 @@ Verifying a build on device: `adb logcat` should show `[Tools] v10 started …` 
 
 - **Editor open ⇄ batchmode.** `Temp/UnityLockfile` exists while the Editor runs; batchmode then
   exits instantly with no log at all. The driver checks this and says so.
+- **A crashed Editor leaves a stale `Temp/UnityLockfile`** (and a stale `%TEMP%\mcpbridge_*.info`).
+  Believing either one sends you down the wrong transport — the driver ended up calling a dead
+  bridge and got `ECONNREFUSED`. Both markers are now validated against a live process
+  (`tasklist` / `process.kill(pid, 0)`); `status` prints `STALE … (ignored)` when it sees one.
+- **A run that dies on compiler errors leaves the PREVIOUS `TestResults-*.xml` in place.** Reading
+  it reports last run's numbers as if they were fresh — worse than no result. The driver deletes
+  the XML before each run and prints the `error CS…` lines when no results appear.
 - **Never use `TestRunnerTools.WaitForTestRun` from a script.** It holds the HTTP response open
   while the Editor runs tests; node's fetch kills it with `UND_ERR_HEADERS_TIMEOUT` and you get a
   hang with no output. The driver polls `GetResults` instead. Same reason `RunAll` for PlayMode

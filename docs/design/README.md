@@ -17,7 +17,8 @@
 | 09 | [project-structure](09-project-structure.md) | **Корневой:** Дом→Этажи→Комнаты, захват и сборка, Ingest 🔜 |
 | 10 | [controls](10-controls.md) | Карта кнопок (раскладка ввода) ✅ |
 | 11 | [object-operations](11-object-operations.md) | Манипуляции по типам объектов (роадмап редактирования) ✅🔜 |
-| 12 | [phase-b-wallgraph](12-phase-b-wallgraph.md) | **План Фазы B:** WallGraph и правка стен 🔜 |
+| 12 | [coding-rules](12-coding-rules.md) | **Свод правил к коду** (из аудита 2026-08-09) ✅ |
+| 13 | [phase-b-wallgraph](13-phase-b-wallgraph.md) | **План Фазы B:** WallGraph и правка стен 🔜 |
 
 ## Порядок реализации
 

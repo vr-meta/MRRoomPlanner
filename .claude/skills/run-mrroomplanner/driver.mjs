@@ -24,7 +24,7 @@
  *   node .claude/skills/run-mrroomplanner/driver.mjs mcp <Tool> <method> [k=v ...]
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -52,7 +52,23 @@ function unityExe() {
   die(`Unity ${version} not found. Tried:\n  ${candidates.join('\n  ')}\nSet UNITY_EXE to override.`);
 }
 
-const editorOpen = () => existsSync(LOCKFILE);
+/** Does this pid still exist? (signal 0 = existence probe, EPERM means "alive, not ours") */
+function pidAlive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+function unityRunning() {
+  const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq Unity.exe', '/NH'], { encoding: 'utf8' });
+  return /Unity\.exe/i.test(r.stdout || '');
+}
+
+/**
+ * A crashed/killed Editor leaves Temp/UnityLockfile behind, so the file alone lies.
+ * Trust it only when a Unity process actually exists.
+ */
+const editorOpen = () => existsSync(LOCKFILE) && unityRunning();
+const staleLock = () => existsSync(LOCKFILE) && !unityRunning();
 
 // ---------------------------------------------------------------- MCP bridge
 
@@ -69,6 +85,8 @@ function bridgeInfo() {
       // only trust the file that belongs to THIS project
       const p = (info.projectPath || '').replace(/\\/g, '/').toLowerCase();
       if (p && p !== ROOT.replace(/\\/g, '/').toLowerCase()) continue;
+      // Unity does not always clean this up on exit — a file whose pid is gone is stale.
+      if (!pidAlive(info.pid)) continue;
       return info;
     } catch { /* stale/partial file */ }
   }
@@ -137,13 +155,24 @@ function parseResults(xmlPath) {
 
 function batchTests(platform) {
   const xml = join(ROOT, `TestResults-${platform}.xml`);
+  // Delete first: a run that dies on compiler errors leaves the PREVIOUS xml in place,
+  // and reporting those stale numbers as this run's result is worse than no result.
+  if (existsSync(xml)) rmSync(xml);
   console.log(`[batch] running ${platform} tests (Editor closed, ~60-90s)…`);
-  const { code } = runUnity(
+  const { code, log } = runUnity(
     ['-runTests', '-batchmode', '-projectPath', ROOT, '-testPlatform', platform, '-testResults', xml],
     platform,
   );
   const res = parseResults(xml);
-  if (!res) { console.error(`[batch] ${platform}: no results (exit ${code}) — see ci-${platform}.log`); return 1; }
+  if (!res) {
+    console.error(`[batch] ${platform}: NO RESULTS (exit ${code}) — see ci-${platform}.log`);
+    // compiler errors are the usual cause; surface them instead of making the user grep
+    try {
+      const errs = [...new Set(readFileSync(log, 'utf8').match(/.*error CS\d+.*/g) || [])];
+      errs.slice(0, 15).forEach((e) => console.error(`  ${e.trim()}`));
+    } catch { /* no log */ }
+    return 1;
+  }
   console.log(`[batch] ${platform}: total=${res.total} passed=${res.passed} failed=${res.failed} skipped=${res.skipped}`);
   res.failedNames.forEach((n) => console.log(`  FAIL: ${n}`));
   return res.failed > 0 ? 1 : 0;
@@ -155,7 +184,9 @@ async function cmdStatus() {
   const info = bridgeInfo();
   console.log(`project      : ${ROOT}`);
   console.log(`unity        : ${unityExe()}`);
-  console.log(`editor open  : ${editorOpen() ? 'YES (bridge path; batchmode blocked)' : 'no (batchmode path)'}`);
+  console.log(`editor open  : ${editorOpen() ? 'YES (bridge path; batchmode blocked)'
+    : staleLock() ? 'no — STALE Temp/UnityLockfile from a crashed Editor (ignored)'
+    : 'no (batchmode path)'}`);
   console.log(`mcp bridge   : ${info ? `port ${info.port} (pid ${info.pid})` : 'not running'}`);
   if (!info) return 0;
   try {
