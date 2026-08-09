@@ -32,13 +32,22 @@ namespace RoomPlanner.Measure
             if (c != null) c.enabled = on;
         }
 
+        private Renderer _markerRendererA, _markerRendererB;
+
         /// <summary>Показать/скрыть визуал маркера конца (для схлопывания совпавших точек).</summary>
         public void SetMarkerVisible(bool isEndA, bool visible)
         {
-            var t = isEndA ? markerA : markerB;
-            if (t == null) return;
-            var r = t.GetComponent<Renderer>();
-            if (r != null) r.enabled = visible;
+            // Cached: this runs per marker per frame from DedupeMarkers.
+            var r = isEndA ? _markerRendererA : _markerRendererB;
+            if (r == null)
+            {
+                var t = isEndA ? markerA : markerB;
+                if (t == null) return;
+                r = t.GetComponent<Renderer>();
+                if (r == null) return;
+                if (isEndA) _markerRendererA = r; else _markerRendererB = r;
+            }
+            if (r.enabled != visible) r.enabled = visible;
         }
 
         /// <summary>Ручка конца (для выделения/таскания по магнит-близости, не только по коллайдеру).</summary>

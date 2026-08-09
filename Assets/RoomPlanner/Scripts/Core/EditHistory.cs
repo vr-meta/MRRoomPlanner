@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace RoomPlanner.Core
@@ -40,16 +41,20 @@ namespace RoomPlanner.Core
         public void Undo()
         {
             if (_undo.Count == 0) return;
-            var cmd = _undo.Pop();
+            // Peek before invoking: if Undo() throws, the command stays on the stack instead
+            // of silently vanishing from both stacks.
+            var cmd = _undo.Peek();
             cmd.Undo();
+            _undo.Pop();
             _redo.Push(cmd);
         }
 
         public void Redo()
         {
             if (_redo.Count == 0) return;
-            var cmd = _redo.Pop();
+            var cmd = _redo.Peek();
             cmd.Do();
+            _redo.Pop();
             _undo.Push(cmd);
         }
 
@@ -57,6 +62,28 @@ namespace RoomPlanner.Core
         {
             _undo.Clear();
             _redo.Clear();
+        }
+
+        /// <summary>
+        /// Remove matching commands from both stacks (order preserved). Used when a target
+        /// object is destroyed for good, so its commands can never be replayed.
+        /// </summary>
+        public void PurgeWhere(Func<ICommand, bool> shouldRemove)
+        {
+            if (shouldRemove == null) return;
+            PurgeStack(_undo, shouldRemove);
+            PurgeStack(_redo, shouldRemove);
+        }
+
+        private static void PurgeStack(Stack<ICommand> stack, Func<ICommand, bool> shouldRemove)
+        {
+            if (stack.Count == 0) return;
+            var kept = new List<ICommand>(stack.Count);
+            foreach (var cmd in stack)                    // enumerates top → bottom
+                if (!shouldRemove(cmd)) kept.Add(cmd);
+            if (kept.Count == stack.Count) return;
+            stack.Clear();
+            for (int i = kept.Count - 1; i >= 0; i--) stack.Push(kept[i]);
         }
     }
 }

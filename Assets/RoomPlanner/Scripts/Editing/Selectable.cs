@@ -19,6 +19,7 @@ namespace RoomPlanner.Editing
         private static readonly Color SelectColor = new Color(0.3f, 1f, 0.5f);   // green
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int FaceColorId = Shader.PropertyToID("_FaceColor"); // TMP labels
 
         private SelectableKind _kind;
         private bool _resolved;
@@ -33,9 +34,21 @@ namespace RoomPlanner.Editing
         public Transform Transform => transform;
         public bool IsHidden => !gameObject.activeSelf;
 
+        // `this` is compile-time typed as a UnityEngine.Object here, so the overloaded
+        // null-check correctly reports a destroyed component (unlike interface-typed refs).
+        public bool IsAlive => this != null;
+
         public SelectableKind Kind { get { Resolve(); return _kind; } }
 
         private void Awake() => Resolve();
+
+        private void OnDestroy()
+        {
+            // Safety net: drop this object (and its history commands) from the model even if
+            // the destroying code forgot the explicit Unregister.
+            var model = SceneModel.Instance;
+            if (model != null) model.Unregister(this);
+        }
 
         private void Resolve()
         {
@@ -89,6 +102,7 @@ namespace RoomPlanner.Editing
                     r.GetPropertyBlock(_mpb);
                     _mpb.SetColor(BaseColorId, c);
                     _mpb.SetColor(ColorId, c);
+                    _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
                     r.SetPropertyBlock(_mpb);
                 }
                 else

@@ -93,8 +93,9 @@ namespace RoomPlanner.Tools
         {
             if (pointer == null || input == null) return;
 
-            // Global Undo/Redo (X/Y) — works regardless of the active tool.
-            if (sceneModel != null)
+            // Global Undo/Redo (X/Y) — works regardless of the active tool, but not while a
+            // drag is accumulating its delta (replaying history mid-drag corrupts the total).
+            if (sceneModel != null && (select == null || !select.IsDragging))
             {
                 if (input.UndoPressed()) { sceneModel.History.Undo(); RefreshMenu(); }
                 else if (input.RedoPressed()) { sceneModel.History.Redo(); RefreshMenu(); }
@@ -104,14 +105,20 @@ namespace RoomPlanner.Tools
             MenuButton mb = null;
             InspectorGrab grab = null;
             RaycastHit hit = default;
-            if (Physics.Raycast(ray, out hit, 10f, 1 << MenuLayer, QueryTriggerInteraction.Ignore))
+            // ANY hit on the menu layer blocks the scene tools — panel backgrounds carry
+            // colliders too, so the trigger can't shoot through the gaps between buttons.
+            bool overMenu = Physics.Raycast(ray, out hit, 10f, 1 << MenuLayer, QueryTriggerInteraction.Ignore);
+            if (overMenu)
             {
                 mb = hit.collider.GetComponentInParent<MenuButton>();
                 grab = hit.collider.GetComponentInParent<InspectorGrab>();
             }
 
-            // --- Grab-to-move the floating inspector (grip on its title bar) ---
-            if (input.SnapHeld() && (grab != null || _grabbing))
+            // --- Grab-to-move the floating inspector (grip PRESSED on its title bar) ---
+            // Requires a fresh grip press over the bar: a grip already held for axis/angle snap
+            // that merely sweeps across the panel must not yank it (and must not freeze the tool).
+            bool grabStart = !_grabbing && grab != null && input.SnapPressed();
+            if ((_grabbing && input.SnapHeld()) || grabStart)
             {
                 if (!_grabbing) { _grabbing = true; _grabDist = Mathf.Max(0.3f, hit.distance); }
                 if (inspector != null) inspector.MovePanel(ray.origin + ray.direction * _grabDist);
@@ -120,8 +127,6 @@ namespace RoomPlanner.Tools
                 return; // don't tick tools or press buttons while dragging
             }
             _grabbing = false;
-
-            bool overMenu = mb != null || grab != null;
 
             ITool act = ActiveTool();
             if (act != null) act.Tick(overMenu);

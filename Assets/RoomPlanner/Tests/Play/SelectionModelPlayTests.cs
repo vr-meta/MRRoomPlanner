@@ -24,6 +24,7 @@ namespace RoomPlanner.Tests.Play
             public Transform Transform => transform;
             public Bounds WorldBounds => new Bounds(transform.position, Vector3.one);
             public bool IsHidden => !gameObject.activeSelf;
+            public bool IsAlive => this != null;   // Unity fake-null via the typed `this`
 
             public Vector3 Moved;           // accumulated MoveBy deltas
             public int HighlightChanges;
@@ -152,6 +153,60 @@ namespace RoomPlanner.Tests.Play
 
             history.Undo();
             Assert.IsFalse(target.IsHidden);
+        }
+
+        [Test]
+        public void DeleteCommand_Redo_HidesAgain()
+        {
+            var target = MakePickable("T", Vector3.zero);
+            var history = new EditHistory();
+
+            history.Execute(new DeleteCommand(target));
+            history.Undo();
+            Assert.IsFalse(target.IsHidden);
+
+            history.Redo();
+            Assert.IsTrue(target.IsHidden, "redo must re-hide the object");
+        }
+
+        // ---- lifetime: destroyed targets must never crash the history ----
+
+        [UnityTest]
+        public IEnumerator Undo_AfterTargetDestroyed_IsSafeNoOp()
+        {
+            var model = MakeModel();
+            var target = MakePickable("T", Vector3.zero);
+            model.Register(target);
+            model.History.Execute(new MoveCommand(target, Vector3.right));
+
+            // Hard-destroy WITHOUT unregistering — the worst case (a missed pairing).
+            Object.Destroy(target.gameObject);
+            yield return null;   // destroy applies at end of frame
+
+            Assert.DoesNotThrow(() => model.History.Undo(), "IsAlive guard must absorb the dead target");
+            Assert.DoesNotThrow(() => model.History.Redo());
+        }
+
+        [Test]
+        public void Unregister_PurgesTargetCommandsFromHistory()
+        {
+            var model = MakeModel();
+            var a = MakePickable("A", Vector3.zero);
+            var b = MakePickable("B", Vector3.one);
+            model.Register(a);
+            model.Register(b);
+            model.History.Execute(new MoveCommand(a, Vector3.right));
+            model.History.Execute(new MoveCommand(b, Vector3.forward));
+            model.History.Undo();   // b's move sits on the redo stack
+            Assert.AreEqual(1, model.History.UndoCount);
+            Assert.AreEqual(1, model.History.RedoCount);
+
+            model.Unregister(a);
+
+            Assert.AreEqual(0, model.History.UndoCount, "a's command purged from undo");
+            Assert.AreEqual(1, model.History.RedoCount, "b's command survives on redo");
+            model.History.Redo();
+            Assert.AreEqual(Vector3.forward, b.Moved, "surviving command still replays");
         }
 
         [Test]

@@ -45,13 +45,24 @@ namespace RoomPlanner.EditorTools
             }
         }
 
-        /// <summary>Build the Quest APK to Build/MRRoomPlanner.apk.</summary>
+        /// <summary>
+        /// Build the Quest APK to Build/MRRoomPlanner.apk. The single build path for both
+        /// batchmode and the GUI menu (RoomPlanner → Build APK (Quest) delegates here) — two
+        /// diverging pipelines drifted before.
+        /// </summary>
         public static void BuildAndroid()
         {
             try
             {
                 string outPath = "Build/MRRoomPlanner.apk";
                 System.IO.Directory.CreateDirectory("Build");
+
+                if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
+                    EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
+
+                var id = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android);
+                if (string.IsNullOrEmpty(id) || id.Contains("DefaultCompany"))
+                    PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.RoomPlanner.MRRoomPlanner");
 
                 var scenes = EditorBuildSettings.scenes
                     .Where(s => s.enabled)
@@ -70,14 +81,24 @@ namespace RoomPlanner.EditorTools
 
                 var report = BuildPipeline.BuildPlayer(opts);
                 var summary = report.summary;
+                bool ok = summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded;
                 Debug.Log($"[CI] Build {summary.result}, size={summary.totalSize} bytes, errors={summary.totalErrors}");
-                if (summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
-                    EditorApplication.Exit(1);
+                if (Application.isBatchMode)
+                {
+                    if (!ok) EditorApplication.Exit(1);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Build APK (Quest)",
+                        ok ? $"OK: {outPath}\nSize: {summary.totalSize / (1024f * 1024f):F1} MB"
+                           : $"FAILED: {summary.result} ({summary.totalErrors} errors)", "OK");
+                }
             }
             catch (Exception e)
             {
                 Debug.LogError($"[CI] BuildAndroid failed: {e}");
-                EditorApplication.Exit(1);
+                // Exit only headless — from the GUI menu this would close the Editor.
+                if (Application.isBatchMode) EditorApplication.Exit(1);
             }
         }
 

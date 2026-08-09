@@ -21,6 +21,13 @@ namespace RoomPlanner.Editing
         Bounds WorldBounds { get; }
         bool IsHidden { get; }
 
+        /// <summary>
+        /// False once the underlying Unity object is destroyed. Interface-typed references
+        /// bypass UnityEngine.Object's overloaded null-check, so commands/registries must ask
+        /// this instead of comparing the reference to null.
+        /// </summary>
+        bool IsAlive { get; }
+
         void SetHighlight(HighlightState state);
         void SetHidden(bool hidden);
         void MoveBy(Vector3 delta);

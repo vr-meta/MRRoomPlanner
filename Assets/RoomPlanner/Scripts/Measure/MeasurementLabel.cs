@@ -28,7 +28,9 @@ namespace RoomPlanner.Measure
         public void SetDistance(float meters)
         {
             if (text == null) return;
-            text.text = FormatDistance(meters);
+            string s = FormatDistance(meters);
+            if (s == text.text) return;   // same rounded cm — skip the TMP rebuild + string churn
+            text.text = s;
 
             if (background != null)
             {

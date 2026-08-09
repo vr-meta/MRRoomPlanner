@@ -1,0 +1,21 @@
+{
+    "name": "RoomPlanner.Editor",
+    "rootNamespace": "RoomPlanner.EditorTools",
+    "references": [
+        "RoomPlanner.App",
+        "RoomPlanner.Core",
+        "RoomPlanner.Editing",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

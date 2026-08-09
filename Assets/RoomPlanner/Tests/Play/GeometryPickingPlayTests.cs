@@ -19,56 +19,29 @@ namespace RoomPlanner.Tests.Play
     /// </summary>
     public class GeometryPickingPlayTests
     {
-        // ISelectable adapter mirroring the real Selectable's delegation, but reachable from the
-        // test assembly (the production Selectable lives in Assembly-CSharp).
-        private class GeoProbe : MonoBehaviour, ISelectable
-        {
-            public Wall Wall;
-            public Floor Floor;
-
-            public string Id { get; set; }
-            public SelectableKind Kind => Wall != null ? SelectableKind.Wall : SelectableKind.Floor;
-            public Transform Transform => transform;
-            public Bounds WorldBounds
-            {
-                get { var r = GetComponent<Renderer>(); return r != null ? r.bounds : new Bounds(transform.position, Vector3.one); }
-            }
-            public bool IsHidden => !gameObject.activeSelf;
-
-            public void SetHighlight(HighlightState state) { }
-            public void SetHidden(bool hidden) => gameObject.SetActive(!hidden);
-            public void MoveBy(Vector3 delta)
-            {
-                if (Wall != null) Wall.MoveBy(delta);
-                else if (Floor != null) Floor.MoveBy(delta);
-            }
-            public string Describe() => "geo";
-        }
+        // Tests run against the PRODUCTION Selectable adapter (RoomPlanner.App) — no hand-written
+        // double that could drift from the real component.
 
         private readonly List<GameObject> _spawned = new();
         private static readonly Ray ThroughX1 = new Ray(new Vector3(1f, 1f, -5f), Vector3.forward);
 
-        private GeoProbe SpawnWall(Vector3 a, Vector3 b)
+        private Selectable SpawnWall(Vector3 a, Vector3 b)
         {
             var go = new GameObject("Wall");
             _spawned.Add(go);
             var w = go.AddComponent<Wall>();
             var interior = new Vector3((a.x + b.x) * 0.5f, 0f, Mathf.Min(a.z, b.z) - 1f); // interior on -Z
             w.Build(new List<Vector3> { a, b }, 0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, interior);
-            var p = go.AddComponent<GeoProbe>();
-            p.Wall = w;
-            return p;
+            return go.AddComponent<Selectable>();
         }
 
-        private GeoProbe SpawnFloor(Vector3 a, Vector3 b, float level)
+        private Selectable SpawnFloor(Vector3 a, Vector3 b, float level)
         {
             var go = new GameObject("Floor");
             _spawned.Add(go);
             var f = go.AddComponent<Floor>();
             f.Build(a, b, level, 0.2f, 5f, 0f, 0f);
-            var p = go.AddComponent<GeoProbe>();
-            p.Floor = f;
-            return p;
+            return go.AddComponent<Selectable>();
         }
 
         private SceneModel MakeModel()
@@ -96,9 +69,9 @@ namespace RoomPlanner.Tests.Play
 
             Assert.IsTrue(model.TryPick(ThroughX1, out var hit, out var pt), "ray should hit the wall's runtime MeshCollider");
             Assert.AreSame(wall, hit);
-            // hit lands somewhere across the wall's thickness (z in [2 .. 2.2]); which face the
-            // MeshCollider reports depends on triangle winding, so don't pin the exact face.
-            Assert.That(pt.z, Is.InRange(1.95f, 2.25f), "hit point sits on the wall");
+            // The ray comes from the interior (-Z) side; with outward-wound faces it must hit
+            // the NEAR (inner) face at z = 2.0 exactly — not tunnel to the far face at 2.2.
+            Assert.AreEqual(2.0f, pt.z, 0.01f, "hit lands on the near (inner) face");
         }
 
         [UnityTest]
@@ -113,8 +86,9 @@ namespace RoomPlanner.Tests.Play
             var down = new Ray(new Vector3(1f, 5f, 1f), Vector3.down);
             Assert.IsTrue(model.TryPick(down, out var hit, out var pt));
             Assert.AreSame(floor, hit);
-            // lands somewhere on the slab (top y=0 .. bottom y=-0.2), exact face is winding-dependent.
-            Assert.That(pt.y, Is.InRange(-0.25f, 0.05f), "hit lands on the slab");
+            // A downward pick must land on the TOP face (y = level), not tunnel through to the
+            // bottom at level - thickness: the measuring tools rely on cm-exact pick points.
+            Assert.AreEqual(0f, pt.y, 0.01f, "hit lands on the top face");
         }
 
         [UnityTest]

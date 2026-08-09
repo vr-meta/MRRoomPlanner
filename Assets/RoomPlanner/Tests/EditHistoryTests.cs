@@ -94,5 +94,106 @@ namespace RoomPlanner.Tests
             Assert.DoesNotThrow(() => h.Redo());
             Assert.IsFalse(h.CanUndo);
         }
+
+        [Test]
+        public void Record_ClearsRedo()
+        {
+            var cell = new[] { 0 };
+            var h = new EditHistory();
+            h.Execute(new SetValueCommand(cell, 1));
+            h.Undo();
+            Assert.IsTrue(h.CanRedo);
+
+            h.Record(new SetValueCommand(cell, 2));
+            Assert.IsFalse(h.CanRedo, "Record is a fresh edit and must discard the redo stack");
+        }
+
+        [Test]
+        public void Undo_IsLifo()
+        {
+            var cell = new[] { 0 };
+            var h = new EditHistory();
+            h.Execute(new SetValueCommand(cell, 1));   // before=0
+            h.Execute(new SetValueCommand(cell, 2));   // before=1
+
+            h.Undo();
+            Assert.AreEqual(1, cell[0], "last command undoes first");
+            h.Undo();
+            Assert.AreEqual(0, cell[0]);
+        }
+
+        [Test]
+        public void Clear_EmptiesBothStacks()
+        {
+            var cell = new[] { 0 };
+            var h = new EditHistory();
+            h.Execute(new SetValueCommand(cell, 1));
+            h.Execute(new SetValueCommand(cell, 2));
+            h.Undo();
+
+            h.Clear();
+
+            Assert.IsFalse(h.CanUndo);
+            Assert.IsFalse(h.CanRedo);
+        }
+
+        [Test]
+        public void PurgeWhere_RemovesFromBothStacks_KeepsOthers()
+        {
+            var cell = new[] { 0 };
+            var h = new EditHistory();
+            // Construct each command right before Execute — 'before' is captured at construction.
+            var doomedUndo = new SetValueCommand(cell, 1);
+            h.Execute(doomedUndo);
+            var kept = new SetValueCommand(cell, 2);
+            h.Execute(kept);
+            var doomedRedo = new SetValueCommand(cell, 3);
+            h.Execute(doomedRedo);
+            h.Undo();   // doomedRedo → redo stack
+            Assert.AreEqual(2, h.UndoCount);
+            Assert.AreEqual(1, h.RedoCount);
+
+            h.PurgeWhere(c => c == doomedUndo || c == doomedRedo);
+
+            Assert.AreEqual(1, h.UndoCount);
+            Assert.AreEqual(0, h.RedoCount);
+            h.Undo();
+            Assert.AreEqual(1, cell[0], "the surviving command still undoes correctly");
+        }
+
+        // ---- exception safety: a throwing command must not silently vanish ----
+
+        private class ThrowingCommand : ICommand
+        {
+            public bool Throw = true;
+            public string Name => "Throwing";
+            public void Do() { if (Throw) throw new System.InvalidOperationException("do"); }
+            public void Undo() { if (Throw) throw new System.InvalidOperationException("undo"); }
+        }
+
+        [Test]
+        public void Undo_WhenCommandThrows_KeepsCommandOnUndoStack()
+        {
+            var h = new EditHistory();
+            var cmd = new ThrowingCommand { Throw = false };
+            h.Execute(cmd);
+            cmd.Throw = true;
+
+            Assert.Throws<System.InvalidOperationException>(() => h.Undo());
+            Assert.IsTrue(h.CanUndo, "the command must stay on the undo stack");
+            Assert.IsFalse(h.CanRedo, "a failed undo must not populate redo");
+
+            cmd.Throw = false;
+            Assert.DoesNotThrow(() => h.Undo(), "recovered command undoes normally");
+            Assert.IsTrue(h.CanRedo);
+        }
+
+        [Test]
+        public void Execute_WhenDoThrows_RecordsNothing()
+        {
+            var h = new EditHistory();
+            Assert.Throws<System.InvalidOperationException>(() => h.Execute(new ThrowingCommand()));
+            Assert.IsFalse(h.CanUndo, "a command that failed to apply must not enter the history");
+        }
     }
 }

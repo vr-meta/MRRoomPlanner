@@ -56,16 +56,20 @@ namespace RoomPlanner.Floors
             float planScale, float planOriginX, float planOriginZ)
         {
             Ensure();
+            // Keep the stored corners on the slab's top plane so CornerA.y never drifts from Level.
+            a.y = level; b.y = level;
             CornerA = a; CornerB = b; Level = level;
-            _thickness = thickness; _planScale = planScale; _planOriginX = planOriginX; _planOriginZ = planOriginZ;
+            _thickness = Mathf.Max(0.001f, Mathf.Abs(thickness));
+            _planScale = planScale; _planOriginX = planOriginX; _planOriginZ = planOriginZ;
             _mesh.Clear();
 
             float minX = Mathf.Min(a.x, b.x), maxX = Mathf.Max(a.x, b.x);
             float minZ = Mathf.Min(a.z, b.z), maxZ = Mathf.Max(a.z, b.z);
             if (maxX - minX < 1e-4f || maxZ - minZ < 1e-4f) { if (_collider != null) _collider.sharedMesh = null; return; }
 
-            float top = level, bot = level - thickness;
-            float s = planScale > 1e-4f ? planScale : 1f;
+            float top = level, bot = level - _thickness;
+            // Negative scale = mirrored plan (legit); only guard against near-zero.
+            float s = Mathf.Abs(planScale) > 1e-4f ? planScale : 1f;
 
             var v = new List<Vector3>();
             var uv = new List<Vector2>();
@@ -82,12 +86,14 @@ namespace RoomPlanner.Floors
             v.Add(new Vector3(maxX, bot, maxZ)); uv.Add(Vector2.zero);
             v.Add(new Vector3(minX, bot, maxZ)); uv.Add(Vector2.zero);
 
-            Quad(t, 0, 1, 2, 3);   // top
-            Quad(t, 4, 7, 6, 5);   // bottom
-            Quad(t, 0, 4, 5, 1);   // sides
-            Quad(t, 1, 5, 6, 2);
-            Quad(t, 2, 6, 7, 3);
-            Quad(t, 3, 7, 4, 0);
+            // All faces wound OUTWARD — MeshCollider raycasts only hit front faces, so a
+            // downward pick must land on the top (y = level), not tunnel to the bottom.
+            Quad(t, 0, 3, 2, 1);   // top (+Y)
+            Quad(t, 4, 5, 6, 7);   // bottom (−Y)
+            Quad(t, 0, 1, 5, 4);   // side z = minZ (−Z)
+            Quad(t, 1, 2, 6, 5);   // side x = maxX (+X)
+            Quad(t, 2, 3, 7, 6);   // side z = maxZ (+Z)
+            Quad(t, 3, 0, 4, 7);   // side x = minX (−X)
 
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
@@ -113,6 +119,14 @@ namespace RoomPlanner.Floors
         {
             t.Add(a); t.Add(b); t.Add(c);
             t.Add(a); t.Add(c); t.Add(d);
+        }
+
+        private void OnDestroy()
+        {
+            // The mesh created via `new Mesh` is not freed by Destroy(gameObject).
+            if (_mesh == null) return;
+            if (Application.isPlaying) Destroy(_mesh);
+            else DestroyImmediate(_mesh);
         }
     }
 }

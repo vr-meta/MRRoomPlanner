@@ -29,7 +29,9 @@ namespace RoomPlanner.Floors
 
         private readonly List<Floor> _floors = new();
         private Vector3? _cornerA;
-        private float _planSig = float.NaN;
+        private Texture2D _planTex;
+        private float _planScaleApplied = float.NaN;
+        private float _planOffXApplied, _planOffZApplied;
 
         public void OnActivate() => ReloadPlan();
 
@@ -99,22 +101,35 @@ namespace RoomPlanner.Floors
 
         private void RebuildIfPlanChanged()
         {
-            float sig = Scale() * 1000f + OffX() * 7.3f + OffZ() * 13.1f;
-            if (sig == _planSig) return;
-            _planSig = sig;
+            // Compare the fields directly — an additive "signature" can collide when two
+            // parameters change in opposite directions.
+            float s = Scale(), ox = OffX(), oz = OffZ();
+            if (s == _planScaleApplied && ox == _planOffXApplied && oz == _planOffZApplied) return;
+            _planScaleApplied = s; _planOffXApplied = ox; _planOffZApplied = oz;
             foreach (var f in _floors)
-                if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), Scale(), OffX(), OffZ());
+                if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), s, ox, oz);
         }
 
         private void DeleteLast()
         {
-            if (_floors.Count == 0) return;
-            var f = _floors[_floors.Count - 1];
-            _floors.RemoveAt(_floors.Count - 1);
-            if (f != null)
+            // Delete the last VISIBLE slab, routed through the command stack (undoable). A slab
+            // hidden by a DeleteCommand is already "deleted" to the user — skip it, don't
+            // destroy it out from under its undo entry.
+            for (int i = _floors.Count - 1; i >= 0; i--)
             {
-                if (sceneModel != null) sceneModel.Unregister(f.GetComponent<Selectable>());
-                Destroy(f.gameObject);
+                var f = _floors[i];
+                if (f == null || !f.gameObject.activeSelf) continue;
+                var sel = f.GetComponent<Selectable>();
+                if (sceneModel != null && sel != null)
+                {
+                    sceneModel.History.Execute(new DeleteCommand(sel));
+                }
+                else
+                {
+                    _floors.RemoveAt(i);
+                    Destroy(f.gameObject);
+                }
+                return;
             }
         }
 
@@ -137,10 +152,15 @@ namespace RoomPlanner.Floors
             var tex = new Texture2D(2, 2) { wrapMode = TextureWrapMode.Clamp };
             if (tex.LoadImage(File.ReadAllBytes(path)))
             {
+                // Free the previous decode — each activation would otherwise leak a full-size
+                // texture until Horizon OS kills the app.
+                if (_planTex != null) Destroy(_planTex);
+                _planTex = tex;
                 if (planMaterial.HasProperty("_BaseMap")) planMaterial.SetTexture("_BaseMap", tex);
                 planMaterial.mainTexture = tex;
                 Debug.Log($"[Floor] plan loaded {tex.width}x{tex.height}");
             }
+            else Destroy(tex);
         }
 
         private float Thickness() => manager != null ? manager.WallThickness : 0.2f;

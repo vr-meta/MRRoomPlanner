@@ -67,6 +67,16 @@ namespace RoomPlanner.Measure
                 || OVRInput.Get(OVRInput.Button.SecondaryHandTrigger);
         }
 
+        /// <summary>Grip just pressed this frame — starts the inspector grab (held grip elsewhere = snap).</summary>
+        public bool SnapPressed()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.LeftShift)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.PrimaryHandTrigger)
+                || OVRInput.GetDown(OVRInput.Button.SecondaryHandTrigger);
+        }
+
         /// <summary>Thumbstick vector (either controller, larger magnitude wins).</summary>
         public Vector2 Thumbstick()
         {
@@ -96,6 +106,16 @@ namespace RoomPlanner.Measure
         private void Update()
         {
             if (_hapticUntil > 0f && Time.time >= _hapticUntil)
+            {
+                OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
+                _hapticUntil = 0f;
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Don't leave a vibration running for the OS's ~2 s auto-timeout.
+            if (_hapticUntil > 0f)
             {
                 OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
                 _hapticUntil = 0f;

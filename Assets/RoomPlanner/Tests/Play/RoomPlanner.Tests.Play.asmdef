@@ -4,6 +4,7 @@
     "references": [
         "RoomPlanner.Core",
         "RoomPlanner.Editing",
+        "RoomPlanner.App",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

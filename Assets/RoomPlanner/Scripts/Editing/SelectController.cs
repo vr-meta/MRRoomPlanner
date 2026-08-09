@@ -23,11 +23,15 @@ namespace RoomPlanner.Editing
         private ISelectable _hovered;
         private ISelectable _dragging;
         private Vector3 _lastCursor;
+        private bool _cursorValid;
         private Vector3 _dragTotal;
         private float _dragPlaneY;
-        private bool _draggedFar;
 
-        public bool HasSelection => _selected != null && !_selected.IsHidden;
+        public bool HasSelection => _selected != null && _selected.IsAlive && !_selected.IsHidden;
+
+        /// <summary>True while a drag is in progress (ToolManager suppresses undo/redo then).</summary>
+        public bool IsDragging => _dragging != null;
+
         public string SelectionTitle { get; private set; } = "Nothing selected";
         public string SelectionInfo { get; private set; } = "";
 
@@ -35,7 +39,9 @@ namespace RoomPlanner.Editing
 
         public void OnDeactivate()
         {
-            EndDrag(record: false);
+            // Record (not discard): the live movement stays applied, so a lost record would
+            // desync undo from the visible scene.
+            EndDrag(record: true);
             Deselect();
             SetHover(null);
             if (reticle != null) reticle.gameObject.SetActive(false);
@@ -46,6 +52,9 @@ namespace RoomPlanner.Editing
             if (pointer == null || input == null || sceneModel == null) return;
             if (blocked)
             {
+                // Finish (and record) an in-flight drag instead of freezing it — otherwise the
+                // object teleports to the cursor when the ray comes back from the menu.
+                EndDrag(record: true);
                 SetHover(null);
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 return;
@@ -56,24 +65,33 @@ namespace RoomPlanner.Editing
             // --- Dragging the selected object across the ground plane at its own height ---
             if (_dragging != null)
             {
-                if (input.ConfirmHeld())
+                if (!_dragging.IsAlive) { _dragging = null; }
+                else if (input.ConfirmHeld())
                 {
                     if (MeasureMath.RayPlaneY(ray, _dragPlaneY, out var cur))
                     {
+                        if (!_cursorValid)
+                        {
+                            // First valid plane hit — just latch the cursor; applying a delta
+                            // against a made-up fallback point would teleport the object.
+                            _lastCursor = cur;
+                            _cursorValid = true;
+                        }
                         Vector3 delta = cur - _lastCursor; delta.y = 0f;
                         if (delta.sqrMagnitude > 0f)
                         {
-                            _dragging.MoveBy(delta);
+                            // Cheap preview: shift the transform only. The parametric geometry
+                            // (and its MeshCollider re-cook) is applied ONCE in EndDrag.
+                            _dragging.Transform.position += delta;
                             _dragTotal += delta;
                             _lastCursor = cur;
-                            if (_dragTotal.sqrMagnitude > 0.0004f) _draggedFar = true; // >2 cm total
                         }
                         if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = cur; }
                     }
                     RefreshSelectionText();
                     return;
                 }
-                EndDrag(record: true);
+                else EndDrag(record: true);
             }
 
             // --- Hover ---
@@ -110,19 +128,21 @@ namespace RoomPlanner.Editing
 
         // ---- selection ----
 
+        private static bool Alive(ISelectable s) => s != null && s.IsAlive;
+
         private void Select(ISelectable s)
         {
             if (_selected == s) return;
-            if (_selected != null) _selected.SetHighlight(HighlightState.None);
+            if (Alive(_selected)) _selected.SetHighlight(HighlightState.None);
             _selected = s;
-            if (_selected != null) _selected.SetHighlight(HighlightState.Selected);
+            if (Alive(_selected)) _selected.SetHighlight(HighlightState.Selected);
             RefreshSelectionText();
             Notify();
         }
 
         private void Deselect()
         {
-            if (_selected != null) _selected.SetHighlight(HighlightState.None);
+            if (Alive(_selected)) _selected.SetHighlight(HighlightState.None);
             _selected = null;
             SelectionTitle = "Nothing selected";
             SelectionInfo = "";
@@ -133,9 +153,9 @@ namespace RoomPlanner.Editing
         {
             if (_hovered == s) return;
             // don't override the selected object's highlight
-            if (_hovered != null && _hovered != _selected) _hovered.SetHighlight(HighlightState.None);
+            if (Alive(_hovered) && _hovered != _selected) _hovered.SetHighlight(HighlightState.None);
             _hovered = s;
-            if (_hovered != null && _hovered != _selected)
+            if (Alive(_hovered) && _hovered != _selected)
             {
                 _hovered.SetHighlight(HighlightState.Hover);
                 if (input != null) input.Pulse(0.3f, 0.04f);
@@ -148,10 +168,8 @@ namespace RoomPlanner.Editing
         {
             _dragging = s;
             _dragTotal = Vector3.zero;
-            _draggedFar = false;
             _dragPlaneY = s.WorldBounds.center.y;
-            if (!MeasureMath.RayPlaneY(ray, _dragPlaneY, out _lastCursor))
-                _lastCursor = ray.origin + ray.direction * 2f;
+            _cursorValid = MeasureMath.RayPlaneY(ray, _dragPlaneY, out _lastCursor);
         }
 
         private void EndDrag(bool record)
@@ -160,16 +178,30 @@ namespace RoomPlanner.Editing
             var moved = _dragging;
             var total = _dragTotal;
             _dragging = null;
-            if (record && _draggedFar && total.sqrMagnitude > 0f)
+            _dragTotal = Vector3.zero;
+            _cursorValid = false;
+            if (!moved.IsAlive) return;
+
+            // Revert the transform preview, then commit the move parametrically in one rebuild.
+            moved.Transform.position -= total;
+            bool far = total.sqrMagnitude > 0.0004f;   // ≤2 cm = accidental jiggle → revert
+            if (record && far)
+            {
+                moved.MoveBy(total);
                 sceneModel.History.Record(new MoveCommand(moved, total));
-            _draggedFar = false;
+            }
         }
 
         // ---- inspector text ----
 
         private void RefreshSelectionText()
         {
-            if (_selected == null) { SelectionTitle = "Nothing selected"; SelectionInfo = ""; return; }
+            if (_selected == null || !_selected.IsAlive)
+            {
+                SelectionTitle = "Nothing selected";
+                SelectionInfo = "";
+                return;
+            }
             SelectionTitle = $"{_selected.Kind} #{_selected.Id}";
             SelectionInfo = _selected.Describe();
         }

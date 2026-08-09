@@ -160,7 +160,9 @@ namespace RoomPlanner.Walls
             bool found = false;
             foreach (var w in _walls)
             {
-                if (w == null) continue;
+                // Skip destroyed AND hidden (delete-command) walls — invisible geometry must
+                // not act as a snap magnet.
+                if (w == null || !w.gameObject.activeSelf) continue;
                 var pts = w.Points;
                 bool isCurrent = w == _current;
 

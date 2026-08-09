@@ -67,6 +67,9 @@ namespace RoomPlanner.Measure
         public void OnDeactivate()
         {
             if (_preview != null) { Destroy(_preview.gameObject); _preview = null; _pendingStart = null; }
+            // Re-enable the dragged measurement's endpoint colliders — otherwise a tool switch
+            // mid-drag leaves the measurement permanently unpickable.
+            if (_dragging != null && _dragging.Owner != null) _dragging.Owner.SetInteractable(true);
             _dragging = null;
             HidePlus();
             if (reticle != null) reticle.gameObject.SetActive(false);
@@ -76,13 +79,14 @@ namespace RoomPlanner.Measure
         {
             if (pointer == null || raycaster == null || input == null) return;
 
-            DedupeMarkers();
             if (blocked)
             {
                 HidePlus();
+                UpdateHover(null, null);   // clear hover scale/highlight so "+" doesn't reappear enlarged
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 return;
             }
+            DedupeMarkers();
 
             Ray ray = pointer.GetRay();
             _hasHit = raycaster.TryRaycast(ray, out _currentHit, out _currentNormal, out var hitObj);
@@ -267,33 +271,49 @@ namespace RoomPlanner.Measure
             }
             else
             {
-                _preview.Set(_pendingStart.Value, p);
                 var done = _preview;
-                _measurements.Add(done);
-                if (sceneModel != null) sceneModel.Register(done.GetComponent<Selectable>());
+                var start = _pendingStart.Value;
                 _preview = null;
                 _pendingStart = null;
+                if (done == null) return;   // preview destroyed externally — abandon gracefully
+                done.Set(start, p);
+                _measurements.Add(done);
+                if (sceneModel != null) sceneModel.Register(done.GetComponent<Selectable>());
                 done.SetInteractable(true);
                 TrimMeasurements();
             }
         }
 
+        /// <summary>Alive AND visible (not hidden by a DeleteCommand) — hidden objects must not
+        /// snap, dedupe or count toward the cap as if they were still on the scene.</summary>
+        private static bool IsLive(Measurement m) => m != null && m.gameObject.activeSelf;
+
         private void TrimMeasurements()
         {
-            if (_measurements.Count > maxMeasurements)
+            // Hard cap on total entries (live + hidden) so memory stays bounded. Destroying is
+            // safe for undo: SceneModel.Unregister purges the victim's commands from history.
+            while (_measurements.Count > maxMeasurements)
             {
-                if (sceneModel != null) sceneModel.Unregister(_measurements[0].GetComponent<Selectable>());
-                Destroy(_measurements[0].gameObject);
+                var m = _measurements[0];
                 _measurements.RemoveAt(0);
+                if (m == null) continue;
+                if (sceneModel != null) sceneModel.Unregister(m.GetComponent<Selectable>());
+                Destroy(m.gameObject);
             }
         }
 
         private void DeleteMeasurement(Measurement m)
         {
-            _measurements.Remove(m);
-            if (m != null)
+            if (m == null) { _measurements.Remove(m); return; }
+            var sel = m.GetComponent<Selectable>();
+            if (sceneModel != null && sel != null)
             {
-                if (sceneModel != null) sceneModel.Unregister(m.GetComponent<Selectable>());
+                // Route through the command stack: delete = hide, undoable with X.
+                sceneModel.History.Execute(new DeleteCommand(sel));
+            }
+            else
+            {
+                _measurements.Remove(m);
                 Destroy(m.gameObject);
             }
         }
@@ -307,12 +327,12 @@ namespace RoomPlanner.Measure
                 _pendingStart = null;
                 return;
             }
-            if (_measurements.Count > 0)
+            // Delete the last VISIBLE measurement — hidden ones are already "deleted" to the user.
+            for (int i = _measurements.Count - 1; i >= 0; i--)
             {
-                var m = _measurements[_measurements.Count - 1];
-                _measurements.RemoveAt(_measurements.Count - 1);
-                if (sceneModel != null) sceneModel.Unregister(m.GetComponent<Selectable>());
-                Destroy(m.gameObject);
+                if (!IsLive(_measurements[i])) continue;
+                DeleteMeasurement(_measurements[i]);
+                return;
             }
         }
 
@@ -322,7 +342,7 @@ namespace RoomPlanner.Measure
             _keptPts.Clear();
             foreach (var m in _measurements)
             {
-                if (m == null) continue;
+                if (!IsLive(m)) continue;
                 m.SetMarkerVisible(true, KeepOrDuplicate(m.PointA));
                 m.SetMarkerVisible(false, KeepOrDuplicate(m.PointB));
             }
@@ -345,7 +365,7 @@ namespace RoomPlanner.Measure
             MeasurePointHandle found = null;
             foreach (var m in _measurements)
             {
-                if (m == null) continue;
+                if (!IsLive(m)) continue;
                 float da = Vector3.Distance(p, m.PointA);
                 if (da < best) { best = da; found = m.GetHandle(true); }
                 float db = Vector3.Distance(p, m.PointB);
@@ -362,7 +382,7 @@ namespace RoomPlanner.Measure
             bool found = false;
             foreach (var m in _measurements)
             {
-                if (m == null || m == exclude) continue;
+                if (!IsLive(m) || m == exclude) continue;
                 float da = Vector3.Distance(p, m.PointA);
                 if (da < best) { best = da; result = m.PointA; found = true; }
                 float db = Vector3.Distance(p, m.PointB);

@@ -49,7 +49,7 @@ namespace RoomPlanner.Core
             hit = default;
             if (Mathf.Abs(ray.direction.y) < 1e-5f) return false;
             float t = (planeY - ray.origin.y) / ray.direction.y;
-            if (t <= 0f) return false;
+            if (t < 0f) return false;   // t == 0: ray starts exactly on the plane — still a hit
             hit = ray.origin + ray.direction * t;
             return true;
         }

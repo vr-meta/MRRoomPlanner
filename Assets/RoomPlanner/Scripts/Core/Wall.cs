@@ -22,8 +22,10 @@ namespace RoomPlanner.Walls
     /// <summary>
     /// A wall = polyline of centerline points + thickness + height → procedural mesh.
     /// Built as an extruded footprint from two offset contours (inner/outer) with mitered/
-    /// beveled/rounded corners — one clean strip, no overlapping boxes. Two-sided Unlit
-    /// material (cull off), so winding is irrelevant.
+    /// beveled/rounded corners — one clean strip, no overlapping boxes.
+    /// Winding matters even with a two-sided material: MeshCollider raycasts only hit
+    /// front faces, so every triangle must face OUTWARD (away from the wall solid) or the
+    /// Select/Measure tools pick the far face and report a point one thickness off.
     /// Project principle: parameters → mesh (no CSG / baked unwraps). In RoomPlanner.Core
     /// so the geometry is unit-testable without device deps.
     /// </summary>
@@ -35,6 +37,9 @@ namespace RoomPlanner.Walls
         [SerializeField] private MeshFilter edgesFilter;
 
         private const int RoundSegments = 5;
+        private const float MinSize = 0.001f;        // smallest sane thickness/height, m
+        private const float DupEpsSqr = 1e-6f;       // consecutive points closer than 1 mm collapse
+        private const float MiterLimit = 4f;         // max miter length in multiples of the offset
 
         private MeshFilter _mf;
         private Mesh _mesh;
@@ -75,9 +80,16 @@ namespace RoomPlanner.Walls
             WallOffsetMode mode, WallJoin join, Vector3 interior)
         {
             Ensure();
-            _pts.Clear();
-            _pts.AddRange(centerline);
-            _thickness = thickness; _height = height; _mode = mode; _join = join; _interior = interior;
+            // The input may BE _pts (e.g. via the Points view) — clearing first would wipe it.
+            if (!ReferenceEquals(centerline, _pts))
+            {
+                _pts.Clear();
+                if (centerline != null) _pts.AddRange(centerline);
+            }
+            RemoveDuplicatePoints(_pts);
+            _thickness = Mathf.Max(MinSize, Mathf.Abs(thickness));
+            _height = Mathf.Max(MinSize, Mathf.Abs(height));
+            _mode = mode; _join = join; _interior = interior;
             _mesh.Clear();
             if (_edges != null) _edges.Clear();
             if (_pts.Count < 2) { if (_collider != null) _collider.sharedMesh = null; return; }
@@ -85,20 +97,27 @@ namespace RoomPlanner.Walls
             float dOut, dIn;
             switch (mode)
             {
-                case WallOffsetMode.Center: dOut = thickness * 0.5f; dIn = thickness * 0.5f; break;
-                case WallOffsetMode.Inner:  dOut = 0f;               dIn = thickness;         break;
-                default:                    dOut = thickness;        dIn = 0f;                break; // Outer
+                case WallOffsetMode.Center: dOut = _thickness * 0.5f; dIn = _thickness * 0.5f; break;
+                case WallOffsetMode.Inner:  dOut = 0f;                dIn = _thickness;         break;
+                default:                    dOut = _thickness;        dIn = 0f;                 break; // Outer
             }
 
-            List<Cross> sections = BuildFootprint(_pts, dOut, dIn, OutwardSign(_pts, interior), join);
-            Triangulate(sections, height);
+            float oSign = OutwardSign(_pts, interior);
+            List<Cross> sections = BuildFootprint(_pts, dOut, dIn, oSign, join);
+            // oSign mirrors the footprint across the centerline, which flips triangle
+            // orientation; compensate so faces always point outward.
+            Triangulate(sections, _height, flip: oSign < 0f);
         }
 
         /// <summary>Rebuild the mesh from the current centerline and cached parameters.</summary>
-        public void Rebuild()
+        public void Rebuild() => Build(_pts, _thickness, _height, _mode, _join, _interior);
+
+        /// <summary>Collapse consecutive (near-)identical points — double-clicks in MR are common
+        /// and would otherwise inject a degenerate normal into the footprint.</summary>
+        private static void RemoveDuplicatePoints(List<Vector3> pts)
         {
-            var pts = new List<Vector3>(_pts);
-            Build(pts, _thickness, _height, _mode, _join, _interior);
+            for (int i = pts.Count - 1; i > 0; i--)
+                if ((pts[i] - pts[i - 1]).sqrMagnitude < DupEpsSqr) pts.RemoveAt(i);
         }
 
         /// <summary>Translate the whole wall (centerline + interior reference) and rebuild in place.</summary>
@@ -154,7 +173,13 @@ namespace RoomPlanner.Walls
                 float denom = 1f + Vector3.Dot(n0, n1);
 
                 bool straight = Mathf.Abs(turn) < 1e-4f;
-                Vector3 mvec = denom > 1e-3f ? (n0 + n1) / denom : (n0 + n1).normalized;
+                Vector3 sum = n0 + n1;
+                Vector3 mvec;
+                if (denom > 1e-3f) mvec = sum / denom;
+                // ~180° reversal: no miter direction exists; fall back to the incoming normal.
+                else mvec = sum.sqrMagnitude > 1e-6f ? sum.normalized : n0;
+                // Miter limit: |mvec| = 1/cos(θ/2) is unbounded near a reversal — cap the spike.
+                if (mvec.sqrMagnitude > MiterLimit * MiterLimit) mvec = mvec.normalized * MiterLimit;
                 Vector3 miterOuter = pts[i] + mvec * (oSign * dOut);
                 Vector3 miterInner = pts[i] + mvec * (-oSign * dIn);
 
@@ -217,7 +242,7 @@ namespace RoomPlanner.Walls
 
         // ---- extrude cross-sections into a mesh (+edges) ----
 
-        private void Triangulate(List<Cross> s, float height)
+        private void Triangulate(List<Cross> s, float height, bool flip)
         {
             int m = s.Count;
             var v = new List<Vector3>(m * 4);
@@ -225,6 +250,13 @@ namespace RoomPlanner.Walls
             var ev = new List<Vector3>(m * 4);
             var ei = new List<int>();
             Vector3 up = Vector3.up * height;
+
+            // Reverses winding when the footprint is mirrored (oSign < 0) so faces stay outward.
+            void AddQuad(int a, int b, int c, int d)
+            {
+                if (flip) Quad(tris, a, d, c, b);
+                else Quad(tris, a, b, c, d);
+            }
 
             for (int j = 0; j < m; j++)
             {
@@ -238,10 +270,10 @@ namespace RoomPlanner.Walls
             for (int j = 0; j < m - 1; j++)
             {
                 int a = j * 4, b = (j + 1) * 4;
-                Quad(tris, a + 0, a + 1, b + 1, b + 0);   // bottom
-                Quad(tris, a + 2, b + 2, b + 3, a + 3);   // top
-                Quad(tris, a + 1, a + 3, b + 3, b + 1);   // outer wall
-                Quad(tris, a + 0, b + 0, b + 2, a + 2);   // inner wall
+                AddQuad(a + 0, a + 1, b + 1, b + 0);   // bottom
+                AddQuad(a + 2, b + 2, b + 3, a + 3);   // top
+                AddQuad(a + 1, a + 3, b + 3, b + 1);   // outer wall
+                AddQuad(a + 0, b + 0, b + 2, a + 2);   // inner wall
 
                 // edge lines along the run
                 ei.Add(a + 1); ei.Add(b + 1); // outer base
@@ -251,9 +283,9 @@ namespace RoomPlanner.Walls
             }
 
             // end caps
-            Quad(tris, 0, 2, 3, 1);
+            AddQuad(0, 2, 3, 1);
             int e = (m - 1) * 4;
-            Quad(tris, e + 1, e + 3, e + 2, e + 0);
+            AddQuad(e + 1, e + 3, e + 2, e + 0);
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
@@ -281,6 +313,21 @@ namespace RoomPlanner.Walls
         {
             t.Add(a); t.Add(b); t.Add(c);
             t.Add(a); t.Add(c); t.Add(d);
+        }
+
+        private void OnDestroy()
+        {
+            // Meshes created via `new Mesh` are not freed by Destroy(gameObject).
+            if (Application.isPlaying)
+            {
+                if (_mesh != null) Destroy(_mesh);
+                if (_edges != null) Destroy(_edges);
+            }
+            else
+            {
+                if (_mesh != null) DestroyImmediate(_mesh);
+                if (_edges != null) DestroyImmediate(_edges);
+            }
         }
 
         /// <summary>

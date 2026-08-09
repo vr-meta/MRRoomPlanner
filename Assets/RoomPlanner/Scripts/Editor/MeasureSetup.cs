@@ -28,11 +28,16 @@ namespace RoomPlanner.EditorTools
         [MenuItem("RoomPlanner/Setup Measure Rig")]
         public static void SetupMeasureRig()
         {
-            // Remove previous rig AND any orphaned menu/inspector from earlier Setups
-            // (they were created as separate roots, so old runs left duplicates → purple/ghosted UI).
-            DestroyAllNamed("MeasureRig");
-            DestroyAllNamed("ToolMenu");
-            DestroyAllNamed("Inspector");
+            // Remove previous rig AND any orphaned menu/inspector from earlier Setups.
+            // Primary path: our own RigMarker. Legacy path: name + component (never a bare
+            // generic name — the scene may legitimately contain another "Inspector").
+            foreach (var m in Object.FindObjectsByType<RigMarker>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (m != null) Object.DestroyImmediate(m.gameObject);
+            DestroyAllNamed("MeasureRig", typeof(MeasureController));
+            DestroyAllNamed("ToolMenu", typeof(ToolMenu));
+            DestroyAllNamed("Inspector", typeof(InspectorPanel));
+
+            EnsureLayerName(SelectableLayer, "Selectable");
 
             Directory.CreateDirectory(MatDir);
             Directory.CreateDirectory(PrefabDir);
@@ -48,6 +53,7 @@ namespace RoomPlanner.EditorTools
             MeasureContinueButton contPrefab = CreateContinueButtonPrefab(contMat);
 
             var rig = new GameObject("MeasureRig");
+            rig.AddComponent<RigMarker>();
             var raycaster = rig.AddComponent<SceneRaycaster>();
             var pointer = rig.AddComponent<PointerProvider>();
             var input = rig.AddComponent<MeasureInput>();
@@ -191,15 +197,39 @@ namespace RoomPlanner.EditorTools
         {
             var mat = new Material(UnlitShader());
             SetColor(mat, color);
-            string path = $"{MatDir}/{name}.mat";
-            AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>
+        /// Persist a material WITHOUT changing its GUID: mutate the existing asset if one is
+        /// already at the path (Delete+Create would re-GUID it every Setup run, breaking any
+        /// external reference and churning the scene diff).
+        /// </summary>
+        private static Material SaveMaterial(Material tmp, string path)
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(tmp, path);
+                return tmp;
+            }
+            existing.shader = tmp.shader;
+            existing.CopyPropertiesFromMaterial(tmp);
+            existing.shaderKeywords = tmp.shaderKeywords;
+            existing.renderQueue = tmp.renderQueue;
+            EditorUtility.SetDirty(existing);
+            Object.DestroyImmediate(tmp);
+            return existing;
         }
 
         /// <summary>Белая текстура скруглённого прямоугольника (альфа) — подложка бейджа.</summary>
         private static Texture2D CreateRoundedBadgeTexture()
         {
+            // Deterministic content — reuse the existing asset so its GUID stays stable.
+            string existingPath = $"{MatDir}/Measure_BadgeTex.asset";
+            var existingTex = AssetDatabase.LoadAssetAtPath<Texture2D>(existingPath);
+            if (existingTex != null) return existingTex;
+
             const int W = 320, H = 160;
             const float radius = 46f;
             var tex = new Texture2D(W, H, TextureFormat.RGBA32, false)
@@ -222,9 +252,7 @@ namespace RoomPlanner.EditorTools
             }
             tex.SetPixels(px);
             tex.Apply();
-            string path = $"{MatDir}/Measure_BadgeTex.asset";
-            AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(tex, path);
+            AssetDatabase.CreateAsset(tex, existingPath);
             return tex;
         }
 
@@ -246,10 +274,7 @@ namespace RoomPlanner.EditorTools
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.DisableKeyword("_ALPHATEST_ON");
             mat.renderQueue = 2990;
-            string path = $"{MatDir}/{name}.mat";
-            AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
         private static Measurement CreateMeasurementPrefab(Material lineMat, Material markerMat, Material badgeMat)
@@ -302,7 +327,7 @@ namespace RoomPlanner.EditorTools
             lso.FindProperty("background").objectReferenceValue = badge.transform;
             lso.ApplyModifiedProperties();
 
-            AssetDatabase.DeleteAsset(MeasurePrefabPath);
+            // SaveAsPrefabAsset overwrites in place, preserving the prefab's GUID.
             var asset = PrefabUtility.SaveAsPrefabAsset(root, MeasurePrefabPath);
             Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
@@ -334,7 +359,6 @@ namespace RoomPlanner.EditorTools
             tmp.color = Color.black;
             tmp.rectTransform.sizeDelta = new Vector2(2f, 2f);
 
-            AssetDatabase.DeleteAsset(ContPrefabPath);
             var asset = PrefabUtility.SaveAsPrefabAsset(root, ContPrefabPath);
             Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
@@ -379,7 +403,6 @@ namespace RoomPlanner.EditorTools
 
             SetLayerRecursively(root, SelectableLayer);   // picked by Select tool, ignored by surface raycaster
             string path = PrefabDir + "/Wall.prefab";
-            AssetDatabase.DeleteAsset(path);
             var asset = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
@@ -391,10 +414,7 @@ namespace RoomPlanner.EditorTools
             var mat = new Material(UnlitShader());
             SetColor(mat, color);
             if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
-            string path = $"{MatDir}/{name}.mat";
-            AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
         private static Floor CreateFloorPrefab(Material mat)
@@ -407,7 +427,6 @@ namespace RoomPlanner.EditorTools
 
             SetLayerRecursively(root, SelectableLayer);   // picked by Select tool, ignored by surface raycaster
             string path = PrefabDir + "/Floor.prefab";
-            AssetDatabase.DeleteAsset(path);
             var asset = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
             AssetDatabase.SaveAssets();
@@ -418,11 +437,13 @@ namespace RoomPlanner.EditorTools
         private static ToolMenu BuildPalette(Material panelMat, Material btnMat, Material activeMat, Transform leftAnchor)
         {
             var root = new GameObject("ToolMenu");
+            root.AddComponent<RigMarker>();
             var menu = root.AddComponent<ToolMenu>();
 
             var panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
             panel.name = "Panel";
-            RemoveCollider(panel);
+            // Keep the quad's collider: the whole panel must block scene tools, or a trigger
+            // pull between buttons places a point on the wall BEHIND the menu.
             panel.transform.SetParent(root.transform, false);
             panel.transform.localScale = new Vector3(0.24f, 0.16f, 1f);
             panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
@@ -472,13 +493,14 @@ namespace RoomPlanner.EditorTools
         private static InspectorPanel BuildInspector(Material panelMat, Material btnMat, Material activeMat)
         {
             var root = new GameObject("Inspector");
+            root.AddComponent<RigMarker>();
             var inspector = root.AddComponent<InspectorPanel>();
 
             var panelRoot = new GameObject("Panel");
             panelRoot.transform.SetParent(root.transform, false);
 
             var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            bg.name = "Bg"; RemoveCollider(bg);
+            bg.name = "Bg";   // collider kept — the panel background must block scene tools
             bg.transform.SetParent(panelRoot.transform, false);
             bg.transform.localScale = new Vector3(0.36f, 0.44f, 1f);
             bg.transform.localPosition = new Vector3(0f, 0f, 0.006f);
@@ -642,11 +664,29 @@ namespace RoomPlanner.EditorTools
             foreach (Transform c in go.transform) SetLayerRecursively(c.gameObject, layer);
         }
 
-        private static void DestroyAllNamed(string name)
+        private static void DestroyAllNamed(string name, System.Type requiredComponent)
         {
             foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (go != null && go.name == name)
+                if (go != null && go.name == name && go.GetComponent(requiredComponent) != null)
                     Object.DestroyImmediate(go);
+        }
+
+        /// <summary>Give the layer a name in TagManager if it has none — the rig relies on
+        /// layer 6 being 'Selectable'; on a fresh project it would silently stay unnamed.</summary>
+        private static void EnsureLayerName(int layer, string name)
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (assets == null || assets.Length == 0) return;
+            var so = new SerializedObject(assets[0]);
+            var layers = so.FindProperty("layers");
+            if (layers == null || layer >= layers.arraySize) return;
+            var el = layers.GetArrayElementAtIndex(layer);
+            if (string.IsNullOrEmpty(el.stringValue))
+            {
+                el.stringValue = name;
+                so.ApplyModifiedProperties();
+                Debug.Log($"[Setup] named layer {layer} '{name}'");
+            }
         }
 
         private static Transform FindLeftControllerAnchor()
