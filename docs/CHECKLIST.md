@@ -194,6 +194,30 @@
 - [ ] **P2**: `SettingKind.Number` + numpad · A = Duplicate/offset-wall, A-hold = контекст-меню · стик-клик = предыдущий инструмент · quick-measure на hover · poke по палитре · не рвать цепочку Wall при случайной деактивации
 - [ ] **Резерв под MEP**: палитра цветов слоёв в константах, левая кромка 4 мм, третий ряд палитры под layer-чипы, `ITool.AccentColor`
 
+## 2j. Импорт IFC из Revit (дизайн: `design/18-ifc-import.md`, ветка `worktree-ifc-import`)
+
+- [~] **I1 — Core: `StepTokenizer`** — разбор записи `#id=TYPE(...)`: строки (включая
+  `\X2\…\X0\`-юникод и `''`-экранирование), числа, `.ENUM.`, `#ref`, `$`/`*`, вложенные
+  списки; + юнит-тесты на инлайн-фрагментах — код и 9 тестов написаны, ждут прогона
+- [~] **I2 — Core: `StepFile`** — построчный ридер (заголовок/DATA, записи с переносами),
+  индекс id→запись, ленивый разбор аргументов, метры из `IFCSIUNIT`; + 5 тестов — написаны
+- [~] **I3 — Core: `IfcImporter` (этажи+стены)** — `IfcBuildingStorey` (отметки),
+  `IfcWallStandardCase`: ось `Axis`/Curve2D + толщина (`IfcMaterialLayerSetUsage`) +
+  высота экструзии + композиция `IfcLocalPlacement` → мировые точки Unity (мм→м, Z-up→Y-up);
+  fixture `Tests/Fixtures/MiniRevit.ifc` (214 записей из реального `Project1.ifc`) — написаны
+- [~] **I4 — Core: слэбы и колонны** — `IfcSlab` профиль → контур пола (включая
+  перевёрнутый фрейм Z=(0,0,−1)); `IfcColumn`+`IfcRectangleProfileDef` → короткий сегмент
+  стены (длинная сторона = ось); круглые/Brep — пропуск со счётчиком; + тесты — написаны
+- [ ] **I5 — App: `ImportController` (ITool "Import")** — выбор `.ifc` из Download
+  (generic-локатор файлов), Load → `Wall`/`Floor` командами через `SceneModel` (весь
+  импорт = один Undo), статус «N walls / M slabs / K skipped»; Setup + реестр + палитра;
+  Play-тест: load fixture → объекты в сцене, undo снимает всё
+- [ ] **I6 — Навигация по дому** — корень `Building`, телепорт (луч в пол →
+  смещение модели к пользователю, математика в `Core/BuildingNav` + тесты), выбор
+  этажа (скрыть уровни выше); раскладку — в `10-controls.md`
+- [ ] **I7 — Проверка на устройстве** — реальный `Project1.ifc` в Download, импорт,
+  телепорт по квартире, покраска колонн как стен; синхронизация доков, коммит
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._
