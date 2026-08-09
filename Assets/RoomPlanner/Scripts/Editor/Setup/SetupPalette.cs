@@ -27,10 +27,11 @@ namespace RoomPlanner.EditorTools
             panel.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
 
             // ---- tool buttons from the registry order (must match ToolManager's list) ----
-            ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool };
+            ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool, ctx.Blueprint };
             var toolButtons = new MenuButton[tools.Length];
-            var toolSize = new Vector2(0.05f, 0.05f);
-            float startX = -0.087f, stepX = 0.058f;
+            var toolSize = new Vector2(0.045f, 0.05f);
+            float stepX = 0.0485f;                                  // centered row, fits 5 buttons
+            float startX = -stepX * (tools.Length - 1) * 0.5f;
             for (int i = 0; i < tools.Length; i++)
             {
                 string label = tools[i] != null ? tools[i].PaletteLabel : $"T{i}";

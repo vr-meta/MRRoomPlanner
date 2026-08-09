@@ -154,7 +154,18 @@
   - [x] M6 — `MeasureSetup` разрезан на `Editor/Setup/*` (RigContext/Assets/CoreRig/Select/Measure/Wall/Floor/Palette/Inspector), оркестратор — тонкий
   - [~] M7 — SetupRig + полный прогон headless: EditMode 102/102, PlayMode 16/16 ✅; осталась проверка на устройстве (инспектор выглядит/работает как раньше)
   - [x] M8 — PlayMode-тесты UI-слоя (`InspectorSchemaPlayTests`): генерация рядов из схемы (Stepper/Cycle, слой меню, OnClick-делегаты), ребинд при смене схемы, selection-режим, привязка реальных схем Wall/Floor к стору `ToolManager` (мутация + клэмпы)
-- [ ] После миграции: поток Blueprint выселяет `planScale/planOffset*` из `ToolManager` в свой контроллер (первая задача потока)
+- [~] После миграции: поток Blueprint выселяет `planScale/planOffset*` из `ToolManager` в свой контроллер — **см. 2h**
+
+## 2h. Blueprint — чертёж на полу (дизайн: `design/15-blueprint.md`)
+
+- [~] **v1: самостоятельный инструмент «Plan»** (масштаб + поворот + смещение)
+  - [ ] BP1 — `Core/BlueprintMath.cs`: `BlueprintPlacement`, `WorldToPlanUV`/`PlanUVToWorld`, `FromPointPairs` (подобие по 2 парам точек) + юнит-тесты
+  - [ ] BP2 — `Floor`: поворот плана в UV верхней грани (перегрузка, старая сигнатура = rotation 0) + тест UV-поворота
+  - [ ] BP3 — `BlueprintController : ITool` («Plan»): состояние scale/rotation/offset/текстура у себя; стик = смещение; схема Plan scale / Rotation / Reload; выселение plan-полей из `ToolManager` и текстуры/наджа из `FloorController`; `FloorController.RefreshPlan()`
+  - [ ] BP4 — `SetupBlueprintTool` + регистрация (реестр, палитра на 5 кнопок) + PlayMode-тест схемы; обновить `10-controls.md`
+  - [ ] Прогон headless (SetupRig + тесты) + проверка на устройстве (план крутится/тянется, полы пересобираются вживую)
+- [ ] **BP5 — калибровка по 2 точкам** (A′→A, B′→B, `FromPointPairs`; валидация коротких отрезков)
+- [ ] Импорт плана по-человечески (сейчас `adb push plan.png` в persistentDataPath)
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 

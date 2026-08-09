@@ -11,8 +11,8 @@
 |---|---|---|
 | **Index Trigger** | Поставить точку / **выбрать объект** / начать перетаскивание (удержание) | Select, Measure, Walls, Menu |
 | **Grip (side)** | Модификатор привязки (Measure — ось; Walls — угол 15°). **Над заголовком инспектора** — таскать плавающую панель | Measure, Walls, Inspector |
-| **Thumbstick ↑/↓** | Глубина курсора в воздухе; в Floor-инструменте — смещение плана | Measure, Walls, Floor |
-| **Thumbstick ←/→** | Floor — смещение плана по X; иначе *свободно* | Floor |
+| **Thumbstick ↑/↓** | Глубина курсора в воздухе; в **Blueprint («Plan»)** — смещение плана по Z | Measure, Walls, Blueprint |
+| **Thumbstick ←/→** | Blueprint — смещение плана по X; иначе *свободно* | Blueprint |
 | **Thumbstick click** | *свободно* | — |
 | **A (Button.One)** | *свободно* (план: дублировать выбранное) | — |
 | **B (Button.Two)** | Удаление/отмена: Select — **удалить выбранное** (отменяемо); Measure — удалить измерение; Walls — завершить цепочку | Select, Measure, Walls |
@@ -21,7 +21,7 @@
 
 | Кнопка | Действие | Где |
 |---|---|---|
-| **Палитра** | Всегда видна у левой руки, лицом к камере; выбор — правым лучом + триггер. Кнопки: **Sel**/Meas/Wall/Floor + привязки | Menu |
+| **Палитра** | Всегда видна у левой руки, лицом к камере; выбор — правым лучом + триггер. Кнопки: **Sel**/Meas/Wall/Floor/**Plan** + привязки | Menu |
 | **X (Button.Three)** | **Undo** (глобально, стек команд `EditHistory`) | Все |
 | **Y (Button.Four)** | **Redo** (глобально) | Все |
 | **Index Trigger / Grip / Stick** | Дублируют правые (читаем обе руки) | — |
@@ -35,7 +35,8 @@
 - **HUD у прицела** (план на будущее) — окраска по инструменту, подсказки, бейдж размера.
 
 **Инспектор Walls:** Thickness, Height, Angle step, Offset (Outer/Center/Inner), Corner=Join (Miter/Bevel/Round), Place (Surface/Free/Floor).
-**Инспектор Floor:** Level, Thickness, Plan scale.
+**Инспектор Floor:** Level, Thickness.
+**Инспектор Plan (Blueprint):** Plan scale, Rotation (±5°), Plan file (Reload; статус «ok W×H»/«no file»). Смещение — стиком.
 **Инспектор Select:** группа выбранного объекта — заголовок «Тип #id» + краткое описание (длина/размер) + подсказки. Пока read-only (per-instance правка параметров — Фаза B).
 
 ### Инструмент Select (дефолтный, Фаза A)

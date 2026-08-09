@@ -204,15 +204,36 @@ namespace RoomPlanner.Tests.Play
 
             var s = floor.GetSettings();
             Assert.IsNotNull(s);
-            Assert.AreEqual(3, s.Fields.Count, "Level/Thickness/Plan scale");
+            Assert.AreEqual(2, s.Fields.Count, "Level/Thickness — plan placement moved to the Blueprint tool");
 
             float lvl = mgr.Level;
             s.Fields[0].Increase();
             Assert.AreEqual(lvl + 0.1f, mgr.Level, 1e-5f);
+        }
 
-            float plan = mgr.PlanScale;
-            s.Fields[2].Decrease();
-            Assert.AreEqual(plan - 0.25f, mgr.PlanScale, 1e-5f);
+        [Test]
+        public void BlueprintSchema_OwnsItsState_NoManagerNeeded()
+        {
+            // The Blueprint tool is the first whose parameters live in the tool itself
+            // (design/14 §"что остаётся связанным") — its schema must work with NO manager.
+            var go = new GameObject("BlueprintCtl");
+            _spawned.Add(go);
+            var bp = go.AddComponent<BlueprintController>();
+
+            var s = bp.GetSettings();
+            Assert.IsNotNull(s);
+            Assert.AreEqual(3, s.Fields.Count, "Plan scale / Rotation / Plan file");
+
+            float scale = bp.PlanScale;
+            s.Fields[0].Increase();
+            Assert.AreEqual(scale + 0.25f, bp.PlanScale, 1e-5f, "scale stepper mutates the tool's own state");
+
+            float rot = bp.PlanRotationDeg;
+            s.Fields[1].Increase();
+            Assert.AreEqual(Mathf.Repeat(rot + 5f, 360f), bp.PlanRotationDeg, 1e-5f, "rotation stepper");
+
+            for (int i = 0; i < 300; i++) s.Fields[1].Increase();
+            Assert.That(bp.PlanRotationDeg, Is.InRange(0f, 360f), "rotation wraps, never accumulates");
         }
     }
 }

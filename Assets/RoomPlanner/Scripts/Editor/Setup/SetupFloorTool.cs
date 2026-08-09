@@ -31,8 +31,8 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("floorPrefab").objectReferenceValue = floorPrefab;
             so.FindProperty("previewLine").objectReferenceValue = floorPrev;
             so.FindProperty("manager").objectReferenceValue = ctx.Manager;
-            so.FindProperty("planMaterial").objectReferenceValue = ctx.FloorMat;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            // "blueprint" is wired by SetupBlueprintTool (built after this module)
             so.ApplyModifiedProperties();
         }
 

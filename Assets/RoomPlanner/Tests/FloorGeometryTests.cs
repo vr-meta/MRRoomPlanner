@@ -142,6 +142,45 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void Build_PlanRotation90_RotatesTopUVs()
+        {
+            var go = new GameObject("FloorTest");
+            try
+            {
+                var floor = go.AddComponent<Floor>();
+                // scale 1, rotation 90°, origin 0 → uv = (z, −x)
+                floor.Build(Vector3.zero, new Vector3(4f, 0f, 3f), 0f, 0.2f, 1f, 90f, 0f, 0f);
+                var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                for (int i = 0; i < 4; i++)
+                {
+                    Assert.AreEqual(mesh.vertices[i].z, mesh.uv[i].x, 1e-4f, $"vert {i}: u = z");
+                    Assert.AreEqual(-mesh.vertices[i].x, mesh.uv[i].y, 1e-4f, $"vert {i}: v = −x");
+                }
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void Build_LegacyOverload_MeansZeroRotation()
+        {
+            var goA = new GameObject("FloorA");
+            var goB = new GameObject("FloorB");
+            try
+            {
+                goA.AddComponent<Floor>().Build(Vector3.zero, new Vector3(4f, 0f, 3f), 0f, 0.2f, 2f, 1f, 3f);
+                goB.AddComponent<Floor>().Build(Vector3.zero, new Vector3(4f, 0f, 3f), 0f, 0.2f, 2f, 0f, 1f, 3f);
+                var uvA = goA.GetComponent<MeshFilter>().sharedMesh.uv;
+                var uvB = goB.GetComponent<MeshFilter>().sharedMesh.uv;
+                for (int i = 0; i < 4; i++)
+                {
+                    Assert.AreEqual(uvB[i].x, uvA[i].x, 1e-5f);
+                    Assert.AreEqual(uvB[i].y, uvA[i].y, 1e-5f);
+                }
+            }
+            finally { Object.DestroyImmediate(goA); Object.DestroyImmediate(goB); }
+        }
+
+        [Test]
         public void Build_ZeroPlanScale_FallsBackToOne()
         {
             var go = new GameObject("FloorTest");

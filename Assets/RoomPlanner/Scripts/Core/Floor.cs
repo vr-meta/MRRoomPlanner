@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Floors
 {
@@ -24,6 +25,7 @@ namespace RoomPlanner.Floors
         // Cached build parameters so the slab can rebuild itself after edits (move/resize).
         private float _thickness = 0.2f;
         private float _planScale = 5f;
+        private float _planRotationDeg;
         private float _planOriginX;
         private float _planOriginZ;
 
@@ -43,24 +45,30 @@ namespace RoomPlanner.Floors
         }
 
         /// <summary>Rebuild from the current corners/level and cached parameters.</summary>
-        public void Rebuild() => Build(CornerA, CornerB, Level, _thickness, _planScale, _planOriginX, _planOriginZ);
+        public void Rebuild() => Build(CornerA, CornerB, Level, _thickness, _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
 
         /// <summary>Translate the whole slab and rebuild in place.</summary>
         public void MoveBy(Vector3 delta)
         {
             Build(CornerA + delta, CornerB + delta, Level + delta.y,
-                _thickness, _planScale, _planOriginX, _planOriginZ);
+                _thickness, _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
         }
 
+        /// <summary>Legacy signature (no plan rotation) — kept so existing callers/tests stand.</summary>
         public void Build(Vector3 a, Vector3 b, float level, float thickness,
             float planScale, float planOriginX, float planOriginZ)
+            => Build(a, b, level, thickness, planScale, 0f, planOriginX, planOriginZ);
+
+        public void Build(Vector3 a, Vector3 b, float level, float thickness,
+            float planScale, float planRotationDeg, float planOriginX, float planOriginZ)
         {
             Ensure();
             // Keep the stored corners on the slab's top plane so CornerA.y never drifts from Level.
             a.y = level; b.y = level;
             CornerA = a; CornerB = b; Level = level;
             _thickness = Mathf.Max(0.001f, Mathf.Abs(thickness));
-            _planScale = planScale; _planOriginX = planOriginX; _planOriginZ = planOriginZ;
+            _planScale = planScale; _planRotationDeg = planRotationDeg;
+            _planOriginX = planOriginX; _planOriginZ = planOriginZ;
             _mesh.Clear();
 
             float minX = Mathf.Min(a.x, b.x), maxX = Mathf.Max(a.x, b.x);
@@ -68,18 +76,22 @@ namespace RoomPlanner.Floors
             if (maxX - minX < 1e-4f || maxZ - minZ < 1e-4f) { if (_collider != null) _collider.sharedMesh = null; return; }
 
             float top = level, bot = level - _thickness;
-            // Negative scale = mirrored plan (legit); only guard against near-zero.
-            float s = Mathf.Abs(planScale) > 1e-4f ? planScale : 1f;
+            // Negative scale = mirrored plan (legit); near-zero is guarded inside BlueprintMath.
+            var placement = new BlueprintPlacement
+            {
+                Scale = planScale, RotationDeg = planRotationDeg,
+                OriginX = planOriginX, OriginZ = planOriginZ,
+            };
 
             var v = new List<Vector3>();
             var uv = new List<Vector2>();
             var t = new List<int>();
 
-            // top (0-3) — UV by world position so the plan aligns across slabs
-            AddTop(v, uv, minX, top, minZ, planOriginX, planOriginZ, s);
-            AddTop(v, uv, maxX, top, minZ, planOriginX, planOriginZ, s);
-            AddTop(v, uv, maxX, top, maxZ, planOriginX, planOriginZ, s);
-            AddTop(v, uv, minX, top, maxZ, planOriginX, planOriginZ, s);
+            // top (0-3) — UV by world position (scale+rotation+offset) so the plan aligns across slabs
+            AddTop(v, uv, minX, top, minZ, placement);
+            AddTop(v, uv, maxX, top, minZ, placement);
+            AddTop(v, uv, maxX, top, maxZ, placement);
+            AddTop(v, uv, minX, top, maxZ, placement);
             // bottom (4-7)
             v.Add(new Vector3(minX, bot, minZ)); uv.Add(Vector2.zero);
             v.Add(new Vector3(maxX, bot, minZ)); uv.Add(Vector2.zero);
@@ -109,10 +121,11 @@ namespace RoomPlanner.Floors
         }
 
         private static void AddTop(List<Vector3> v, List<Vector2> uv, float x, float y, float z,
-            float ox, float oz, float s)
+            in BlueprintPlacement placement)
         {
-            v.Add(new Vector3(x, y, z));
-            uv.Add(new Vector2((x - ox) / s, (z - oz) / s));
+            var p = new Vector3(x, y, z);
+            v.Add(p);
+            uv.Add(BlueprintMath.WorldToPlanUV(p, placement));
         }
 
         private static void Quad(List<int> t, int a, int b, int c, int d)

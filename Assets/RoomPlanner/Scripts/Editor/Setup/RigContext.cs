@@ -29,6 +29,7 @@ namespace RoomPlanner.EditorTools
         public MeasureController Measure;
         public WallController WallTool;
         public FloorController FloorTool;
+        public BlueprintController Blueprint;
 
         // shared assets
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;

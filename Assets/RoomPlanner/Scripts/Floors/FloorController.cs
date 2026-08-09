@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Measure;
@@ -10,8 +9,8 @@ namespace RoomPlanner.Floors
 {
     /// <summary>
     /// Floor tool: place a rectangular slab by two corners on the current Level, with thickness
-    /// (Thk). Top gets the floorplan image (plan.png in the app folder). Plan scale (menu Plan −/+)
-    /// and offset (right stick while this tool is active) position the plan; slabs rebuild live.
+    /// (Thk). The floorplan image and its placement (scale/rotation/offset) belong to the
+    /// Blueprint tool — this controller only reads them when (re)building slabs.
     /// </summary>
     public class FloorController : MonoBehaviour, ITool
     {
@@ -22,16 +21,12 @@ namespace RoomPlanner.Floors
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
         [SerializeField] private SceneModel sceneModel;
-        [SerializeField] private Material planMaterial;   // shared floor-top material; receives the plan texture
-        [SerializeField] private float offsetSpeed = 0.6f; // m/s of plan nudging via stick
-
-        private const string PlanFile = "plan.png";
+        [SerializeField] private BlueprintController blueprint;   // plan placement source
 
         private readonly List<Floor> _floors = new();
         private Vector3? _cornerA;
-        private Texture2D _planTex;
         private float _planScaleApplied = float.NaN;
-        private float _planOffXApplied, _planOffZApplied;
+        private float _planRotApplied, _planOffXApplied, _planOffZApplied;
         private SettingsSchema _settings;
 
         public string Id => "floor";
@@ -46,14 +41,11 @@ namespace RoomPlanner.Floors
                     () => manager.AdjustLevel(-0.1f), () => manager.AdjustLevel(0.1f))
                 .Stepper("thk", "Thickness",
                     () => $"{manager.WallThickness * 100f:0} cm",
-                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f))
-                .Stepper("plan", "Plan scale",
-                    () => $"{manager.PlanScale:0.0} m",
-                    () => manager.AdjustPlanScale(-0.25f), () => manager.AdjustPlanScale(0.25f));
+                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f));
             return _settings;
         }
 
-        public void OnActivate() => ReloadPlan();
+        public void OnActivate() { }
 
         public void OnDeactivate()
         {
@@ -73,14 +65,6 @@ namespace RoomPlanner.Floors
             }
 
             float level = manager != null ? manager.Level : 0f;
-
-            // move the plan with the stick when we're not mid-rectangle
-            if (manager != null && !_cornerA.HasValue)
-            {
-                Vector2 s = input.Thumbstick();
-                if (s.sqrMagnitude > 0.02f)
-                    manager.NudgePlan(s.x * offsetSpeed * Time.deltaTime, s.y * offsetSpeed * Time.deltaTime);
-            }
 
             RebuildIfPlanChanged();
 
@@ -116,18 +100,26 @@ namespace RoomPlanner.Floors
             var f = Instantiate(floorPrefab, transform);
             _floors.Add(f);
             if (sceneModel != null) sceneModel.Register(f.GetComponent<Selectable>());
-            f.Build(a, b, level, Thickness(), Scale(), OffX(), OffZ());
+            f.Build(a, b, level, Thickness(), Scale(), Rotation(), OffX(), OffZ());
+        }
+
+        /// <summary>Force a plan re-apply on all slabs (called by the Blueprint tool after
+        /// its placement changes — floors rebuild live even while another tool is active).</summary>
+        public void RefreshPlan()
+        {
+            _planScaleApplied = float.NaN;
+            RebuildIfPlanChanged();
         }
 
         private void RebuildIfPlanChanged()
         {
             // Compare the fields directly — an additive "signature" can collide when two
             // parameters change in opposite directions.
-            float s = Scale(), ox = OffX(), oz = OffZ();
-            if (s == _planScaleApplied && ox == _planOffXApplied && oz == _planOffZApplied) return;
-            _planScaleApplied = s; _planOffXApplied = ox; _planOffZApplied = oz;
+            float s = Scale(), r = Rotation(), ox = OffX(), oz = OffZ();
+            if (s == _planScaleApplied && r == _planRotApplied && ox == _planOffXApplied && oz == _planOffZApplied) return;
+            _planScaleApplied = s; _planRotApplied = r; _planOffXApplied = ox; _planOffZApplied = oz;
             foreach (var f in _floors)
-                if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), s, ox, oz);
+                if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), s, r, ox, oz);
         }
 
         private void DeleteLast()
@@ -164,28 +156,10 @@ namespace RoomPlanner.Floors
             previewLine.SetPosition(3, new Vector3(a.x, level, b.z));
         }
 
-        private void ReloadPlan()
-        {
-            if (planMaterial == null) return;
-            string path = Path.Combine(Application.persistentDataPath, PlanFile);
-            if (!File.Exists(path)) { Debug.Log($"[Floor] no plan at {path}"); return; }
-            var tex = new Texture2D(2, 2) { wrapMode = TextureWrapMode.Clamp };
-            if (tex.LoadImage(File.ReadAllBytes(path)))
-            {
-                // Free the previous decode — each activation would otherwise leak a full-size
-                // texture until Horizon OS kills the app.
-                if (_planTex != null) Destroy(_planTex);
-                _planTex = tex;
-                if (planMaterial.HasProperty("_BaseMap")) planMaterial.SetTexture("_BaseMap", tex);
-                planMaterial.mainTexture = tex;
-                Debug.Log($"[Floor] plan loaded {tex.width}x{tex.height}");
-            }
-            else Destroy(tex);
-        }
-
         private float Thickness() => manager != null ? manager.WallThickness : 0.2f;
-        private float Scale() => manager != null ? manager.PlanScale : 5f;
-        private float OffX() => manager != null ? manager.PlanOffsetX : 0f;
-        private float OffZ() => manager != null ? manager.PlanOffsetZ : 0f;
+        private float Scale() => blueprint != null ? blueprint.PlanScale : 5f;
+        private float Rotation() => blueprint != null ? blueprint.PlanRotationDeg : 0f;
+        private float OffX() => blueprint != null ? blueprint.PlanOffsetX : 0f;
+        private float OffZ() => blueprint != null ? blueprint.PlanOffsetZ : 0f;
     }
 }

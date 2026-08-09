@@ -29,6 +29,7 @@ namespace RoomPlanner.EditorTools
             SetupMeasureTool.Build(ctx);
             SetupWallTool.Build(ctx);
             SetupFloorTool.Build(ctx);
+            SetupBlueprintTool.Build(ctx);
 
             ToolMenuAndInspector(ctx);
             SetupCoreRig.TryEnableEffectMeshColliders();
@@ -65,6 +66,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("measure").objectReferenceValue = ctx.Measure;
             so.FindProperty("wall").objectReferenceValue = ctx.WallTool;
             so.FindProperty("floor").objectReferenceValue = ctx.FloorTool;
+            so.FindProperty("blueprint").objectReferenceValue = ctx.Blueprint;
             so.ApplyModifiedProperties();
         }
     }

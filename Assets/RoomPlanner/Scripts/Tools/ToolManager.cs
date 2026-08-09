@@ -28,6 +28,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private MeasureController measure;
         [SerializeField] private WallController wall;
         [SerializeField] private FloorController floor;
+        [SerializeField] private BlueprintController blueprint;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
         [SerializeField] private int offsetMode = 0;  // 0 Outer, 1 Center, 2 Inner
@@ -41,9 +42,8 @@ namespace RoomPlanner.Tools
         [SerializeField] private float angleStep = 15f;    // degrees
         [SerializeField] private float level = 0f;         // working floor level Y (storeys); Quest floor ≈ 0
         [SerializeField] private bool scanOn = true;       // show/hide the scanned room mesh (EffectMesh)
-        [SerializeField] private float planScale = 5f;     // meters across the floorplan image width
-        [SerializeField] private float planOffsetX = 0f;   // plan origin in world (positioning)
-        [SerializeField] private float planOffsetZ = 0f;
+        // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
+        // shared store here holds only genuinely cross-tool parameters.
 
         private const int MenuLayer = 2;              // IgnoreRaycast
 
@@ -59,9 +59,6 @@ namespace RoomPlanner.Tools
         public float GridSize => gridSize;
         public float AngleStep => angleStep;
         public float Level => level;
-        public float PlanScale => planScale;
-        public float PlanOffsetX => planOffsetX;
-        public float PlanOffsetZ => planOffsetZ;
 
         // ---- shared-parameter mutators (referenced by tool schemas) ----
 
@@ -69,7 +66,6 @@ namespace RoomPlanner.Tools
         public void AdjustWallHeight(float d) => wallHeight = Mathf.Clamp(wallHeight + d, 0.2f, 5f);
         public void AdjustAngleStep(float d) => angleStep = Mathf.Clamp(angleStep + d, 5f, 90f);
         public void AdjustLevel(float d) => level = Mathf.Round((level + d) * 100f) / 100f;
-        public void AdjustPlanScale(float d) => planScale = Mathf.Clamp(planScale + d, 0.5f, 50f);
         public void CycleOffsetMode() => offsetMode = (offsetMode + 1) % 3;
         public void CyclePlaceMode() => placeMode = (placeMode + 1) % 3;
         public void CycleJoinMode() => joinMode = (joinMode + 1) % 3;
@@ -77,8 +73,6 @@ namespace RoomPlanner.Tools
         public string OffsetName() => offsetMode == 0 ? "Outer" : offsetMode == 1 ? "Center" : "Inner";
         public string PlaceName() => placeMode == 0 ? "Surface" : placeMode == 1 ? "Free" : "Floor";
         public string JoinName() => joinMode == 0 ? "Miter" : joinMode == 1 ? "Bevel" : "Round";
-
-        public void NudgePlan(float dx, float dz) { planOffsetX += dx; planOffsetZ += dz; }
 
         // ---- tool registry ----
 
@@ -92,7 +86,7 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (palette buttons are generated from the same order by SetupPalette).
-            _tools = new ITool[] { select, measure, wall, floor };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint };
 
             Debug.Log($"[Tools] v11 registry: {_tools.Length} tools, scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)
