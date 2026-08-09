@@ -62,6 +62,12 @@ namespace RoomPlanner.Measure
             }
         }
 
+        public string Id => "measure";
+        public string PaletteLabel => "Meas";
+
+        /// <summary>Measure has no settings panel.</summary>
+        public SettingsSchema GetSettings() => null;
+
         public void OnActivate() { }
 
         public void OnDeactivate()

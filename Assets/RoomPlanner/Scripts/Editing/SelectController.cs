@@ -27,6 +27,12 @@ namespace RoomPlanner.Editing
         private Vector3 _dragTotal;
         private float _dragPlaneY;
 
+        public string Id => "select";
+        public string PaletteLabel => "Sel";
+
+        /// <summary>No parameter rows — the selection group is a dedicated panel section.</summary>
+        public SettingsSchema GetSettings() => null;
+
         public bool HasSelection => _selected != null && _selected.IsAlive && !_selected.IsHidden;
 
         /// <summary>True while a drag is in progress (ToolManager suppresses undo/redo then).</summary>

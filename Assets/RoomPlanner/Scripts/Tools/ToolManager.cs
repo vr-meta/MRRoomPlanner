@@ -1,4 +1,5 @@
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Measure;
 using RoomPlanner.Walls;
 using RoomPlanner.Floors;
@@ -10,9 +11,10 @@ namespace RoomPlanner.Tools
     public enum PlaceMode { Surface, Free, Floor }
 
     /// <summary>
-    /// «Мозг» инструментов: держит активный инструмент, каждый кадр решает — указатель над
-    /// меню (тогда обрабатываем выбор в меню и блокируем инструмент) или в сцене (тикаем
-    /// активный инструмент). Хранит глобальные параметры стен (толщина/высота/смещение).
+    /// «Мозг» инструментов: держит РЕЕСТР инструментов (ITool[], без enum/switch — см.
+    /// design/14-modularity.md), каждый кадр решает — указатель над меню (блокируем
+    /// инструмент) или в сцене (тикаем активный). Хранит ОБЩИЕ параметры (толщина/высота/
+    /// уровень и т.п.) как разделяемый стор; схемы инструментов ссылаются на его методы.
     /// </summary>
     public class ToolManager : MonoBehaviour
     {
@@ -61,28 +63,42 @@ namespace RoomPlanner.Tools
         public float PlanOffsetX => planOffsetX;
         public float PlanOffsetZ => planOffsetZ;
 
+        // ---- shared-parameter mutators (referenced by tool schemas) ----
+
+        public void AdjustWallThickness(float d) => wallThickness = Mathf.Clamp(wallThickness + d, 0.02f, 1f);
+        public void AdjustWallHeight(float d) => wallHeight = Mathf.Clamp(wallHeight + d, 0.2f, 5f);
+        public void AdjustAngleStep(float d) => angleStep = Mathf.Clamp(angleStep + d, 5f, 90f);
+        public void AdjustLevel(float d) => level = Mathf.Round((level + d) * 100f) / 100f;
+        public void AdjustPlanScale(float d) => planScale = Mathf.Clamp(planScale + d, 0.5f, 50f);
+        public void CycleOffsetMode() => offsetMode = (offsetMode + 1) % 3;
+        public void CyclePlaceMode() => placeMode = (placeMode + 1) % 3;
+        public void CycleJoinMode() => joinMode = (joinMode + 1) % 3;
+
+        public string OffsetName() => offsetMode == 0 ? "Outer" : offsetMode == 1 ? "Center" : "Inner";
+        public string PlaceName() => placeMode == 0 ? "Surface" : placeMode == 1 ? "Free" : "Floor";
+        public string JoinName() => joinMode == 0 ? "Miter" : joinMode == 1 ? "Bevel" : "Round";
+
         public void NudgePlan(float dx, float dz) { planOffsetX += dx; planOffsetZ += dz; }
 
-        // Tool codes (must match ToolMenu.Refresh / InspectorPanel.ShowFor): 0 Select, 1 Measure, 2 Wall, 3 Floor.
-        private enum Tool { Select, Measure, Wall, Floor }
-        private Tool _active = Tool.Select;
+        // ---- tool registry ----
 
-        private ITool ActiveTool() => _active switch
-        {
-            Tool.Select => (ITool)select,
-            Tool.Measure => measure,
-            Tool.Wall => wall,
-            _ => floor
-        };
+        private ITool[] _tools;
+        private int _active;
+
+        private ITool ActiveTool() =>
+            _tools != null && _active >= 0 && _active < _tools.Length ? _tools[_active] : null;
 
         private void Start()
         {
-            Debug.Log($"[Tools] v10 started. select={(select != null)} measure={(measure != null)} wall={(wall != null)} floor={(floor != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
-            if (measure != null) measure.OnDeactivate();
-            if (wall != null) wall.OnDeactivate();
-            if (floor != null) floor.OnDeactivate();
-            if (select != null) select.OnActivate();
-            _active = Tool.Select;
+            // Registration point: adding a tool = wiring its controller + one entry here
+            // (palette buttons are generated from the same order by SetupPalette).
+            _tools = new ITool[] { select, measure, wall, floor };
+
+            Debug.Log($"[Tools] v11 registry: {_tools.Length} tools, scene={(sceneModel != null)} inspector={(inspector != null)}");
+            foreach (var t in _tools)
+                if (t != null) t.OnDeactivate();
+            _active = 0;
+            if (ActiveTool() != null) ActiveTool().OnActivate();
             RefreshMenu();
         }
 
@@ -135,36 +151,28 @@ namespace RoomPlanner.Tools
             {
                 if (menu != null) menu.Highlight(mb);
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hit.point; }
-                if (mb != null && input.ConfirmPressed()) { Execute(mb.Action); input.Pulse(); }
+                if (mb != null && input.ConfirmPressed()) { Execute(mb); input.Pulse(); }
             }
             else if (menu != null) menu.Highlight(null);
         }
 
-        private void Execute(MenuAction a)
+        private void Execute(MenuButton mb)
         {
-            switch (a)
+            // Runtime-bound rows (inspector schema) take precedence over the global enum.
+            if (mb.OnClick != null)
             {
-                case MenuAction.SelectTool: SetActive(Tool.Select); break;
-                case MenuAction.SelectMeasure: SetActive(Tool.Measure); break;
-                case MenuAction.SelectWall: SetActive(Tool.Wall); break;
-                case MenuAction.SelectFloor: SetActive(Tool.Floor); break;
-                case MenuAction.PlanDown: planScale = Mathf.Clamp(planScale - 0.25f, 0.5f, 50f); break;
-                case MenuAction.PlanUp: planScale = Mathf.Clamp(planScale + 0.25f, 0.5f, 50f); break;
-                case MenuAction.ThicknessDown: wallThickness = Mathf.Clamp(wallThickness - 0.02f, 0.02f, 1f); break;
-                case MenuAction.ThicknessUp: wallThickness = Mathf.Clamp(wallThickness + 0.02f, 0.02f, 1f); break;
-                case MenuAction.HeightDown: wallHeight = Mathf.Clamp(wallHeight - 0.1f, 0.2f, 5f); break;
-                case MenuAction.HeightUp: wallHeight = Mathf.Clamp(wallHeight + 0.1f, 0.2f, 5f); break;
-                case MenuAction.CycleOffset: offsetMode = (offsetMode + 1) % 3; break;
-                case MenuAction.CyclePlace: placeMode = (placeMode + 1) % 3; break;
+                mb.OnClick();
+                RefreshMenu();
+                return;
+            }
+
+            switch (mb.Action)
+            {
+                case MenuAction.SelectTool: if (mb.ToolIndex >= 0) SetActiveTool(mb.ToolIndex); break;
                 case MenuAction.ToggleSnapCorner: snapCorner = !snapCorner; break;
                 case MenuAction.ToggleSnapEdge: snapEdge = !snapEdge; break;
                 case MenuAction.ToggleSnapGrid: snapGrid = !snapGrid; break;
                 case MenuAction.ToggleSnapAngle: snapAngle = !snapAngle; break;
-                case MenuAction.AngleDown: angleStep = Mathf.Clamp(angleStep - 5f, 5f, 90f); break;
-                case MenuAction.AngleUp: angleStep = Mathf.Clamp(angleStep + 5f, 5f, 90f); break;
-                case MenuAction.CycleJoin: joinMode = (joinMode + 1) % 3; break;
-                case MenuAction.LevelDown: level = Mathf.Round((level - 0.1f) * 100f) / 100f; break;
-                case MenuAction.LevelUp: level = Mathf.Round((level + 0.1f) * 100f) / 100f; break;
                 case MenuAction.ToggleScan: scanOn = !scanOn; SetScan(scanOn); break;
             }
             RefreshMenu();
@@ -178,14 +186,15 @@ namespace RoomPlanner.Tools
                     mb.gameObject.SetActive(on);
         }
 
-        private void SetActive(Tool t)
+        public void SetActiveTool(int index)
         {
-            if (t != _active)
+            if (_tools == null || index < 0 || index >= _tools.Length) return;
+            if (index != _active)
             {
                 ITool prev = ActiveTool();
                 if (prev != null) prev.OnDeactivate();
             }
-            _active = t;
+            _active = index;
             ITool next = ActiveTool();
             if (next != null) next.OnActivate();
             RefreshMenu();
@@ -197,19 +206,15 @@ namespace RoomPlanner.Tools
         private void RefreshMenu()
         {
             if (menu != null)
-                menu.Refresh((int)_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn);
+                menu.Refresh(_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn);
             if (inspector != null)
             {
-                inspector.RefreshValues(wallThickness, wallHeight, angleStep, level, planScale,
-                    OffsetName(), JoinName(), PlaceName());
+                ITool act = ActiveTool();
                 bool hasSel = select != null && select.HasSelection;
+                bool showSelection = act != null && ReferenceEquals(act, select) && hasSel;
                 if (select != null) inspector.SetSelection(select.SelectionTitle, select.SelectionInfo);
-                inspector.ShowFor((int)_active, hasSel);
+                inspector.ShowFor(act?.GetSettings(), showSelection);
             }
         }
-
-        private string OffsetName() => offsetMode == 0 ? "Outer" : offsetMode == 1 ? "Center" : "Inner";
-        private string PlaceName() => placeMode == 0 ? "Surface" : placeMode == 1 ? "Free" : "Floor";
-        private string JoinName() => joinMode == 0 ? "Miter" : joinMode == 1 ? "Bevel" : "Round";
     }
 }

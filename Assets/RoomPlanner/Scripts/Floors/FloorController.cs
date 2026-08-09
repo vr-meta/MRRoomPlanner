@@ -32,6 +32,26 @@ namespace RoomPlanner.Floors
         private Texture2D _planTex;
         private float _planScaleApplied = float.NaN;
         private float _planOffXApplied, _planOffZApplied;
+        private SettingsSchema _settings;
+
+        public string Id => "floor";
+        public string PaletteLabel => "Floor";
+
+        public SettingsSchema GetSettings()
+        {
+            if (manager == null) return null;
+            _settings ??= new SettingsSchema()
+                .Stepper("lvl", "Level",
+                    () => $"{manager.Level * 100f:0} cm",
+                    () => manager.AdjustLevel(-0.1f), () => manager.AdjustLevel(0.1f))
+                .Stepper("thk", "Thickness",
+                    () => $"{manager.WallThickness * 100f:0} cm",
+                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f))
+                .Stepper("plan", "Plan scale",
+                    () => $"{manager.PlanScale:0.0} m",
+                    () => manager.AdjustPlanScale(-0.25f), () => manager.AdjustPlanScale(0.25f));
+            return _settings;
+        }
 
         public void OnActivate() => ReloadPlan();
 

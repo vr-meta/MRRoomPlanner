@@ -2,42 +2,38 @@ using UnityEngine;
 
 namespace RoomPlanner.Tools
 {
+    /// <summary>
+    /// GLOBAL palette actions only. Per-tool parameter buttons are runtime-bound via
+    /// <see cref="MenuButton.OnClick"/> and never appear here (design/14-modularity.md).
+    /// </summary>
     public enum MenuAction
     {
-        SelectMeasure,
-        SelectWall,
-        ThicknessDown,
-        ThicknessUp,
-        HeightDown,
-        HeightUp,
-        CycleOffset,
-        CyclePlace,
+        None,
+        SelectTool,        // activates the tool at MenuButton.ToolIndex
         ToggleSnapCorner,
         ToggleSnapEdge,
         ToggleSnapGrid,
         ToggleSnapAngle,
-        AngleDown,
-        AngleUp,
-        CycleJoin,
-        LevelDown,
-        LevelUp,
-        ToggleScan,
-        SelectFloor,
-        PlanDown,
-        PlanUp,
-        SelectTool
+        ToggleScan
     }
 
     /// <summary>
-    /// Кнопка меню (на слое IgnoreRaycast). Хранит действие; при наведении подсвечивается,
-    /// у кнопок-инструментов есть отметка «активен».
+    /// Кнопка меню (на слое IgnoreRaycast). Действие — либо рантайм-делегат
+    /// <see cref="OnClick"/> (ряды инспектора из схемы), либо глобальный
+    /// <see cref="MenuAction"/>; при наведении подсвечивается, у кнопок-инструментов
+    /// есть отметка «активен».
     /// </summary>
     public class MenuButton : MonoBehaviour
     {
         [SerializeField] private MenuAction action;
+        [SerializeField] private int toolIndex = -1;   // for MenuAction.SelectTool
         [SerializeField] private GameObject activeMark;
 
         public MenuAction Action => action;
+        public int ToolIndex => toolIndex;
+
+        /// <summary>Runtime-bound handler (schema rows); takes precedence over Action.</summary>
+        public System.Action OnClick;
 
         private Vector3 _baseScale;
         private bool _hovered;

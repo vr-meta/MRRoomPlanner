@@ -31,6 +31,30 @@ namespace RoomPlanner.Walls
         private Wall _current;
         private Vector3 _interior;
         private float _cursorDistance = 2f;
+        private SettingsSchema _settings;
+
+        public string Id => "wall";
+        public string PaletteLabel => "Wall";
+
+        /// <summary>Wall parameters live in ToolManager (shared store); the schema binds to it.</summary>
+        public SettingsSchema GetSettings()
+        {
+            if (manager == null) return null;
+            _settings ??= new SettingsSchema()
+                .Stepper("thk", "Thickness",
+                    () => $"{manager.WallThickness * 100f:0} cm",
+                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f))
+                .Stepper("h", "Height",
+                    () => $"{manager.WallHeight * 100f:0} cm",
+                    () => manager.AdjustWallHeight(-0.1f), () => manager.AdjustWallHeight(0.1f))
+                .Stepper("ang", "Angle step",
+                    () => $"{manager.AngleStep:0}°",
+                    () => manager.AdjustAngleStep(-5f), () => manager.AdjustAngleStep(5f))
+                .Cycle("off", "Offset", () => manager.OffsetName(), manager.CycleOffsetMode)
+                .Cycle("join", "Corner", () => manager.JoinName(), manager.CycleJoinMode)
+                .Cycle("place", "Place", () => manager.PlaceName(), manager.CyclePlaceMode);
+            return _settings;
+        }
 
         public void OnActivate() { }
 
