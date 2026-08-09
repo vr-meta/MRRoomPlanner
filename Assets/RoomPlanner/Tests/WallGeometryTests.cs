@@ -95,5 +95,98 @@ namespace RoomPlanner.Tests
             }
             finally { Object.DestroyImmediate(go); }
         }
+
+        [Test]
+        public void MoveBy_ShiftsEveryCenterlinePoint()
+        {
+            var go = new GameObject("WallTest");
+            try
+            {
+                var wall = go.AddComponent<Wall>();
+                var pts = new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) };
+                wall.Build(pts, 0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                var before = new List<Vector3>(wall.Points);
+
+                var delta = new Vector3(2f, 0f, -3f);
+                wall.MoveBy(delta);
+
+                Assert.AreEqual(before.Count, wall.Points.Count);
+                for (int i = 0; i < before.Count; i++)
+                {
+                    Assert.AreEqual(before[i].x + delta.x, wall.Points[i].x, 1e-4f);
+                    Assert.AreEqual(before[i].z + delta.z, wall.Points[i].z, 1e-4f);
+                }
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void MoveBy_TranslatesMeshBounds_AndKeepsVertexCount()
+        {
+            var go = new GameObject("WallTest");
+            try
+            {
+                var wall = go.AddComponent<Wall>();
+                wall.Build(new List<Vector3> { A, B }, 0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                int count = mesh.vertexCount;
+                Vector3 centerBefore = mesh.bounds.center;
+
+                var delta = new Vector3(1.5f, 0f, 0.5f);
+                wall.MoveBy(delta);
+
+                Assert.AreEqual(count, mesh.vertexCount, "move must not change topology");
+                Assert.AreEqual(centerBefore.x + delta.x, mesh.bounds.center.x, 1e-3f);
+                Assert.AreEqual(centerBefore.z + delta.z, mesh.bounds.center.z, 1e-3f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void MoveBy_ThenInverse_RestoresPoints()
+        {
+            // This is the round-trip MoveCommand.Undo relies on: MoveBy(d) then MoveBy(-d).
+            var go = new GameObject("WallTest");
+            try
+            {
+                var wall = go.AddComponent<Wall>();
+                var pts = new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) };
+                wall.Build(pts, 0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                var before = new List<Vector3>(wall.Points);
+
+                var delta = new Vector3(2.5f, 0f, -1.25f);
+                wall.MoveBy(delta);
+                wall.MoveBy(-delta);
+
+                for (int i = 0; i < before.Count; i++)
+                {
+                    Assert.AreEqual(before[i].x, wall.Points[i].x, 1e-4f);
+                    Assert.AreEqual(before[i].z, wall.Points[i].z, 1e-4f);
+                }
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void Rebuild_ReproducesSameGeometry()
+        {
+            var go = new GameObject("WallTest");
+            try
+            {
+                var wall = go.AddComponent<Wall>();
+                wall.Build(new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) },
+                    0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                int count = mesh.vertexCount;
+                Vector3 center = mesh.bounds.center;
+
+                wall.Rebuild();
+
+                Assert.AreEqual(count, mesh.vertexCount);
+                Assert.AreEqual(center.x, mesh.bounds.center.x, 1e-4f);
+                Assert.AreEqual(center.z, mesh.bounds.center.z, 1e-4f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
     }
 }
