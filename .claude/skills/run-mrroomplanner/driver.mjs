@@ -203,9 +203,18 @@ async function cmdStatus() {
 
 async function bridgeTests(platform) {
   console.log(`[bridge] running ${platform} tests in the open Editor…`);
-  const start = unwrap(await mcpCall('TestRunnerTools', 'RunAll', { testPlatform: platform }));
-  const runId = start.runId;
-  console.log(`[bridge] runId=${runId} queued=${start.testsQueued}`);
+
+  // RunAll can hold the HTTP response until the whole run finishes (the Editor main thread is
+  // busy running tests), and node's fetch then kills it with UND_ERR_HEADERS_TIMEOUT. Treat a
+  // timeout as "started anyway" and fall back to polling for the latest finished run.
+  let runId = null;
+  try {
+    const start = unwrap(await mcpCall('TestRunnerTools', 'RunAll', { testPlatform: platform }));
+    runId = start?.runId ?? null;
+    console.log(`[bridge] runId=${runId} queued=${start?.testsQueued}`);
+  } catch (e) {
+    console.log('[bridge] start call did not answer (run is under way) — polling for results…');
+  }
   // NEVER use WaitForTestRun here: it holds the HTTP response open while the Editor
   // main thread runs tests, and node's fetch kills it with UND_ERR_HEADERS_TIMEOUT.
   // Short calls + polling is the only reliable shape.
@@ -213,9 +222,13 @@ async function bridgeTests(platform) {
   for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 3000));
     try {
-      const r = unwrap(await mcpCall('TestRunnerTools', 'GetResults', { runId }));
-      // guard against seeing the PREVIOUS run's (already finished) results
-      if (r && r.runId === runId && r.isRunning === false) { res = r; break; }
+      const args = runId ? { runId } : {};
+      const r = unwrap(await mcpCall('TestRunnerTools', 'GetResults', args));
+      if (!r || r.isRunning !== false) continue;
+      // with a known id, insist on it — otherwise we could report the PREVIOUS run's numbers
+      if (runId && r.runId !== runId) continue;
+      res = r;
+      break;
     } catch { /* Editor busy mid-run — keep polling */ }
   }
   if (!res) { console.error('[bridge] no results'); return 1; }

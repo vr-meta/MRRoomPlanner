@@ -277,7 +277,7 @@ namespace RoomPlanner.Tests.Play
 
             var s = bp.GetSettings();
             Assert.IsNotNull(s);
-            Assert.AreEqual(4, s.Fields.Count, "Plan scale / Rotation / Calibrate / Plan file");
+            Assert.AreEqual(5, s.Fields.Count, "Plan scale / Rotation / Calibrate / Plan file / Load");
 
             float scale = bp.PlanScale;
             s.Fields[0].Increase();

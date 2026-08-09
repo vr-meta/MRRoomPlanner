@@ -222,12 +222,28 @@ namespace RoomPlanner.Tools
             RefreshMenu();
         }
 
-        // Show/hide the scanned room mesh so we can work purely from a plan.
+        // Show/hide the scanned room so we can work purely from a plan: the EffectMesh AND the
+        // Virtual Home primitives (prefabs spawned under MRUK anchors). Renderers+colliders are
+        // toggled under anchors (not the anchor objects) so MRUK internals keep working.
+        // Reflection by type name — no hard MRUK assembly dependency.
         private static void SetScan(bool on)
         {
-            foreach (var mb in FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
-                if (mb != null && mb.GetType().Name == "EffectMesh")
+            // FindObjectsInactive.Include: a hidden EffectMesh is inactive — without it the
+            // toggle could switch the scan off but never back on.
+            foreach (var mb in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (mb == null) continue;
+                string t = mb.GetType().Name;
+                if (t == "EffectMesh")
+                {
                     mb.gameObject.SetActive(on);
+                }
+                else if (t == "MRUKAnchor")
+                {
+                    foreach (var r in mb.GetComponentsInChildren<Renderer>(true)) r.enabled = on;
+                    foreach (var c in mb.GetComponentsInChildren<Collider>(true)) c.enabled = on;
+                }
+            }
         }
 
         public void SetActiveTool(int index)

@@ -18,5 +18,9 @@
 | 11 | [Манипуляции по типам объектов (роадмап редактирования)](design/11-object-operations.md) |
 | 12 | [Свод правил к коду (аудит)](design/12-coding-rules.md) |
 | 13 | [План Фазы B: WallGraph и правка стен](design/13-phase-b-wallgraph.md) |
+| 14 | [Модульность инструментов (реестр, схема настроек)](design/14-modularity.md) |
+| 15 | [Blueprint: чертёж на полу](design/15-blueprint.md) |
+| 16 | [UX v2 (ревью 3 экспертов)](design/16-ux-v2.md) |
+| 17 | [Пол как замкнутый контур (Фаза C)](design/17-floor-outline.md) |
 
 Индекс и порядок реализации — [`docs/design/README.md`](design/README.md).

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using RoomPlanner.Core;
@@ -33,6 +34,10 @@ namespace RoomPlanner.Floors
         private string _planStatus = "no file";
         private SettingsSchema _settings;
 
+        // File picking (design/15 BP6): images discovered on device, cycled in the inspector.
+        private readonly List<string> _files = new();
+        private int _fileIndex = -1;
+
         // Two-point calibration (design/15 BP5): two pairs «point on the projected plan →
         // where it really is» solve scale+rotation+offset in one step.
         private int _calibStep = -1;   // -1 idle; 0..3 = fromA, toA, fromB, toB
@@ -62,8 +67,62 @@ namespace RoomPlanner.Floors
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg + 5f, 360f); Refresh(); })
                 .Cycle("calib", "Calibrate", CalibrationLabel,
                     () => { if (_calibStep < 0) BeginCalibration(); else CancelCalibration(); })
-                .Cycle("reload", "Plan file", () => _planStatus, ReloadPlan);
+                .Cycle("file", "Plan file", SelectedFileLabel, NextFile)
+                .Cycle("load", "Load", () => _planStatus, ReloadPlan);
             return _settings;
+        }
+
+        // ---- file picking ----
+
+        /// <summary>Candidate folders: the app's own dir plus the device's common image drops
+        /// (a plan downloaded in the headset browser lands in Download).</summary>
+        private IEnumerable<string> CandidateDirs()
+        {
+            yield return Application.persistentDataPath;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            yield return "/sdcard/Download";
+            yield return "/sdcard/Pictures";
+#endif
+        }
+
+        public IReadOnlyList<string> Files => _files;
+        public string SelectedFile =>
+            _fileIndex >= 0 && _fileIndex < _files.Count ? _files[_fileIndex] : null;
+
+        private string SelectedFileLabel()
+        {
+            var f = SelectedFile;
+            return f != null ? Path.GetFileName(f) : "no files";
+        }
+
+        /// <summary>Rescan and advance to the next found image (inspector "Plan file" row).</summary>
+        public void NextFile()
+        {
+            string keep = SelectedFile;
+            RefreshFileList();
+            if (_files.Count == 0) { _fileIndex = -1; return; }
+            int cur = keep != null ? _files.IndexOf(keep) : -1;
+            _fileIndex = (cur + 1) % _files.Count;
+        }
+
+        public void RefreshFileList()
+        {
+            _files.Clear();
+            _files.AddRange(PlanFileLocator.FindImages(CandidateDirs()));
+            if (_fileIndex >= _files.Count) _fileIndex = _files.Count - 1;
+        }
+
+        private static void RequestImagePermission()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            int sdk;
+            using (var version = new AndroidJavaClass("android.os.Build$VERSION"))
+                sdk = version.GetStatic<int>("SDK_INT");
+            string perm = sdk >= 33 ? "android.permission.READ_MEDIA_IMAGES"
+                                    : "android.permission.READ_EXTERNAL_STORAGE";
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(perm))
+                UnityEngine.Android.Permission.RequestUserPermission(perm);
+#endif
         }
 
         // ---- two-point calibration ----
@@ -111,6 +170,14 @@ namespace RoomPlanner.Floors
 
         public void OnActivate()
         {
+            RequestImagePermission();
+            RefreshFileList();
+            // prefer the app-folder plan.png if present, else the newest found image
+            if (_fileIndex < 0 && _files.Count > 0)
+            {
+                int legacy = _files.FindIndex(f => Path.GetFileName(f) == PlanFile);
+                _fileIndex = legacy >= 0 ? legacy : 0;
+            }
             if (_planTex == null) ReloadPlan();
         }
 
@@ -179,7 +246,8 @@ namespace RoomPlanner.Floors
         private void ReloadPlan()
         {
             if (planMaterial == null) return;
-            string path = Path.Combine(Application.persistentDataPath, PlanFile);
+            // selected file first; legacy fallback — plan.png in the app folder
+            string path = SelectedFile ?? Path.Combine(Application.persistentDataPath, PlanFile);
             if (!File.Exists(path))
             {
                 _planStatus = "no file";
