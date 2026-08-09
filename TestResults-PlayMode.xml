@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="13" result="Passed" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0,3431762">
+  <test-suite type="TestSuite" id="1023" name="MRRoomPlanner" fullname="MRRoomPlanner" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.343176" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="PlayMode" />
+    </properties>
+    <test-suite type="Assembly" id="1016" name="RoomPlanner.Tests.Play.dll" fullname="D:/Dev/MRRoomPlanner/Library/ScriptAssemblies/RoomPlanner.Tests.Play.dll" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.335877" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="5932" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="PlayMode" />
+        <property name="EditorOnly" value="False" />
+      </properties>
+      <test-suite type="TestSuite" id="1017" name="RoomPlanner" fullname="RoomPlanner" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.334995" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1018" name="Tests" fullname="RoomPlanner.Tests" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.334574" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1019" name="Play" fullname="RoomPlanner.Tests.Play" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.334346" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestFixture" id="1001" name="GeometryPickingPlayTests" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.234495" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1007" name="DeleteCommand_OnWall_RemovesFromPicking_AndUndoRestores" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.DeleteCommand_OnWall_RemovesFromPicking_AndUndoRestores" methodname="DeleteCommand_OnWall_RemovesFromPicking_AndUndoRestores" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="1318261839" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.068525" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.DeleteCommand_OnWall_RemovesFromPicking_AndUndoRestores
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.DeleteCommand_OnWall_RemovesFromPicking_AndUndoRestores, ResultState: Passed, Duration: 0,069s
+]]></output>
+              </test-case>
+              <test-case id="1006" name="MoveCommand_OnWall_MovesCollider_AndUndoRestores" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.MoveCommand_OnWall_MovesCollider_AndUndoRestores" methodname="MoveCommand_OnWall_MovesCollider_AndUndoRestores" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="818155629" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.048020" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.MoveCommand_OnWall_MovesCollider_AndUndoRestores
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.MoveCommand_OnWall_MovesCollider_AndUndoRestores, ResultState: Passed, Duration: 0,048s
+]]></output>
+              </test-case>
+              <test-case id="1003" name="TryPick_HitsRealFloorFromAbove" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealFloorFromAbove" methodname="TryPick_HitsRealFloorFromAbove" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="52317660" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.019411" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealFloorFromAbove
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealFloorFromAbove, ResultState: Passed, Duration: 0,019s
+]]></output>
+              </test-case>
+              <test-case id="1002" name="TryPick_HitsRealWallCollider" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealWallCollider" methodname="TryPick_HitsRealWallCollider" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="1733288995" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.016370" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealWallCollider
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_HitsRealWallCollider, ResultState: Passed, Duration: 0,016s
+]]></output>
+              </test-case>
+              <test-case id="1004" name="TryPick_PicksNearerRealWall" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_PicksNearerRealWall" methodname="TryPick_PicksNearerRealWall" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="1778698174" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.018019" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_PicksNearerRealWall
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.TryPick_PicksNearerRealWall, ResultState: Passed, Duration: 0,018s
+]]></output>
+              </test-case>
+              <test-case id="1005" name="WallCollider_FollowsMoveBy" fullname="RoomPlanner.Tests.Play.GeometryPickingPlayTests.WallCollider_FollowsMoveBy" methodname="WallCollider_FollowsMoveBy" classname="RoomPlanner.Tests.Play.GeometryPickingPlayTests" runstate="Runnable" seed="388722016" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.038061" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.GeometryPickingPlayTests.WallCollider_FollowsMoveBy
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.GeometryPickingPlayTests.WallCollider_FollowsMoveBy, ResultState: Passed, Duration: 0,038s
+]]></output>
+              </test-case>
+            </test-suite>
+            <test-suite type="TestFixture" id="1008" name="SelectionModelPlayTests" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.098395" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1014" name="DeleteCommand_Execute_Hides_Undo_Restores" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.DeleteCommand_Execute_Hides_Undo_Restores" methodname="DeleteCommand_Execute_Hides_Undo_Restores" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="1903187948" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.003625" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.DeleteCommand_Execute_Hides_Undo_Restores
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.DeleteCommand_Execute_Hides_Undo_Restores, ResultState: Passed, Duration: 0,004s
+]]></output>
+              </test-case>
+              <test-case id="1013" name="MoveCommand_Execute_MovesTarget_Undo_Reverts" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.MoveCommand_Execute_MovesTarget_Undo_Reverts" methodname="MoveCommand_Execute_MovesTarget_Undo_Reverts" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="1886199569" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.004102" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.MoveCommand_Execute_MovesTarget_Undo_Reverts
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.MoveCommand_Execute_MovesTarget_Undo_Reverts, ResultState: Passed, Duration: 0,004s
+]]></output>
+              </test-case>
+              <test-case id="1015" name="Register_AssignsUniqueIds_AndTracksItems" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.Register_AssignsUniqueIds_AndTracksItems" methodname="Register_AssignsUniqueIds_AndTracksItems" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="429079206" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.003017" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.Register_AssignsUniqueIds_AndTracksItems
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.Register_AssignsUniqueIds_AndTracksItems, ResultState: Passed, Duration: 0,003s
+]]></output>
+              </test-case>
+              <test-case id="1011" name="TryPick_IgnoresColliderWithoutSelectable" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_IgnoresColliderWithoutSelectable" methodname="TryPick_IgnoresColliderWithoutSelectable" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="206553551" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.017695" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_IgnoresColliderWithoutSelectable
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_IgnoresColliderWithoutSelectable, ResultState: Passed, Duration: 0,018s
+]]></output>
+              </test-case>
+              <test-case id="1009" name="TryPick_PicksNearestSelectable" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_PicksNearestSelectable" methodname="TryPick_PicksNearestSelectable" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="1568407489" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.018131" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_PicksNearestSelectable
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_PicksNearestSelectable, ResultState: Passed, Duration: 0,018s
+]]></output>
+              </test-case>
+              <test-case id="1012" name="TryPick_ReturnsFalse_WhenNothingHit" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_ReturnsFalse_WhenNothingHit" methodname="TryPick_ReturnsFalse_WhenNothingHit" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="153721769" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.017385" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_ReturnsFalse_WhenNothingHit
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_ReturnsFalse_WhenNothingHit, ResultState: Passed, Duration: 0,017s
+]]></output>
+              </test-case>
+              <test-case id="1010" name="TryPick_SkipsHiddenObject" fullname="RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_SkipsHiddenObject" methodname="TryPick_SkipsHiddenObject" classname="RoomPlanner.Tests.Play.SelectionModelPlayTests" runstate="Runnable" seed="1435162578" result="Passed" start-time="2026-08-09 13:45:19Z" end-time="2026-08-09 13:45:19Z" duration="0.017862" asserts="0">
+                <properties>
+                  <property name="_JOINTYPE" value="UnityCombinatorial" />
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[[TestRunnerTools] Test Started: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_SkipsHiddenObject
+[TestRunnerTools] Test Finished: RoomPlanner.Tests.Play.SelectionModelPlayTests.TryPick_SkipsHiddenObject, ResultState: Passed, Duration: 0,018s
+Saving results to: C:/Users/butsc/AppData/LocalLow/DefaultCompany/MRRoomPlanner\TestResults.xml
+]]></output>
+              </test-case>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

@@ -1,0 +1,724 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.0/staging' branch; Version is '6000.0.81f1 (6238fec1e98f) revision 6437118'; Using compiler version '193933523'; Build Type 'Release'
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-butsc" at "2026-08-09T13:47:13.5142665Z"
+OS: 'Windows 11  (10.0.26200) Professional' Language: 'en' Physical Memory: 31864 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+System  architecture: x64
+Process architecture: x64
+Date: 2026-08-09T13:47:13Z
+
+COMMAND LINE ARGUMENTS:
+D:\Unity\Editors\6000.0.81f1\Editor\Unity.exe
+-batchmode
+-quit
+-projectPath
+D:\Dev\MRRoomPlanner
+-executeMethod
+RoomPlanner.EditorTools.CiTools.SetupRig
+-logFile
+D:\Dev\MRRoomPlanner\ci-SetupRig.log
+Successfully changed project path to: D:\Dev\MRRoomPlanner
+D:/Dev/MRRoomPlanner
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gfx=262144"
+Player connection [18692]  Target information:
+
+Player connection [18692]  * "[IP] 172.31.48.1 [Port] 55504 [Flags] 2 [Guid] 120310400 [EditorId] 120310400 [Version] 1048832 [Id] WindowsEditor(7,butschster) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor" 
+
+Player connection [18692]  * "[IP] 172.21.64.1 [Port] 55504 [Flags] 2 [Guid] 120310400 [EditorId] 120310400 [Version] 1048832 [Id] WindowsEditor(7,butschster) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor" 
+
+Player connection [18692]  * "[IP] 192.168.0.235 [Port] 55504 [Flags] 2 [Guid] 120310400 [EditorId] 120310400 [Version] 1048832 [Id] WindowsEditor(7,butschster) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor" 
+
+Player connection [18692] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [18692] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Package Manager] Connected to IPC stream "Upm-49512" after 0.4 seconds.
+Library Redirect Path: Library/
+Unable to parse file ProjectSettings/TagManager.asset: [Parser Failure at line 68: Expect ':' between key and value within mapping]
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+[Licensing::Module] Licensing is not yet initialized.
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.17.4+4293ba1
+  Session Id:              3a45ec8be8f349349b4123445fe2f660
+  Correlation Id:          ab7a712e75c454cd5d89942fac12a5f4
+  External correlation Id: 6999917667058366964
+  Machine Id:              YQedE8a6wmlS8EFEObKR3jL67YE=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-butsc" (connect: 0.00s, validation: 0.00s, handshake: 1.22s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-butsc-notifications" at "2026-08-09T13:47:14.7395314Z"
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: 18968481792290-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.00
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Licensing Background thread has ended after 1.24s
+[Licensing::Module] Licensing is initialized (took 0.04s).
+[Licensing::Client] Successfully resolved entitlement details
+Refreshing native plugins compatible for Editor in 1.15 ms, found 0 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Initialize engine version: 6000.0.81f1 (6238fec1e98f)
+[Subsystems] Discovering subsystems at path D:/Unity/Editors/6000.0.81f1/Editor/Data/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path D:/Dev/MRRoomPlanner/Assets
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: NVIDIA GeForce RTX 4070 Laptop GPU (ID=0x2860)
+    Vendor:   NVIDIA
+    VRAM:     7948 MB
+    Driver:   32.0.15.9144
+Shader 'Meta/MRUK/Scene/HighlightsAndShadows': fallback shader 'Off' not found
+Shader 'Oculus/OVRMRCameraFrameLit': fallback shader 'Alpha-Diffuse' not found
+Initialize mono
+Mono path[0] = 'D:/Unity/Editors/6000.0.81f1/Editor/Data/Managed'
+Mono path[1] = 'D:/Unity/Editors/6000.0.81f1/Editor/Data/MonoBleedingEdge/lib/mono/unityjit-win32'
+Mono config path = 'D:/Unity/Editors/6000.0.81f1/Editor/Data/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56512
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: D:/Unity/Editors/6000.0.81f1/Editor/Data/PlaybackEngines/WindowsStandaloneSupport/UnityEditor.WindowsStandalone.Extensions.dll
+Register platform support module: D:/Unity/Editors/6000.0.81f1/Editor/Data/PlaybackEngines/AndroidPlayer/UnityEditor.Android.Extensions.dll
+Registered in 0.003151 seconds.
+- Loaded All Assemblies, in  0.394 seconds
+Native extension for Android target not found
+Android Extension - Scanning For ADB Devices 2327 ms
+Native extension for WindowsStandalone target not found
+Package Manager log level set to [2]
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  2.768 seconds
+Domain Reload Profiling: 3162ms
+	BeginReloadAssembly (157ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (0ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (1ms)
+	RebuildCommonClasses (40ms)
+	RebuildNativeTypeToScriptingClass (11ms)
+	initialDomainReloadingComplete (44ms)
+	LoadAllAssembliesAndSetupDomain (142ms)
+		LoadAssemblies (157ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (139ms)
+			TypeCache.Refresh (137ms)
+				TypeCache.ScanAssembly (125ms)
+			BuildScriptInfoCaches (0ms)
+			ResolveRequiredComponents (1ms)
+	FinalizeReload (2768ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (2728ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (2412ms)
+			SetLoadedEditorAssemblies (5ms)
+			BeforeProcessingInitializeOnLoad (71ms)
+			ProcessInitializeOnLoadAttributes (160ms)
+			ProcessInitializeOnLoadMethodAttributes (79ms)
+			AfterProcessingInitializeOnLoad (0ms)
+			EditorAssembliesLoaded (0ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (0ms)
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 67 packages:
+  Packages from [https://packages.unity.com]:
+    com.meta.xr.sdk.all@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.all@eefa31febf37)
+    com.unity.xr.openxr@1.16.1 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.openxr@ef0033a586bf)
+    com.unity.inputsystem@1.19.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.inputsystem@21a28c3a6c83)
+    com.unity.xr.core-utils@2.6.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.core-utils@a8b900321199)
+    com.unity.xr.management@4.5.4 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.management@e3a3882b360a)
+    com.unity.xr.legacyinputhelpers@2.1.12 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.legacyinputhelpers@b7579e86f3b4)
+    com.meta.xr.sdk.core@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.core@c0efcbf2ba70)
+    com.meta.xr.sdk.audio@85.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.audio@baafb66e77db)
+    com.meta.xr.sdk.voice@85.0.1 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.voice@856439ff2689)
+    com.meta.xr.sdk.haptics@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.haptics@ca7512cf6c80)
+    com.meta.xr.mrutilitykit@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.mrutilitykit@2979546e7179)
+    com.meta.xr.sdk.platform@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.platform@77232b66891b)
+    com.meta.xr.sdk.interaction@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.interaction@b67d311217e9)
+    com.meta.xr.sdk.interaction.ovr@205.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.meta.xr.sdk.interaction.ovr@84d9703a2ac2)
+    com.unity.searcher@4.9.3 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.searcher@1e17ce91558d)
+    com.unity.burst@1.8.30 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.burst@2f3d916873ea)
+    com.unity.mathematics@1.3.2 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.mathematics@8017b507cc74)
+    com.unity.collections@2.6.8 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.collections@84e8eb3fc12e)
+    com.unity.nuget.newtonsoft-json@3.2.2 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.nuget.newtonsoft-json@4dfd81071c64)
+    com.unity.ai.navigation@2.0.13 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.ai.navigation@42d896194035)
+    com.unity.xr.hands@1.7.3 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.hands@3e241be20642)
+    com.unity.nuget.mono-cecil@1.11.6 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.nuget.mono-cecil@ecb9724e46ff)
+    com.unity.test-framework.performance@3.5.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.test-framework.performance@8b56083ec0f0)
+  Built-in packages:
+    com.unity.test-framework@1.6.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.test-framework@082c24152fd4)
+    com.unity.ugui@2.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.ugui@4601c9db1b9b)
+    com.unity.render-pipelines.universal@17.0.4 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.render-pipelines.universal@960febc0b6cb)
+    com.unity.multiplayer.center@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.multiplayer.center@f3fb577b3546)
+    com.unity.modules.accessibility@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.accessibility)
+    com.unity.modules.ai@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vehicles@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.video)
+    com.unity.modules.vr@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.vr)
+    com.unity.modules.wind@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.modules.hierarchycore)
+    com.unity.render-pipelines.core@17.0.4 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.render-pipelines.core@8e828b9223c8)
+    com.unity.shadergraph@17.0.4 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.shadergraph@14250cfec0ec)
+    com.unity.render-pipelines.universal-config@17.0.3 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.render-pipelines.universal-config@dd206bf35d04)
+    com.unity.ext.nunit@2.0.5 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.ext.nunit@031a54704bff)
+    com.unity.rendering.light-transport@1.0.1 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.rendering.light-transport@9bd588f963c0)
+    com.unity.textmeshpro@5.0.0 (location: D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.textmeshpro@53f43edfd2e0)
+[Subsystems] Looking for new subsystems at path D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.openxr@ef0033a586bf
+[Subsystems] Novel subsystem found at Library/PackageCache/com.unity.xr.openxr@ef0033a586bf/Runtime/UnitySubsystemsManifest.json
+[Subsystems] Discovering subsystems at path D:/Unity/Editors/6000.0.81f1/Editor/Data/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path D:/Dev/MRRoomPlanner/Assets
+[Subsystems] Discovering subsystems at path D:\Dev\MRRoomPlanner\Library\PackageCache\com.unity.xr.openxr@ef0033a586bf
+[Subsystems] No descriptors matched for  examples in Library/PackageCache/com.unity.xr.openxr@ef0033a586bf/Runtime/UnitySubsystemsManifest.json.
+[Subsystems] 1 'inputs' descriptors matched in Library/PackageCache/com.unity.xr.openxr@ef0033a586bf/Runtime/UnitySubsystemsManifest.json
+[Subsystems] 1 'displays' descriptors matched in Library/PackageCache/com.unity.xr.openxr@ef0033a586bf/Runtime/UnitySubsystemsManifest.json
+[Subsystems] No descriptors matched for  meshings in Library/PackageCache/com.unity.xr.openxr@ef0033a586bf/Runtime/UnitySubsystemsManifest.json.
+[Package Manager] Done registering packages in 0.09 seconds
+[ScriptCompilation] Requested script compilation because: Assetdatabase observed changes in script compilation related files
+Starting: D:\Unity\Editors\6000.0.81f1\Editor\Data\bee_backend.exe --ipc --defer-dag-verification --dagfile="Library/Bee/1300b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: D:/Dev/MRRoomPlanner
+DisplayProgressbar: Compiling Scripts
+ExitCode: 4 Duration: 0s364ms
+Rebuilding DAG because FileSignature timestamp changed: Library/Bee/1300b0aE-inputdata.json
+[1455/1981  0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+*** Tundra requires additional run (0.32 seconds), 1 items updated, 1454 evaluated
+Starting: D:\Unity\Editors\6000.0.81f1\Editor\Data\Tools\netcorerun\netcorerun.exe "D:\Unity\Editors\6000.0.81f1\Editor\Data\Tools\BuildPipeline\ScriptCompilationBuildProgram.exe" "Library/Bee/1300b0aE.dag.json" "Library/Bee/1300b0aE-inputdata.json" "Library\Bee\buildprogram0.traceevents"
+WorkingDir: D:/Dev/MRRoomPlanner
+ExitCode: 0 Duration: 1s518ms
+Starting: D:\Unity\Editors\6000.0.81f1\Editor\Data\bee_backend.exe --ipc --defer-dag-verification --dagfile="Library/Bee/1300b0aE.dag" --continue-on-failure --dagfilejson="Library\Bee\1300b0aE.dag.json" --profile="Library/Bee/backend2.traceevents" ScriptAssemblies
+WorkingDir: D:/Dev/MRRoomPlanner
+ExitCode: 0 Duration: 3s304ms
+Finished compiling graph: 1985 nodes, 47256 flattened edges (34026 ToBuild, 358 ToUse), maximum node priority 3297
+[ 954/1981  0s] WriteText Library/Bee/artifacts/1300b0aE.dag/Assembly-CSharp-Editor.rsp
+[1454/1981  0s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[1977/1981  2s] Csc Library/Bee/artifacts/1300b0aE.dag/Assembly-CSharp-Editor.dll (+2 others)
+Assets\RoomPlanner\Scripts\Editor\BuildTool.cs(30,22): warning CS0618: 'PlayerSettings.GetApplicationIdentifier(BuildTargetGroup)' is obsolete: 'Use GetApplicationIdentifier(NamedBuildTarget buildTarget) instead'
+
+Assets\RoomPlanner\Scripts\Editor\BuildTool.cs(32,17): warning CS0618: 'PlayerSettings.SetApplicationIdentifier(BuildTargetGroup, string)' is obsolete: 'Use SetApplicationIdentifier(NamedBuildTarget buildTarget, string identifier) instead'
+
+Assets\RoomPlanner\Scripts\Editor\MeasureSetup.cs(629,13): warning CS0618: 'TMP_Text.enableWordWrapping' is obsolete: 'The enabledWordWrapping property is now obsolete. Please use the textWrappingMode property instead.'
+[1978/1981  0s] ILPostProcess Library/Bee/artifacts/1300b0aE.dag/post-processed/Assembly-CSharp-Editor.dll (+pdb)
+Processing assembly Library/Bee/artifacts/1300b0aE.dag/Assembly-CSharp-Editor.dll, with 141 defines and 423 references
+
+processors: Unity.Jobs.CodeGen.JobsILPostProcessor, zzzUnity.Burst.CodeGen.BurstILPostProcessor
+
+running Unity.Jobs.CodeGen.JobsILPostProcessor
+
+running zzzUnity.Burst.CodeGen.BurstILPostProcessor
+[1979/1981  0s] CopyFiles Library/ScriptAssemblies/Assembly-CSharp-Editor.pdb
+[1980/1981  0s] CopyFiles Library/ScriptAssemblies/Assembly-CSharp-Editor.dll
+*** Tundra build success (3.26 seconds), 6 items updated, 1981 evaluated
+Assets\RoomPlanner\Scripts\Editor\BuildTool.cs(30,22): warning CS0618: 'PlayerSettings.GetApplicationIdentifier(BuildTargetGroup)' is obsolete: 'Use GetApplicationIdentifier(NamedBuildTarget buildTarget) instead'
+Assets\RoomPlanner\Scripts\Editor\BuildTool.cs(32,17): warning CS0618: 'PlayerSettings.SetApplicationIdentifier(BuildTargetGroup, string)' is obsolete: 'Use SetApplicationIdentifier(NamedBuildTarget buildTarget, string identifier) instead'
+Assets\RoomPlanner\Scripts\Editor\MeasureSetup.cs(629,13): warning CS0618: 'TMP_Text.enableWordWrapping' is obsolete: 'The enabledWordWrapping property is now obsolete. Please use the textWrappingMode property instead.'
+AssetDatabase: script compilation time: 5.686352s
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  0.877 seconds
+Script 'CharacterController' has the same name as built-in Unity component.
+AddComponent and GetComponent will not work with this script.
+'Packages/com.meta.xr.sdk.core/Editor/BuildingBlocks/BlocksWindowDetailsExtension.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.meta.xr.sdk.core/Editor/RuntimeOptimizer/RuntimeOptimizer.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.meta.xr.sdk.core/Editor/BuildingBlocks/BlocksWindow.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.meta.xr.sdk.core/Editor/BuildingBlocks/BlocksWindowCollectionsPageExtension.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.meta.xr.sdk.core/Editor/RuntimeOptimizer/RuntimeOptimizerNetworking.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+'Packages/com.meta.xr.sdk.core/Editor/RuntimeOptimizer/RuntimeOptimizerStyles.cs' contains partial class of Unity.Object, exactly 1 of the partial classes needs to be in a file with the same filename. This is to know the one that can be referenced from ie. GameObjects
+Refreshing native plugins compatible for Editor in 13.17 ms, found 17 plugins.
+Native extension for Android target not found
+Native extension for WindowsStandalone target not found
+Refreshing native plugins compatible for Editor in 21.61 ms, found 17 plugins.
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  4.582 seconds
+Domain Reload Profiling: 5459ms
+	BeginReloadAssembly (312ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (11ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (144ms)
+	RebuildCommonClasses (33ms)
+	RebuildNativeTypeToScriptingClass (11ms)
+	initialDomainReloadingComplete (22ms)
+	LoadAllAssembliesAndSetupDomain (498ms)
+		LoadAssemblies (358ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (260ms)
+			TypeCache.Refresh (173ms)
+				TypeCache.ScanAssembly (157ms)
+			BuildScriptInfoCaches (66ms)
+			ResolveRequiredComponents (16ms)
+	FinalizeReload (4583ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (4359ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (23ms)
+			SetLoadedEditorAssemblies (8ms)
+			BeforeProcessingInitializeOnLoad (174ms)
+			ProcessInitializeOnLoadAttributes (3725ms)
+			ProcessInitializeOnLoadMethodAttributes (426ms)
+			AfterProcessingInitializeOnLoad (2ms)
+			EditorAssembliesLoaded (1ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (17ms)
+Refreshing native plugins compatible for Editor in 20.56 ms, found 17 plugins.
+Unity memory allocator detected: MetaXRAudio native memory allocations will be tracked.
+Preloading 2 native plugins for Editor in 35.05 ms.
+Asset Pipeline Refresh (id=4a4ccb0d9cb284646a1236e922132c7e): Total: 13.486 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	Summary:
+		Imports: total=0 (actual=0, local cache=0, cache server=0)
+		Asset DB Process Time: managed=0 ms, native=5433 ms
+		Asset DB Callback time: managed=1267 ms, native=154 ms
+		Scripting: domain reloads=1, domain reload time=878 ms, compile time=5690 ms, other=62 ms
+		Project Asset Count: scripts=2494, non-scripts=3894
+		Asset File Changes: new=1, changed=1, moved=0, deleted=0
+		Scan Filter Count: 0
+	InvokeCustomDependenciesCallbacks: 0.002ms
+	InvokePackagesCallback: 94.272ms
+	ApplyChangesToAssetFolders: 0.942ms
+	Scan: 351.569ms
+	OnSourceAssetsModified: 1.150ms
+	CategorizeAssetsWithTransientArtifact: 54.951ms
+	ProcessAssetsWithTransientArtifactChanges: 113.314ms
+	CategorizeAssets: 116.108ms
+	ImportOutOfDateAssets: 4630.435ms (-1063.380ms without children)
+		CompileScripts: 5689.911ms
+		ReloadNativeAssets: 0.039ms
+		UnloadImportedAssets: 1.409ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 1.698ms
+		InitializingProgressBar: 0.001ms
+		PostProcessAllAssetNotificationsAddChangedAssets: 0.001ms
+		OnDemandSchedulerStart: 0.756ms
+	PostProcessAllAssets: 1268.290ms
+	Hotreload: 60.911ms
+	GatherAllCurrentPrimaryArtifactRevisions: 0.003ms
+	UnloadStreamsBegin: 4.716ms
+	PersistCurrentRevisions: 0.298ms
+	UnloadStreamsEnd: 0.003ms
+	GenerateScriptTypeHashes: 19.207ms
+	Untracked: 6788.777ms
+
+Application.AssetDatabase Initial Refresh End
+Scanning for USB devices : 2.122ms
+Initializing Unity extensions:
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-MRRoomPlanner
+[HRT] RulesProvider: loaded 4 remote rule(s) (schema v1).
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+Meta.HandReadinessTool.Editor.HandReadinessRulesProvider:EmitSuccess (int,int) (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessRulesProvider.cs:175)
+Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/<FetchAndSwap>d__11:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessRulesProvider.cs:125)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/RulesPayload>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/RulesPayload>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/RulesPayload>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/RulesPayload>)
+Meta.XR.Editor.UserInterface.RemoteJsonContent`1/<Create>d__1<Meta.HandReadinessTool.Editor.HandReadinessRulesProvider/RulesPayload>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/UserInterface/RemoteJsonContent.cs:56)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader/<Fetch>d__3:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:374)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+Meta.XR.Editor.RemoteContent.RemoteContentDownloader`1/<Fetch>d__31`1<Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader, string>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:309)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<string>:TrySetResult (string)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<string>:SetResult (string)
+Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader/<ReadFromCache>d__5`1<string>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:401)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation/<>c:<.cctor>b__7_0 (object)
+UnityEngine.UnitySynchronizationContext/WorkRequest:Invoke ()
+UnityEngine.UnitySynchronizationContext:Exec ()
+UnityEngine.UnitySynchronizationContext:ExecuteTasks ()
+
+(Filename: ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessRulesProvider.cs Line: 175)
+
+[HRT] PromptProvider: loaded remote prompt (systemPrompt=4925c, references=2, schema v1).
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+Meta.HandReadinessTool.Editor.HandReadinessPromptProvider:EmitSuccess (int,int,int) (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessPromptProvider.cs:159)
+Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/<FetchAndSwap>d__11:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessPromptProvider.cs:122)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/PromptPayload>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/PromptPayload>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/PromptPayload>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/PromptPayload>)
+Meta.XR.Editor.UserInterface.RemoteJsonContent`1/<Create>d__1<Meta.HandReadinessTool.Editor.HandReadinessPromptProvider/PromptPayload>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/UserInterface/RemoteJsonContent.cs:56)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader/<Fetch>d__3:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:374)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:TrySetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<Meta.XR.Editor.RemoteContent.DownloadResult`1<string>>:SetResult (Meta.XR.Editor.RemoteContent.DownloadResult`1<string>)
+Meta.XR.Editor.RemoteContent.RemoteContentDownloader`1/<Fetch>d__31`1<Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader, string>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:309)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.AwaitTaskContinuation:InvokeAction (object)
+System.Threading.Tasks.AwaitTaskContinuation:RunCallback (System.Threading.ContextCallback,object,System.Threading.Tasks.Task&)
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation:Run (System.Threading.Tasks.Task,bool)
+System.Threading.Tasks.Task:FinishContinuations ()
+System.Threading.Tasks.Task:FinishStageThree ()
+System.Threading.Tasks.Task`1<string>:TrySetResult (string)
+System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1<string>:SetResult (string)
+Meta.XR.Editor.RemoteContent.RemoteJsonContentDownloader/<ReadFromCache>d__5`1<string>:MoveNext () (at ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/Utils/RemoteContent/RemoteContentDownloader.cs:401)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:InvokeMoveNext (object)
+System.Threading.ExecutionContext:RunInternal (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Threading.ExecutionContext:Run (System.Threading.ExecutionContext,System.Threading.ContextCallback,object,bool)
+System.Runtime.CompilerServices.AsyncMethodBuilderCore/MoveNextRunner:Run ()
+System.Threading.Tasks.SynchronizationContextAwaitTaskContinuation/<>c:<.cctor>b__7_0 (object)
+UnityEngine.UnitySynchronizationContext/WorkRequest:Invoke ()
+UnityEngine.UnitySynchronizationContext:Exec ()
+UnityEngine.UnitySynchronizationContext:ExecuteTasks ()
+
+(Filename: ./Library/PackageCache/com.meta.xr.sdk.core@c0efcbf2ba70/Editor/HandReadinessTool/HandReadinessPromptProvider.cs Line: 159)
+
+Unloading 180 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 7212 unused Assets / (7.2 MB). Loaded Objects now: 10648.
+Memory consumption went from 263.5 MB to 256.3 MB.
+Total: 35.543900 ms (FindLiveObjects: 1.509300 ms CreateObjectMapping: 1.478100 ms MarkObjects: 25.880700 ms  DeleteObjects: 6.673200 ms)
+
+Opening scene 'Assets/Measure.unity'
+Unloading 8 Unused Serialized files (Serialized files now loaded: 0)
+Loaded scene 'Assets/Measure.unity'
+	Deserialize:            24.443 ms
+	Integration:            534.408 ms
+	Integration of assets:  2.649 ms
+	Thread Wait Time:       0.024 ms
+	Total Operation Time:   561.525 ms
+Unloading 1 unused Assets / (7.7 MB). Loaded Objects now: 11315.
+Memory consumption went from 239.1 MB to 231.4 MB.
+Total: 18.550300 ms (FindLiveObjects: 1.181700 ms CreateObjectMapping: 0.807400 ms MarkObjects: 16.524200 ms  DeleteObjects: 0.033600 ms)
+
+[CI] opened scene Assets/Measure.unity
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+RoomPlanner.EditorTools.CiTools:SetupRig () (at Assets/RoomPlanner/Scripts/Editor/CiTools.cs:31)
+
+(Filename: Assets/RoomPlanner/Scripts/Editor/CiTools.cs Line: 31)
+
+Refreshing native plugins compatible for Editor in 18.80 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.12 ms.
+Asset Pipeline Refresh (id=95f543a88427e394a96f113f71357da3): Total: 0.138 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Line.mat using Guid(855acabbbea36b4438fedf0477fd3c16) (NativeFormatImporter) -> (artifact id: 'b811d8fd93ec304796d2ff13a90057af') in 0.0073553 seconds
+Refreshing native plugins compatible for Editor in 16.09 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=3eb43a5275ca39347bc297c7e4677725): Total: 0.083 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.34 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=fc722f6c8ae87894e802c16f14f84fa7): Total: 0.050 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Marker.mat using Guid(ea968aa689f2d024ba254921556d52c8) (NativeFormatImporter) -> (artifact id: '501707e12edab4c7dae02f0e4356a54f') in 0.0023617 seconds
+Refreshing native plugins compatible for Editor in 12.20 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.09 ms.
+Asset Pipeline Refresh (id=cd6c1cd1bcb0e834098229bc75fb943f): Total: 0.060 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 12.60 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=be4cc5178bb5ed14d88af832a835caed): Total: 0.044 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Reticle.mat using Guid(69947cf0958a8d144b700c6cd8762524) (NativeFormatImporter) -> (artifact id: 'fd79fde42114f481ae730da13d3066f8') in 0.0026373 seconds
+Refreshing native plugins compatible for Editor in 15.70 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=75307de8d3a012a4699a2f731898be7f): Total: 0.064 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 17.58 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.12 ms.
+Asset Pipeline Refresh (id=54333fb9adaa82b4ab7a0baeceebd943): Total: 0.051 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Continue.mat using Guid(8b0122b2975357c4b86014a34a4a2252) (NativeFormatImporter) -> (artifact id: 'aa13ec79d7806d2fb72dbb3348502554') in 0.0028326 seconds
+Refreshing native plugins compatible for Editor in 13.17 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=a6b4c35a2242637499b9f6d95a2bd4d1): Total: 0.070 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.49 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=552424a0d7ff41145b75a30722a69c95): Total: 0.048 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.14 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=10460a1461845c24dac98817ed901859): Total: 0.058 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.21 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=6a91ef06df637ba4496d55c922078f81): Total: 0.046 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Badge.mat using Guid(794fa00e3e06e0f478eb6d20179f0eae) (NativeFormatImporter) -> (artifact id: 'd71db4ab6a20e2c74e82b4f96c8b3b6a') in 0.0029544 seconds
+Refreshing native plugins compatible for Editor in 13.42 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=1c08c09d3693d18409ae25df8e711369): Total: 0.063 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.54 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=e8cdfa7e21875e7428223e0668a2b46c): Total: 0.048 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Prefabs/Measurement.prefab using Guid(e4e49bf3fe3b1a744a9b744eded62c7f) (PrefabImporter) -> (artifact id: '7c083a85b7db60ac1b5487b1e5e4416b') in 0.0093011 seconds
+Refreshing native plugins compatible for Editor in 15.02 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=438849797ef8e804ebb773d0ab44dd70): Total: 0.080 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Measure_Line.mat using Guid(855acabbbea36b4438fedf0477fd3c16) (NativeFormatImporter) -> (artifact id: '42d75c6c224128c87986a77a148d6dae') in 0.0026913 seconds
+Start importing Assets/RoomPlanner/Materials/Measure_Reticle.mat using Guid(69947cf0958a8d144b700c6cd8762524) (NativeFormatImporter) -> (artifact id: 'd202c597007e5c3dad838b8dafa18559') in 0.002041 seconds
+Start importing Assets/RoomPlanner/Materials/Measure_Badge.mat using Guid(794fa00e3e06e0f478eb6d20179f0eae) (NativeFormatImporter) -> (artifact id: 'fa500e2f23a1223e5e44b1a965bfd50d') in 0.0015859 seconds
+Start importing Assets/RoomPlanner/Materials/Measure_Marker.mat using Guid(ea968aa689f2d024ba254921556d52c8) (NativeFormatImporter) -> (artifact id: '7c3bfc6c0bee67cd415bca1ca422384c') in 0.0016568 seconds
+Start importing Assets/RoomPlanner/Materials/Measure_Continue.mat using Guid(8b0122b2975357c4b86014a34a4a2252) (NativeFormatImporter) -> (artifact id: '77d5fa763e971313c225060f5191413f') in 0.0015051 seconds
+Refreshing native plugins compatible for Editor in 13.27 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=8a0c6b676d3d25e44b5362695715f197): Total: 0.064 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 14.06 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=08ccd689a191b6e44aba3d2de2c2f883): Total: 0.049 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Prefabs/ContinueButton.prefab using Guid(3cf4c4262c5de2f4aa991864b7982c46) (PrefabImporter) -> (artifact id: '79ba9078369f98fe01f98f062abc067e') in 0.0059187 seconds
+Refreshing native plugins compatible for Editor in 13.69 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=75bfd4842212cd243baef28085098dc1): Total: 0.066 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 12.53 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.09 ms.
+Asset Pipeline Refresh (id=209f753a2f8a92d4db75fc509f977a20): Total: 0.045 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Wall_Surface.mat using Guid(cb68b685373d435499b3b56578ad01d0) (NativeFormatImporter) -> (artifact id: '2e713ec93d2d3374a021a8a84edb5386') in 0.0023744 seconds
+Refreshing native plugins compatible for Editor in 15.92 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=499fb7d123f4d08449d40df054b4da76): Total: 0.063 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 13.75 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.09 ms.
+Asset Pipeline Refresh (id=9cdb01129edde0d4aa600b46d62e41f5): Total: 0.049 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Wall_Edge.mat using Guid(f38900cb817709340a8f73c8eae71ecc) (NativeFormatImporter) -> (artifact id: '2034329d3494bef534058e27c7fba453') in 0.0029307 seconds
+Refreshing native plugins compatible for Editor in 12.76 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=4a54a4a5705f11342ac665557321b947): Total: 0.064 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 14.96 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=c2530e6cfe12e934a87ce78d4c86ae46): Total: 0.050 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Menu_Panel.mat using Guid(ad41c58480e984747834aff0f27fd8d7) (NativeFormatImporter) -> (artifact id: 'c150d91001ee1e812908f5682042e0f1') in 0.003068 seconds
+Refreshing native plugins compatible for Editor in 14.51 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=a9c6cbc2a410b3646b64c86b2522c8cd): Total: 0.065 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 12.67 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=4b15a7d829fa7144bacd086d40c0c102): Total: 0.048 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Menu_Button.mat using Guid(228172cf7f0ed5f44a77ede6c4db00c1) (NativeFormatImporter) -> (artifact id: 'f8bf66f3f6ac6bf2ed92311662512a52') in 0.0025723 seconds
+Refreshing native plugins compatible for Editor in 13.12 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=95b84da53ca804148b44a8bf314ced66): Total: 0.062 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 16.16 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.11 ms.
+Asset Pipeline Refresh (id=0a37e79c91be0b244b115f680004bd94): Total: 0.052 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Menu_Active.mat using Guid(282840584939b5a4ca1f6630899d07a4) (NativeFormatImporter) -> (artifact id: '5b3be97710c810e8d7927c7ed9aa5ad0') in 0.0027636 seconds
+Refreshing native plugins compatible for Editor in 14.08 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.16 ms.
+Asset Pipeline Refresh (id=c32a9956f41104a4bb6b8ba49df573d6): Total: 0.074 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 20.58 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.13 ms.
+Asset Pipeline Refresh (id=d1547680c6575a1489956668d491342b): Total: 0.058 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Prefabs/Wall.prefab using Guid(78f8bcca29439c44e8164a0cbad9a251) (PrefabImporter) -> (artifact id: 'a4f06710616b8aef1652da14e4161bcf') in 0.0051353 seconds
+Refreshing native plugins compatible for Editor in 14.22 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=020b779936de9e34b85f1e3b64d39d4b): Total: 0.068 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Menu_Button.mat using Guid(228172cf7f0ed5f44a77ede6c4db00c1) (NativeFormatImporter) -> (artifact id: '2c777e9fd488151d596a009ef38d3111') in 0.0024945 seconds
+Start importing Assets/RoomPlanner/Materials/Wall_Edge.mat using Guid(f38900cb817709340a8f73c8eae71ecc) (NativeFormatImporter) -> (artifact id: 'a457968c6705454cd589fb9d670bec1c') in 0.0017206 seconds
+Start importing Assets/RoomPlanner/Materials/Menu_Active.mat using Guid(282840584939b5a4ca1f6630899d07a4) (NativeFormatImporter) -> (artifact id: 'f8bdc20762284d55ccd6a210f51ccced') in 0.0013167 seconds
+Start importing Assets/RoomPlanner/Materials/Wall_Surface.mat using Guid(cb68b685373d435499b3b56578ad01d0) (NativeFormatImporter) -> (artifact id: '6ca705bcb78920d4cfbd209485c67a48') in 0.0015244 seconds
+Start importing Assets/RoomPlanner/Materials/Menu_Panel.mat using Guid(ad41c58480e984747834aff0f27fd8d7) (NativeFormatImporter) -> (artifact id: '2334c5abf448e0a528eae3f5447f2422') in 0.0016837 seconds
+Refreshing native plugins compatible for Editor in 14.23 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=7ad06db0640cf50429f90465ae071aad): Total: 0.064 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 12.88 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=3c2f1d44ddc5e024388998b531d16b84): Total: 0.047 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Floor_Top.mat using Guid(9898ba0fb1b68ba4cbc66628f7fa35d2) (NativeFormatImporter) -> (artifact id: 'ffc3fa9d1fd1823c841453cd18a4e501') in 0.0026412 seconds
+Refreshing native plugins compatible for Editor in 13.80 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=e5838afe0a35203449bd057088ea96ab): Total: 0.062 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Refreshing native plugins compatible for Editor in 18.60 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.13 ms.
+Asset Pipeline Refresh (id=2839806d715c31642b668bc58d489832): Total: 0.051 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Prefabs/Floor.prefab using Guid(a799e855b61c46744b9dc7801512cd85) (PrefabImporter) -> (artifact id: 'bbad0445c4a9d6e4462b318dc83b52ff') in 0.0074613 seconds
+Refreshing native plugins compatible for Editor in 14.61 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=b6a2a72e7d43fe54caf21f9f51e9d57a): Total: 0.089 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Start importing Assets/RoomPlanner/Materials/Floor_Top.mat using Guid(9898ba0fb1b68ba4cbc66628f7fa35d2) (NativeFormatImporter) -> (artifact id: '80923ab84e333b5b3c68617e611e5d6b') in 0.0026278 seconds
+Refreshing native plugins compatible for Editor in 13.92 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.10 ms.
+Asset Pipeline Refresh (id=6aae9a6f4cdbc104897465c8307a2efe): Total: 0.050 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+Cancelling DisplayDialog: Tools Rig Rebuilt (URP): SELECT + measure + walls + floor. Phase A (editing) added:
+  • Left-hand PALETTE = tool type (Sel/Meas/Wall/Floor) + snap toggles (Cor/Edg/Grd/Ang/Scan).
+  • SELECT tool (default): point at a wall/floor/measurement + trigger to select; hold trigger
+    to drag it on the ground plane; B = delete; X = undo, Y = redo. Inspector shows the picked object.
+  • Floating INSPECTOR holds Wall/Floor settings; grip its title bar to move it.
+Floor tool: 2 corners → slab at Level (Thk). Plan image = plan.png in app folder.
+Measure: trigger = points; '+' at any point = chain; point+trigger = drag; point+B = delete.
+Walls: trigger = centerline points (chain), B = finish. Thickness grows outward.
+
+Next: Ctrl+S → Ctrl+B.
+This should not be called in batch mode.
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEditor.EditorUtility:DisplayDialogImpl (string,string,string,string)
+UnityEditor.EditorUtility:DisplayDialog (string,string,string,string)
+UnityEditor.EditorUtility:DisplayDialog (string,string,string)
+RoomPlanner.EditorTools.MeasureSetup:SetupMeasureRig () (at Assets/RoomPlanner/Scripts/Editor/MeasureSetup.cs:177)
+RoomPlanner.EditorTools.CiTools:SetupRig () (at Assets/RoomPlanner/Scripts/Editor/CiTools.cs:33)
+
+[Assets/RoomPlanner/Scripts/Editor/MeasureSetup.cs line 177]
+
+Start importing Assets/Measure.unity using Guid(54ff5c783d1229e4e9cf5e7e747428cb) (DefaultImporter) -> (artifact id: 'a49467da0ca80cae191241ed863fb77a') in 0.0017245 seconds
+Refreshing native plugins compatible for Editor in 13.39 ms, found 17 plugins.
+Preloading 2 native plugins for Editor in 0.14 ms.
+Asset Pipeline Refresh (id=e1a66c70e79ba604e8cde7cc7bb8bf37): Total: 0.050 seconds - Initiated by StopAssetImportingV2(NoUpdateAssetOptions)
+[CI] SetupRig done, scene saved=True
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+RoomPlanner.EditorTools.CiTools:SetupRig () (at Assets/RoomPlanner/Scripts/Editor/CiTools.cs:38)
+
+(Filename: Assets/RoomPlanner/Scripts/Editor/CiTools.cs Line: 38)
+
+Batchmode quit successfully invoked - shutting down!
+Killing ADB server in 0,0801619 seconds.
+[Physics::Module] Cleanup current backned.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+[Licensing::IpcConnector] LicenseClient-butsc-notifications channel disconnected successfully.
+[Licensing::IpcConnector] LicenseClient-butsc channel disconnected successfully.
+AcceleratorClientConnectionCallback - disconnected - :0
+Cleanup mono
+Exiting batchmode successfully now!
+Exiting without the bug reporter. Application will terminate with return code 0
