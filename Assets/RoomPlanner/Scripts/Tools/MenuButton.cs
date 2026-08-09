@@ -35,6 +35,9 @@ namespace RoomPlanner.Tools
         /// <summary>Runtime-bound handler (schema rows); takes precedence over Action.</summary>
         public System.Action OnClick;
 
+        /// <summary>Holding the trigger auto-repeats OnClick (stepper −/+ rows; UX v2 P0.2).</summary>
+        public bool Repeatable;
+
         private Vector3 _baseScale;
         private bool _hovered;
 

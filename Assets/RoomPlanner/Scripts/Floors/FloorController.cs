@@ -91,7 +91,9 @@ namespace RoomPlanner.Floors
             if (input.ClearPressed())
             {
                 if (_cornerA.HasValue) _cornerA = null;   // cancel current rectangle
-                else DeleteLast();                        // else remove last slab
+                // No blind LIFO delete (UX v2 P0.3): deleting a slab is the Select tool's job;
+                // B on empty is the Esc gesture.
+                else if (manager != null) manager.ActivateTool("select");
             }
         }
 
@@ -120,29 +122,6 @@ namespace RoomPlanner.Floors
             _planScaleApplied = s; _planRotApplied = r; _planOffXApplied = ox; _planOffZApplied = oz;
             foreach (var f in _floors)
                 if (f != null) f.Build(f.CornerA, f.CornerB, f.Level, Thickness(), s, r, ox, oz);
-        }
-
-        private void DeleteLast()
-        {
-            // Delete the last VISIBLE slab, routed through the command stack (undoable). A slab
-            // hidden by a DeleteCommand is already "deleted" to the user — skip it, don't
-            // destroy it out from under its undo entry.
-            for (int i = _floors.Count - 1; i >= 0; i--)
-            {
-                var f = _floors[i];
-                if (f == null || !f.gameObject.activeSelf) continue;
-                var sel = f.GetComponent<Selectable>();
-                if (sceneModel != null && sel != null)
-                {
-                    sceneModel.History.Execute(new DeleteCommand(sel));
-                }
-                else
-                {
-                    _floors.RemoveAt(i);
-                    Destroy(f.gameObject);
-                }
-                return;
-            }
         }
 
         private void DrawRect(Vector3 a, Vector3 b, float level)

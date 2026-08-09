@@ -245,7 +245,7 @@ namespace RoomPlanner.Measure
             if (hover != _hoverTarget)
             {
                 _hoverTarget = hover;
-                if (hover != null && input != null) input.Pulse();
+                if (hover != null && input != null) input.Pulse(0.2f, 0.01f);   // hover tick
             }
             if (_hoverBtn != btn)
             {
@@ -333,13 +333,9 @@ namespace RoomPlanner.Measure
                 _pendingStart = null;
                 return;
             }
-            // Delete the last VISIBLE measurement — hidden ones are already "deleted" to the user.
-            for (int i = _measurements.Count - 1; i >= 0; i--)
-            {
-                if (!IsLive(_measurements[i])) continue;
-                DeleteMeasurement(_measurements[i]);
-                return;
-            }
+            // No blind LIFO deletes (UX v2 P0.3): destructive B needs a hovered target —
+            // otherwise B on empty space is the Esc gesture, back to the Select tool.
+            if (manager != null) manager.ActivateTool("select");
         }
 
         /// <summary>Схлопывание совпавших точек: маркер рисуется только у первого владельца.</summary>

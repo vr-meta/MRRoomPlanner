@@ -19,6 +19,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private GameObject panelRoot;      // toggled visible/hidden
         [SerializeField] private Transform rowsRoot;        // parent for generated rows
         [SerializeField] private GameObject selectionGroup; // shown when the Select tool has a selection
+        [SerializeField] private Transform background;      // bg quad, auto-sized to content height
         [SerializeField] private Material buttonMaterial;   // background for generated buttons
 
         [Header("Selection labels")]
@@ -34,6 +35,7 @@ namespace RoomPlanner.Tools
         private readonly List<(SettingField field, TMP_Text valueLabel)> _rows = new();
 
         private Transform _cam;
+        private bool _everPlaced;   // grip-parked position is sacred — never auto-recenter it
 
         public bool IsShown => panelRoot != null && panelRoot.activeSelf;
         public Transform Panel => panelRoot != null ? panelRoot.transform : transform;
@@ -45,12 +47,50 @@ namespace RoomPlanner.Tools
             bool showSettings = schema != null && schema.Fields.Count > 0;
             bool show = showSettings || showSelection;
 
-            if (show && !panelRoot.activeSelf) PlaceInFront();
+            // Re-place ONLY when the parked position is useless (never shown yet, behind the
+            // user, or far away) — a grip-parked panel must survive tool switches (UX v2 P0.4).
+            if (show && !panelRoot.activeSelf && NeedsPlacement()) PlaceInFront();
             panelRoot.SetActive(show);
             if (selectionGroup != null) selectionGroup.SetActive(showSelection);
-            if (rowsRoot != null) rowsRoot.gameObject.SetActive(showSettings);
+            if (rowsRoot != null)
+            {
+                rowsRoot.gameObject.SetActive(showSettings);
+                // per-instance rows coexist with the selection group — shift them below it
+                rowsRoot.localPosition = new Vector3(0f, showSelection ? -0.33f : 0f, 0f);
+            }
             if (showSettings) Bind(schema);
+            FitBackground(showSelection, showSettings ? _rows.Count : 0);
             RefreshValues();
+        }
+
+        /// <summary>Stretch the background to the content — an oversized empty quad both looks
+        /// broken and BLOCKS scene tools with its collider (UX v2 P0.4).</summary>
+        private void FitBackground(bool showSelection, int rows)
+        {
+            if (background == null) return;
+            const float Top = 0.22f;                      // fixed top edge (under the title bar)
+            float bottom = 0.05f;
+            if (showSelection) bottom = -0.18f;           // selection labels reach ~-0.12
+            if (rows > 0)
+            {
+                float rowsTop = showSelection ? -0.20f : RowTop;
+                bottom = Mathf.Min(bottom, rowsTop - (rows - 1) * RowStep - 0.05f);
+            }
+            float h = Mathf.Max(0.16f, Top - bottom);
+            var ls = background.localScale;
+            background.localScale = new Vector3(ls.x, h, ls.z);
+            var lp = background.localPosition;
+            background.localPosition = new Vector3(lp.x, Top - h * 0.5f, lp.z);
+        }
+
+        private bool NeedsPlacement()
+        {
+            if (!_everPlaced) return true;
+            EnsureCam();
+            if (_cam == null) return false;
+            Vector3 to = panelRoot.transform.position - _cam.position;
+            if (to.magnitude > 2.5f) return true;
+            return Vector3.Angle(_cam.forward, to) > 45f;   // parked behind the user's back
         }
 
         /// <summary>Fill the selection group labels (title + one-line description).</summary>
@@ -92,9 +132,9 @@ namespace RoomPlanner.Tools
             TMP_Text value;
             if (f.Kind == SettingKind.Stepper)
             {
-                MakeButton($"{f.Id}-", "−", new Vector3(-0.01f, y, 0f), f.Decrease);
+                MakeButton($"{f.Id}-", "−", new Vector3(-0.01f, y, 0f), f.Decrease, repeatable: true);
                 value = MakeLabel($"{f.Id}Val", "—", new Vector3(0.06f, y, 0f), new Vector2(0.09f, 0.04f));
-                MakeButton($"{f.Id}+", "+", new Vector3(0.14f, y, 0f), f.Increase);
+                MakeButton($"{f.Id}+", "+", new Vector3(0.14f, y, 0f), f.Increase, repeatable: true);
             }
             else // Cycle
             {
@@ -104,7 +144,8 @@ namespace RoomPlanner.Tools
             _rows.Add((f, value));
         }
 
-        private void MakeButton(string name, string label, Vector3 lp, System.Action onClick)
+        private void MakeButton(string name, string label, Vector3 lp, System.Action onClick,
+            bool repeatable = false)
         {
             var root = new GameObject(name) { layer = MenuLayer };
             root.transform.SetParent(rowsRoot, false);
@@ -113,6 +154,7 @@ namespace RoomPlanner.Tools
             col.size = new Vector3(BtnSize.x, BtnSize.y, 0.04f);
             var mb = root.AddComponent<MenuButton>();
             mb.OnClick = onClick;
+            mb.Repeatable = repeatable;
 
             var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
             bg.name = "Bg";
@@ -146,7 +188,8 @@ namespace RoomPlanner.Tools
             // same sizing rules as the setup-built labels: full cell width, readable floor
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             tmp.enableAutoSizing = true;
-            tmp.fontSizeMin = size.y * 0.5f;
+            // readability floor ≥ ~0.9° at 60 cm (UX v2 P1.5) — auto-sizing is only a clamp
+            tmp.fontSizeMin = size.y * 0.78f;
             tmp.fontSizeMax = size.y * 0.9f;
             return tmp;
         }
@@ -163,8 +206,10 @@ namespace RoomPlanner.Tools
         {
             EnsureCam();
             if (_cam == null) return;
+            // 0.65 m: closer causes vergence strain over an hour-long session (UX v2 P0.4)
             panelRoot.transform.position =
-                _cam.position + _cam.forward * 0.55f + _cam.right * 0.12f - _cam.up * 0.12f;
+                _cam.position + _cam.forward * 0.65f + _cam.right * 0.12f - _cam.up * 0.12f;
+            _everPlaced = true;
         }
 
         private void LateUpdate()
@@ -172,7 +217,10 @@ namespace RoomPlanner.Tools
             if (panelRoot == null || !panelRoot.activeSelf) return;
             EnsureCam();
             if (_cam == null) return;
+            // yaw-only billboard: a full LookRotation pitches the panel when parked low,
+            // making the text read at a slant
             Vector3 dir = panelRoot.transform.position - _cam.position;
+            dir.y = 0f;
             if (dir.sqrMagnitude > 0.0001f)
                 panelRoot.transform.rotation = Quaternion.LookRotation(dir);
         }

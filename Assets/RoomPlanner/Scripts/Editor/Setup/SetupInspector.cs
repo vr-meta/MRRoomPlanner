@@ -62,12 +62,15 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("panelRoot").objectReferenceValue = panelRoot;
             so.FindProperty("rowsRoot").objectReferenceValue = rowsRoot.transform;
             so.FindProperty("selectionGroup").objectReferenceValue = selectionGroup;
+            so.FindProperty("background").objectReferenceValue = bg.transform;
             so.FindProperty("selTitleLabel").objectReferenceValue = selTitleLabel;
             so.FindProperty("selInfoLabel").objectReferenceValue = selInfoLabel;
             so.FindProperty("buttonMaterial").objectReferenceValue = ctx.BtnMat;
             so.ApplyModifiedProperties();
 
-            panelRoot.transform.localScale = Vector3.one * 1.8f; // bigger, readable text
+            // 1.3 (was 1.8): with the raised font floor the panel stops dominating the FOV
+            // (UX v2 P0.4) while text stays ≥ ~0.7° at 65 cm.
+            panelRoot.transform.localScale = Vector3.one * 1.3f;
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.MenuLayer);
             panelRoot.SetActive(false); // shown when a tool with settings becomes active
             return inspector;

@@ -303,7 +303,7 @@ namespace RoomPlanner.Editing
             if (Alive(_hovered) && _hovered != _selected)
             {
                 _hovered.SetHighlight(HighlightState.Hover);
-                if (input != null) input.Pulse(0.3f, 0.04f);
+                if (input != null) input.Pulse(0.2f, 0.01f);   // hover tick
             }
         }
 

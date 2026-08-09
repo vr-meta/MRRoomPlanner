@@ -33,6 +33,13 @@ namespace RoomPlanner.Floors
         private string _planStatus = "no file";
         private SettingsSchema _settings;
 
+        // Two-point calibration (design/15 BP5): two pairs «point on the projected plan →
+        // where it really is» solve scale+rotation+offset in one step.
+        private int _calibStep = -1;   // -1 idle; 0..3 = fromA, toA, fromB, toB
+        private Vector3 _calibFromA, _calibToA, _calibFromB;
+        private Vector3 _cursor;
+        private bool _cursorValid;
+
         public string Id => "blueprint";
         public string PaletteLabel => "Plan";
 
@@ -53,8 +60,53 @@ namespace RoomPlanner.Floors
                     () => $"{planRotationDeg:0}°",
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg - 5f, 360f); Refresh(); },
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg + 5f, 360f); Refresh(); })
+                .Cycle("calib", "Calibrate", CalibrationLabel,
+                    () => { if (_calibStep < 0) BeginCalibration(); else CancelCalibration(); })
                 .Cycle("reload", "Plan file", () => _planStatus, ReloadPlan);
             return _settings;
+        }
+
+        // ---- two-point calibration ----
+
+        public int CalibrationStep => _calibStep;
+
+        public void BeginCalibration() => _calibStep = 0;
+
+        public void CancelCalibration() => _calibStep = -1;
+
+        private string CalibrationLabel() => _calibStep switch
+        {
+            0 => "A: on plan",
+            1 => "A: in room",
+            2 => "B: on plan",
+            3 => "B: in room",
+            _ => "start",
+        };
+
+        /// <summary>Feed the next calibration point (trigger while calibrating); on the 4th
+        /// point the placement snaps so both pairs coincide. Public for PlayMode tests.</summary>
+        public void CalibratePoint(Vector3 p)
+        {
+            switch (_calibStep)
+            {
+                case 0: _calibFromA = p; _calibStep = 1; break;
+                case 1: _calibToA = p; _calibStep = 2; break;
+                case 2: _calibFromB = p; _calibStep = 3; break;
+                case 3:
+                    var current = new BlueprintPlacement
+                    {
+                        Scale = planScale, RotationDeg = planRotationDeg,
+                        OriginX = planOffsetX, OriginZ = planOffsetZ,
+                    };
+                    var solved = BlueprintMath.FromPointPairs(_calibFromA, _calibToA, _calibFromB, p, current);
+                    planScale = solved.Scale;
+                    planRotationDeg = Mathf.Repeat(solved.RotationDeg, 360f);
+                    planOffsetX = solved.OriginX;
+                    planOffsetZ = solved.OriginZ;
+                    _calibStep = -1;
+                    Refresh();
+                    break;
+            }
         }
 
         public void OnActivate()
@@ -64,6 +116,7 @@ namespace RoomPlanner.Floors
 
         public void OnDeactivate()
         {
+            CancelCalibration();
             if (reticle != null) reticle.gameObject.SetActive(false);
         }
 
@@ -76,6 +129,38 @@ namespace RoomPlanner.Floors
                 return;
             }
 
+            // cursor on the working level plane (nudge orientation + calibration points)
+            _cursorValid = false;
+            if (pointer != null)
+            {
+                float level = manager != null ? manager.Level : 0f;
+                Ray ray = pointer.GetRay();
+                _cursorValid = MeasureMath.RayPlaneY(ray, level, out _cursor);
+            }
+            if (reticle != null)
+            {
+                reticle.gameObject.SetActive(_cursorValid);
+                if (_cursorValid) reticle.position = _cursor;
+            }
+
+            // B: cancel calibration, else Esc back to Select (UX v2 P0.3)
+            if (input.ClearPressed())
+            {
+                if (_calibStep >= 0) CancelCalibration();
+                else if (manager != null) { manager.ActivateTool("select"); return; }
+            }
+
+            // trigger commits calibration points while calibrating
+            if (_calibStep >= 0)
+            {
+                if (input.ConfirmPressed() && _cursorValid)
+                {
+                    CalibratePoint(_cursor);
+                    input.Pulse(0.4f, 0.015f);   // snap tick
+                }
+                return;   // no plan nudging mid-calibration
+            }
+
             // stick = nudge the plan across the floor
             Vector2 s = input.Thumbstick();
             if (s.sqrMagnitude > 0.02f)
@@ -83,19 +168,6 @@ namespace RoomPlanner.Floors
                 planOffsetX += s.x * offsetSpeed * Time.deltaTime;
                 planOffsetZ += s.y * offsetSpeed * Time.deltaTime;
                 Refresh();
-            }
-
-            // reticle on the working level plane, for orientation while nudging
-            if (pointer != null && reticle != null)
-            {
-                float level = manager != null ? manager.Level : 0f;
-                Ray ray = pointer.GetRay();
-                if (MeasureMath.RayPlaneY(ray, level, out var cursor))
-                {
-                    reticle.gameObject.SetActive(true);
-                    reticle.position = cursor;
-                }
-                else reticle.gameObject.SetActive(false);
             }
         }
 

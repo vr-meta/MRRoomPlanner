@@ -222,7 +222,7 @@ namespace RoomPlanner.Tests.Play
 
             var s = bp.GetSettings();
             Assert.IsNotNull(s);
-            Assert.AreEqual(3, s.Fields.Count, "Plan scale / Rotation / Plan file");
+            Assert.AreEqual(4, s.Fields.Count, "Plan scale / Rotation / Calibrate / Plan file");
 
             float scale = bp.PlanScale;
             s.Fields[0].Increase();
@@ -234,6 +234,37 @@ namespace RoomPlanner.Tests.Play
 
             for (int i = 0; i < 300; i++) s.Fields[1].Increase();
             Assert.That(bp.PlanRotationDeg, Is.InRange(0f, 360f), "rotation wraps, never accumulates");
+        }
+
+        [Test]
+        public void BlueprintCalibration_TwoPairs_AlignThePlan()
+        {
+            var go = new GameObject("BlueprintCtl");
+            _spawned.Add(go);
+            var bp = go.AddComponent<BlueprintController>();
+
+            // where two plan features SHOULD end up (known target placement)
+            var target = new BlueprintPlacement { Scale = 2f, RotationDeg = 90f, OriginX = 1f, OriginZ = -2f };
+            var current = new BlueprintPlacement
+            {
+                Scale = bp.PlanScale, RotationDeg = bp.PlanRotationDeg,
+                OriginX = bp.PlanOffsetX, OriginZ = bp.PlanOffsetZ,
+            };
+            var uvA = new Vector2(0.2f, 0.3f);
+            var uvB = new Vector2(0.8f, 0.5f);
+
+            bp.BeginCalibration();
+            Assert.AreEqual(0, bp.CalibrationStep);
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvA, 0f, current));   // A on projected plan
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvA, 0f, target));    // A where it must be
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvB, 0f, current));   // B on projected plan
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvB, 0f, target));    // B where it must be
+
+            Assert.AreEqual(-1, bp.CalibrationStep, "calibration completes after the 4th point");
+            Assert.AreEqual(target.Scale, bp.PlanScale, 1e-3f);
+            Assert.AreEqual(target.RotationDeg, bp.PlanRotationDeg, 1e-2f);
+            Assert.AreEqual(target.OriginX, bp.PlanOffsetX, 1e-3f);
+            Assert.AreEqual(target.OriginZ, bp.PlanOffsetZ, 1e-3f);
         }
     }
 }

@@ -99,6 +99,12 @@ namespace RoomPlanner.Tools
         private bool _grabbing;
         private float _grabDist = 0.55f;
 
+        // stepper auto-repeat (UX v2 P0.2): hold trigger on a −/+ row to keep stepping
+        private MenuButton _repeatBtn;
+        private float _repeatStart;
+        private float _repeatNext;
+        private MenuButton _hoverBtn;   // for hover-enter haptics
+
         private void Update()
         {
             if (pointer == null || input == null) return;
@@ -144,10 +150,53 @@ namespace RoomPlanner.Tools
             if (overMenu)
             {
                 if (menu != null) menu.Highlight(mb);
+                // short hover-enter tick — the ray needs tactile confirmation, not just visual
+                if (mb != _hoverBtn)
+                {
+                    _hoverBtn = mb;
+                    if (mb != null) input.Pulse(0.2f, 0.01f);
+                }
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hit.point; }
-                if (mb != null && input.ConfirmPressed()) { Execute(mb); input.Pulse(); }
+
+                if (mb != null && input.ConfirmPressed())
+                {
+                    Execute(mb);
+                    input.Pulse(0.6f, 0.02f);   // crisp click, not a long buzz
+                    if (mb.OnClick != null && mb.Repeatable)
+                    {
+                        _repeatBtn = mb;
+                        _repeatStart = Time.time;
+                        _repeatNext = Time.time + 0.4f;   // initial delay before repeating
+                    }
+                }
+                else if (_repeatBtn != null)
+                {
+                    if (!input.ConfirmHeld() || mb != _repeatBtn) _repeatBtn = null;
+                    else if (Time.time >= _repeatNext)
+                    {
+                        // 8 Hz; after 1.5 s of holding each tick steps ×5
+                        int steps = Time.time - _repeatStart > 1.5f ? 5 : 1;
+                        for (int i = 0; i < steps; i++) _repeatBtn.OnClick?.Invoke();
+                        RefreshMenu();
+                        input.Pulse(0.3f, 0.008f);   // detent per step
+                        _repeatNext = Time.time + 0.125f;
+                    }
+                }
             }
-            else if (menu != null) menu.Highlight(null);
+            else
+            {
+                if (menu != null) menu.Highlight(null);
+                _hoverBtn = null;
+                _repeatBtn = null;
+            }
+        }
+
+        /// <summary>Activate a tool by its stable id (e.g. B-on-empty returns to "select").</summary>
+        public void ActivateTool(string id)
+        {
+            if (_tools == null) return;
+            for (int i = 0; i < _tools.Length; i++)
+                if (_tools[i] != null && _tools[i].Id == id) { SetActiveTool(i); return; }
         }
 
         private void Execute(MenuButton mb)
