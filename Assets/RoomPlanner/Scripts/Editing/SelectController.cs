@@ -41,7 +41,7 @@ namespace RoomPlanner.Editing
         public bool HasSelection => _selected != null && _selected.IsAlive && !_selected.IsHidden;
 
         /// <summary>True while a drag is in progress (ToolManager suppresses undo/redo then).</summary>
-        public bool IsDragging => _dragging != null;
+        public bool IsDragging => _dragging != null || _draggingHandle != null;
 
         public string SelectionTitle { get; private set; } = "Nothing selected";
         public string SelectionInfo { get; private set; } = "";
@@ -52,6 +52,7 @@ namespace RoomPlanner.Editing
         {
             // Record (not discard): the live movement stays applied, so a lost record would
             // desync undo from the visible scene.
+            EndHandleDrag();          // settle physics + record, never leave a half-applied drag
             EndDrag(record: true);
             Deselect();
             SetHover(null);
@@ -65,13 +66,32 @@ namespace RoomPlanner.Editing
             {
                 // Finish (and record) an in-flight drag instead of freezing it — otherwise the
                 // object teleports to the cursor when the ray comes back from the menu.
+                EndHandleDrag();
                 EndDrag(record: true);
                 SetHover(null);
+                UpdateHandles();
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 return;
             }
 
             Ray ray = pointer.GetRay();
+
+            // --- Dragging a vertex handle (takes priority: it sits on top of its object) ---
+            if (_draggingHandle != null)
+            {
+                if (input.ConfirmHeld())
+                {
+                    if (MeasureMath.RayPlaneY(ray, _handlePlaneY, out var hp))
+                    {
+                        _handleTo = hp;
+                        _draggingHandle.Provider?.PreviewHandle(_draggingHandle.Index, hp);
+                        if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hp; }
+                    }
+                    UpdateHandles();
+                    return;
+                }
+                EndHandleDrag();
+            }
 
             // --- Dragging the selected object across the ground plane at its own height ---
             if (_dragging != null)
@@ -125,7 +145,11 @@ namespace RoomPlanner.Editing
             // --- Select / begin drag (trigger) ---
             if (input.ConfirmPressed())
             {
-                if (over)
+                // A handle sits ON its object, so it must win the click — otherwise you could
+                // never grab a vertex, you would always move the whole wall instead.
+                var handle = PickHandle(ray);
+                if (handle != null) BeginHandleDrag(handle, ray);
+                else if (over)
                 {
                     Select(picked);
                     BeginDrag(picked, ray);
@@ -135,6 +159,116 @@ namespace RoomPlanner.Editing
                     Deselect();
                 }
             }
+
+            UpdateHandles();
+        }
+
+        // ---- vertex handles (B5) ----
+
+        /// <summary>Layer 6 "Selectable" — same as walls/floors, so handles never hit the menu.</summary>
+        private const int SelectableLayer = 6;
+
+        [SerializeField] private float handlePickRadius = 0.06f;
+
+        private readonly System.Collections.Generic.List<EditHandle> _handles = new();
+        private EditHandle _draggingHandle;
+        private Vector3 _handleFrom, _handleTo;
+        private float _handlePlaneY;
+        private Transform _cam;
+        private Material _handleMat;
+
+        private IHandleProvider SelectedProvider =>
+            HasSelection && _selected.Transform != null
+                ? _selected.Transform.GetComponent<IHandleProvider>()
+                : null;
+
+        /// <summary>Show one handle per point of the selection; hide them otherwise.</summary>
+        private void UpdateHandles()
+        {
+            var provider = SelectedProvider;
+            int want = provider?.HandleCount ?? 0;
+
+            while (_handles.Count < want) _handles.Add(CreateHandle());
+            for (int i = 0; i < _handles.Count; i++)
+            {
+                var h = _handles[i];
+                if (h == null) continue;
+                bool used = i < want;
+                if (h.gameObject.activeSelf != used) h.gameObject.SetActive(used);
+                if (!used) continue;
+                h.Bind(provider, i);
+                h.Follow(Cam());
+            }
+        }
+
+        private Transform Cam()
+        {
+            if (_cam == null && Camera.main != null) _cam = Camera.main.transform;
+            return _cam;
+        }
+
+        private EditHandle CreateHandle()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "EditHandle";
+            go.layer = SelectableLayer;
+            go.transform.SetParent(transform, false);
+
+            if (_handleMat == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+                _handleMat = new Material(shader) { name = "EditHandleMat" };
+                if (_handleMat.HasProperty("_BaseColor")) _handleMat.SetColor("_BaseColor", new Color(1f, 0.75f, 0.2f));
+                _handleMat.color = new Color(1f, 0.75f, 0.2f);
+            }
+            go.GetComponent<Renderer>().sharedMaterial = _handleMat;
+            return go.AddComponent<EditHandle>();
+        }
+
+        /// <summary>Nearest visible handle under the ray, or null.</summary>
+        private EditHandle PickHandle(Ray ray)
+        {
+            EditHandle best = null;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < _handles.Count; i++)
+            {
+                var h = _handles[i];
+                if (h == null || !h.gameObject.activeSelf) continue;
+                Vector3 p = h.transform.position;
+                float along = Vector3.Dot(p - ray.origin, ray.direction);
+                if (along <= 0f) continue;
+                float miss = Vector3.Distance(p, ray.origin + ray.direction * along);
+                float radius = Mathf.Max(handlePickRadius, h.transform.localScale.x);
+                if (miss <= radius && along < bestDist) { bestDist = along; best = h; }
+            }
+            return best;
+        }
+
+        private void BeginHandleDrag(EditHandle h, Ray ray)
+        {
+            _draggingHandle = h;
+            _handleFrom = h.Provider != null ? h.Provider.GetHandlePosition(h.Index) : h.transform.position;
+            _handleTo = _handleFrom;
+            _handlePlaneY = _handleFrom.y;
+            if (input != null) input.Pulse(0.4f, 0.05f);
+        }
+
+        private void EndHandleDrag()
+        {
+            var h = _draggingHandle;
+            _draggingHandle = null;
+            if (h == null || h.Provider == null) return;
+
+            // one command for the whole gesture; the provider settles physics at the same time
+            var cmd = h.Provider.CommitHandle(h.Index, _handleFrom, _handleTo);
+            if (cmd != null && sceneModel != null) sceneModel.History.Record(cmd);
+            RefreshSelectionText();
+        }
+
+        private void OnDestroy()
+        {
+            // a runtime-created material is ours to free (coding rule 1.5)
+            if (_handleMat != null) Destroy(_handleMat);
         }
 
         // ---- selection ----

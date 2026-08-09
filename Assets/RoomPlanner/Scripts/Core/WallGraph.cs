@@ -19,6 +19,12 @@ namespace RoomPlanner.Walls
         public IReadOnlyList<WallSegment> Segments => segments;
         public int Degree => segments.Count;
 
+        /// <summary>
+        /// Deliberately move this node. The property setter stays internal so nobody moves a
+        /// node by accident: whoever calls this owes a rebuild of every segment on it.
+        /// </summary>
+        public void MoveTo(Vector3 position) => Position = position;
+
         internal WallNode(int id, Vector3 position)
         {
             Id = id;

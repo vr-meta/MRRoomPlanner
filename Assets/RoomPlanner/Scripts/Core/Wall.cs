@@ -124,6 +124,22 @@ namespace RoomPlanner.Walls
         public WallSegment Segment => _segment;
 
         /// <summary>
+        /// While true, rebuilds refresh the visible mesh but leave the MeshCollider alone.
+        /// Dragging a shared node has to rebuild the walls hanging off it every frame to stay
+        /// WYSIWYG, and re-cooking physics meshes at 72–120 Hz is what coding rule 4.2 forbids —
+        /// so the collider is re-cooked once, when the drag ends.
+        /// </summary>
+        public bool DeferCollider { get; set; }
+
+        /// <summary>Re-cook the physics mesh after a deferred drag.</summary>
+        public void RefreshCollider()
+        {
+            if (_collider == null || _mesh == null) return;
+            _collider.sharedMesh = null;
+            _collider.sharedMesh = _mesh.vertexCount > 0 ? _mesh : null;
+        }
+
+        /// <summary>
         /// Draw ONE graph segment, with its ends shaped by whatever meets it at each node
         /// (<see cref="WallMesh"/>). Replaces the polyline path for graph-backed walls; the
         /// polyline <see cref="Build"/> stays for the legacy tool and its tests.
@@ -371,7 +387,7 @@ namespace RoomPlanner.Walls
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 
-            if (_collider != null)
+            if (_collider != null && !DeferCollider)
             {
                 // reassign to force the physics mesh to refresh
                 _collider.sharedMesh = null;
