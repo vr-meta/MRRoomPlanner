@@ -61,8 +61,10 @@ Core/Ifc/IfcImporter.cs     — обход: Storeys / Walls (axis+thickness+heig
                               Columns (rect) / Slabs (outline) → ImportedBuilding
 Core/Ifc/ImportedBuilding.cs— чистые данные: ImportedStorey/ImportedWall/ImportedSlab (метры, Unity-оси)
 Core/BuildingNav.cs         — математика телепорта (смещение корня, выбор видимого этажа)
-Tools/ImportController.cs   — ITool "Import": ряды File (листать .ifc) / Load / Storey;
-                              строит Wall/Floor из ImportedBuilding командами
+Import/ImportController.cs  — ITool "Imp": ряды IFC file (листать) / Load / Storey (фильтр
+                              видимости по этажам); строит сегменты WallGraph (Offset=Center)
+                              + Floor через FloorController.CreateImported; один Undo
+                              (ImportBatchCommand: hide/show всего созданного)
 Editor/Setup/SetupImportTool.cs + строка в реестре ToolManager.Start + SetupPalette
 ```
 

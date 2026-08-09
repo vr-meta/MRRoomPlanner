@@ -67,6 +67,21 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void FindFiles_FiltersByGivenExtensions()
+        {
+            string dir = Path.Combine(_root, "ifc");
+            Touch(dir, "Project1.ifc");
+            Touch(dir, "Tower.IFC");       // extension match is case-insensitive
+            Touch(dir, "plan.png");
+            Touch(dir, "readme.txt");
+
+            var found = PlanFileLocator.FindFiles(new[] { dir }, new[] { ".ifc" });
+
+            Assert.AreEqual(2, found.Count);
+            Assert.IsTrue(found.TrueForAll(f => f.ToLowerInvariant().EndsWith(".ifc")));
+        }
+
+        [Test]
         public void MissingAndNullDirectories_AreSkippedSilently()
         {
             string real = Path.Combine(_root, "real");

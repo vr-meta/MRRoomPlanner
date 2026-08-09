@@ -157,20 +157,35 @@ namespace RoomPlanner.Floors
         }
 
         private void CreateFloor(List<Vector3> outline, float level)
+            => CreateSlab(outline, level, Thickness());
+
+        /// <summary>
+        /// Create a slab from an imported outline (IFC import, design/18) — the exact same
+        /// path a drawn outline takes, so imported floors are ordinary editable slabs.
+        /// Returns null if the outline builds nothing (degenerate/crossed).
+        /// </summary>
+        public Floor CreateImported(IReadOnlyList<Vector3> outline, float level, float thickness)
+            => CreateSlab(new List<Vector3>(outline), level, thickness);
+
+        private Floor CreateSlab(List<Vector3> outline, float level, float thickness)
         {
             var f = Instantiate(floorPrefab, transform);
-            f.BuildOutline(outline, level, Thickness(), Scale(), Rotation(), OffX(), OffZ());
+            // A parked (inactive) template is a valid prefab source; a slab that exists
+            // must be visible and pickable — hiding is DeleteCommand's job only.
+            if (!f.gameObject.activeSelf) f.gameObject.SetActive(true);
+            f.BuildOutline(outline, level, thickness, Scale(), Rotation(), OffX(), OffZ());
 
             // A crossed outline builds nothing; do not leave an invisible, unpickable slab
             // registered in the scene (coding rule 2.4 — hidden is not alive).
             if (f.Outline.Count < 3 || f.Area <= 0f)
             {
                 Destroy(f.gameObject);
-                return;
+                return null;
             }
 
             _floors.Add(f);
             if (sceneModel != null) sceneModel.Register(f.GetComponent<Selectable>());
+            return f;
         }
 
         /// <summary>Force a plan re-apply on all slabs (called by the Blueprint tool after

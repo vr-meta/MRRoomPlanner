@@ -30,6 +30,7 @@ namespace RoomPlanner.EditorTools
         public WallController WallTool;
         public FloorController FloorTool;
         public BlueprintController Blueprint;
+        public RoomPlanner.Import.ImportController Import;
 
         // shared assets
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;

@@ -202,22 +202,24 @@
 
 ## 2j. Импорт IFC из Revit (дизайн: `design/18-ifc-import.md`, ветка `worktree-ifc-import`)
 
-- [~] **I1 — Core: `StepTokenizer`** — разбор записи `#id=TYPE(...)`: строки (включая
+- [x] **I1 — Core: `StepTokenizer`** — разбор записи `#id=TYPE(...)`: строки (включая
   `\X2\…\X0\`-юникод и `''`-экранирование), числа, `.ENUM.`, `#ref`, `$`/`*`, вложенные
-  списки; + юнит-тесты на инлайн-фрагментах — код и 9 тестов написаны, ждут прогона
-- [~] **I2 — Core: `StepFile`** — построчный ридер (заголовок/DATA, записи с переносами),
-  индекс id→запись, ленивый разбор аргументов, метры из `IFCSIUNIT`; + 5 тестов — написаны
-- [~] **I3 — Core: `IfcImporter` (этажи+стены)** — `IfcBuildingStorey` (отметки),
+  списки; 9 юнит-тестов на инлайн-фрагментах
+- [x] **I2 — Core: `StepFile`** — ридер с учётом строк (`;` внутри строк, многострочные
+  записи), индекс id→запись, ленивый разбор аргументов, метры из `IFCSIUNIT`; 5 тестов
+- [x] **I3 — Core: `IfcImporter` (этажи+стены)** — `IfcBuildingStorey` (отметки),
   `IfcWallStandardCase`: ось `Axis`/Curve2D + толщина (`IfcMaterialLayerSetUsage`) +
   высота экструзии + композиция `IfcLocalPlacement` → мировые точки Unity (мм→м, Z-up→Y-up);
-  fixture `Tests/Fixtures/MiniRevit.ifc` (214 записей из реального `Project1.ifc`) — написаны
-- [~] **I4 — Core: слэбы и колонны** — `IfcSlab` профиль → контур пола (включая
+  fixture `Tests/Fixtures/MiniRevit.ifc` (214 записей из реального `Project1.ifc`);
+  тест точных мировых координат стены #150
+- [x] **I4 — Core: слэбы и колонны** — `IfcSlab` профиль → контур пола (включая
   перевёрнутый фрейм Z=(0,0,−1)); `IfcColumn`+`IfcRectangleProfileDef` → короткий сегмент
-  стены (длинная сторона = ось); круглые/Brep — пропуск со счётчиком; + тесты — написаны
-- [ ] **I5 — App: `ImportController` (ITool "Import")** — выбор `.ifc` из Download
-  (generic-локатор файлов), Load → `Wall`/`Floor` командами через `SceneModel` (весь
-  импорт = один Undo), статус «N walls / M slabs / K skipped»; Setup + реестр + палитра;
-  Play-тест: load fixture → объекты в сцене, undo снимает всё
+  стены (длинная сторона = ось); круглые/Brep — пропуск со счётчиком; 7 тестов на fixture
+- [~] **I5 — App: `ImportController` (ITool "Imp")** — выбор `.ifc` из Download/Documents
+  (`PlanFileLocator.FindFiles`), Load → сегменты `WallGraph` (Offset=Center, узлы стыкуются
+  снапом) + `FloorController.CreateImported`; весь импорт = один Undo (`ImportBatchCommand`,
+  hide/show); ряд Storey фильтрует видимость по этажам; Setup + реестр + палитра (6 кнопок);
+  4 Play-теста — код написан, ждёт прогона
 - [ ] **I6 — Навигация по дому** — корень `Building`, телепорт (луч в пол →
   смещение модели к пользователю, математика в `Core/BuildingNav` + тесты), выбор
   этажа (скрыть уровни выше); раскладку — в `10-controls.md`
