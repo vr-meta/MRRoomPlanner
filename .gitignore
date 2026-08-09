@@ -1,0 +1,33 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset meta data (keep .meta only for files that exist)
+# (Unity regenerates missing .meta; do not ignore them if you version Assets)
+
+# IDE / OS
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+*.user
+.DS_Store
+Thumbs.db
+
+# Meta XR SDK caches
+[Aa]ssets/Oculus/
+*.apk
+*.aab
+
+# Android/Gradle/Burst build temp
+.utmp/
+*_BurstDebugInformation_DoNotShip/
+TempAssembly.dll
