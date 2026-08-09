@@ -69,6 +69,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("floor").objectReferenceValue = ctx.FloorTool;
             so.FindProperty("blueprint").objectReferenceValue = ctx.Blueprint;
             so.FindProperty("importTool").objectReferenceValue = ctx.Import;
+            so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
             so.ApplyModifiedProperties();
         }
     }

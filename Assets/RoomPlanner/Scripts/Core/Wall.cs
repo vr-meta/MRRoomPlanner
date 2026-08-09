@@ -185,7 +185,179 @@ namespace RoomPlanner.Walls
             _mode = s.Offset;
             _join = s.Join;
 
-            Triangulate(sections, height, flip: !towardPlus);
+            if (s.Openings.Count > 0)
+                TriangulateWithOpenings(sections[0], sections[1], height, !towardPlus, s.Openings, s.Length);
+            else
+                Triangulate(sections, height, flip: !towardPlus);
+        }
+
+        /// <summary>
+        /// Panelisation v0 (docs/design/18 I8, precursor of docs/design/03): a straight
+        /// graph segment with door/window openings. The wall surface is tiled with quads
+        /// around each opening (piers, under-sill, header), plus jambs/sill/header faces
+        /// into the cut and a transparent glass pane (submesh 1) for windows.
+        /// Openings are placed by fraction of the CENTERLINE; on strongly mitred ends the
+        /// footprint edge is slightly longer, so a jamb hugging a sharp corner can drift
+        /// by up to half a thickness — acceptable for v0.
+        /// </summary>
+        private void TriangulateWithOpenings(Cross a, Cross b, float height, bool flip,
+            List<WallOpening> openings, float centerlineLength)
+        {
+            var v = new List<Vector3>();
+            var uv = new List<Vector2>();
+            var tris = new List<int>();
+            var glass = new List<int>();
+            var ev = new List<Vector3>();
+            var ei = new List<int>();
+            float baseY = a.Inner.y;
+
+            Vector3 I(float t, float y) => Vector3.Lerp(a.Inner, b.Inner, t) + Vector3.up * y;
+            Vector3 O(float t, float y) => Vector3.Lerp(a.Outer, b.Outer, t) + Vector3.up * y;
+            Vector3 M(float t, float y) => (I(t, y) + O(t, y)) * 0.5f;
+
+            int Vert(Vector3 p, float u, float vv)
+            {
+                v.Add(p);
+                uv.Add(new Vector2(u, vv));
+                return v.Count - 1;
+            }
+
+            // NOTE the inverted default order: the helpers below enumerate corners
+            // "up first, then along", which is the REVERSE of the outward orientation the
+            // legacy extruder uses — so the un-flipped case reverses (verified against
+            // Triangulate()'s quads; WallOpeningPlayTests pin the result with raycasts).
+            void Face(List<int> target, Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3,
+                float u0, float v0, float u1, float v1)
+            {
+                int i0 = Vert(p0, u0, v0), i1 = Vert(p1, u0, v1), i2 = Vert(p2, u1, v1), i3 = Vert(p3, u1, v0);
+                if (flip) Quad(target, i0, i1, i2, i3);
+                else Quad(target, i0, i3, i2, i1);
+            }
+
+            float U(float t) => t * centerlineLength / TileMeters;
+            float VV(float y) => (baseY + y) / TileMeters;
+
+            // faces oriented as in Triangulate(): inner toward the room, outer away, etc.
+            void FaceInner(float t0, float t1, float y0, float y1) =>
+                Face(tris, I(t0, y0), I(t0, y1), I(t1, y1), I(t1, y0), U(t0), VV(y0), U(t1), VV(y1));
+            void FaceOuter(float t0, float t1, float y0, float y1) =>
+                Face(tris, O(t0, y1), O(t0, y0), O(t1, y0), O(t1, y1), U(t0), VV(y1), U(t1), VV(y0));
+            void FaceUp(float t0, float t1, float y) =>
+                Face(tris, I(t0, y), O(t0, y), O(t1, y), I(t1, y), U(t0), VV(y), U(t1), VV(y));
+            void FaceDown(float t0, float t1, float y) =>
+                Face(tris, O(t0, y), I(t0, y), I(t1, y), O(t1, y), U(t0), VV(y), U(t1), VV(y));
+            void FaceCapBack(float t, float y0, float y1) =>   // faces -t (wall start / right jamb)
+                Face(tris, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t), VV(y1));
+            void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
+                Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t), VV(y1));
+
+            void EdgeRect(System.Func<float, float, Vector3> at, float t0, float t1, float y0, float y1)
+            {
+                int e0 = ev.Count;
+                ev.Add(at(t0, y0)); ev.Add(at(t1, y0)); ev.Add(at(t1, y1)); ev.Add(at(t0, y1));
+                ei.Add(e0); ei.Add(e0 + 1); ei.Add(e0 + 1); ei.Add(e0 + 2);
+                ei.Add(e0 + 2); ei.Add(e0 + 3); ei.Add(e0 + 3); ei.Add(e0);
+            }
+
+            // ---- openings, sanitised: sorted, clamped, non-overlapping ----
+            var ops = new List<(float t0, float t1, float ys, float yh, bool hasGlass)>();
+            foreach (var op in openings)
+            {
+                float halfT = Mathf.Max(0.01f, op.Width) / Mathf.Max(centerlineLength, MinSize) * 0.5f;
+                float t0 = Mathf.Clamp01(op.AlongFraction - halfT);
+                float t1 = Mathf.Clamp01(op.AlongFraction + halfT);
+                float ys = Mathf.Clamp(op.SillHeight, 0f, height - 0.02f);
+                float yh = Mathf.Clamp(op.SillHeight + op.Height, ys + 0.02f, height);
+                if (t1 - t0 < 1e-3f) continue;
+                ops.Add((t0, t1, ys, yh, ys > 0.01f));
+            }
+            ops.Sort((x, y) => x.t0.CompareTo(y.t0));
+            for (int i = ops.Count - 1; i > 0; i--)
+                if (ops[i].t0 < ops[i - 1].t1) ops.RemoveAt(i);   // overlap — keep the first
+
+            // ---- walk the strips ----
+            float cursor = 0f;
+            foreach (var op in ops)
+            {
+                if (op.t0 > cursor)   // pier before the opening
+                {
+                    FaceInner(cursor, op.t0, 0f, height);
+                    FaceOuter(cursor, op.t0, 0f, height);
+                    FaceUp(cursor, op.t0, height);
+                    FaceDown(cursor, op.t0, 0f);
+                }
+
+                if (op.ys > 0.01f)    // under-sill band + its exposed top
+                {
+                    FaceInner(op.t0, op.t1, 0f, op.ys);
+                    FaceOuter(op.t0, op.t1, 0f, op.ys);
+                    FaceDown(op.t0, op.t1, 0f);
+                    FaceUp(op.t0, op.t1, op.ys);
+                }
+                if (op.yh < height - 0.01f)   // header band + its exposed bottom
+                {
+                    FaceInner(op.t0, op.t1, op.yh, height);
+                    FaceOuter(op.t0, op.t1, op.yh, height);
+                    FaceUp(op.t0, op.t1, height);
+                    FaceDown(op.t0, op.t1, op.yh);
+                }
+                else
+                {
+                    FaceUp(op.t0, op.t1, height);   // opening reaches the top: keep the wall crown
+                }
+
+                FaceCapForward(op.t0, op.ys, op.yh);   // left jamb faces into the opening
+                FaceCapBack(op.t1, op.ys, op.yh);      // right jamb
+
+                EdgeRect(I, op.t0, op.t1, op.ys, op.yh);
+                EdgeRect(O, op.t0, op.t1, op.ys, op.yh);
+
+                if (op.hasGlass)
+                {
+                    // window: a mid-plane pane, emitted both ways so it reads from both sides
+                    Face(glass, M(op.t0, op.ys), M(op.t0, op.yh), M(op.t1, op.yh), M(op.t1, op.ys),
+                        U(op.t0), VV(op.ys), U(op.t1), VV(op.yh));
+                    Face(glass, M(op.t1, op.ys), M(op.t1, op.yh), M(op.t0, op.yh), M(op.t0, op.ys),
+                        U(op.t1), VV(op.ys), U(op.t0), VV(op.yh));
+                }
+
+                cursor = op.t1;
+            }
+            if (cursor < 1f)          // final pier (or the whole wall if all openings clipped)
+            {
+                FaceInner(cursor, 1f, 0f, height);
+                FaceOuter(cursor, 1f, 0f, height);
+                FaceUp(cursor, 1f, height);
+                FaceDown(cursor, 1f, 0f);
+            }
+
+            FaceCapBack(0f, 0f, height);      // wall end caps
+            FaceCapForward(1f, 0f, height);
+
+            // outline edges of the whole wall (verticals + top/bottom runs)
+            EdgeRect(I, 0f, 1f, 0f, height);
+            EdgeRect(O, 0f, 1f, 0f, height);
+
+            _mesh.subMeshCount = 2;
+            _mesh.SetVertices(v);
+            _mesh.SetUVs(0, uv);
+            _mesh.SetTriangles(tris, 0);
+            _mesh.SetTriangles(glass, 1);
+            _mesh.RecalculateNormals();
+            _mesh.RecalculateBounds();
+
+            if (_collider != null && !DeferCollider)
+            {
+                _collider.sharedMesh = null;
+                _collider.sharedMesh = _mesh;
+            }
+
+            if (_edges != null)
+            {
+                _edges.SetVertices(ev);
+                _edges.SetIndices(ei, MeshTopology.Lines, 0);
+                _edges.RecalculateBounds();
+            }
         }
 
         /// <summary>Collapse consecutive (near-)identical points — double-clicks in MR are common
@@ -404,9 +576,13 @@ namespace RoomPlanner.Walls
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
+            // Submesh 1 is the window glass — empty here, but always present so a renderer
+            // configured with [wall, glass] materials is valid for every wall.
+            _mesh.subMeshCount = 2;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
             _mesh.SetTriangles(tris, 0);
+            _mesh.SetTriangles(new List<int>(), 1);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 

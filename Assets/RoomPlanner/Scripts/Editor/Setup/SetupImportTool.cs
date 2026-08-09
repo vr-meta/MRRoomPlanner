@@ -19,6 +19,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("walls").objectReferenceValue = ctx.Rig.GetComponent<WallGraphRenderer>();
             so.FindProperty("floors").objectReferenceValue = ctx.FloorTool;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            so.FindProperty("stairMat").objectReferenceValue = ctx.StairMat;
             so.ApplyModifiedProperties();
         }
     }

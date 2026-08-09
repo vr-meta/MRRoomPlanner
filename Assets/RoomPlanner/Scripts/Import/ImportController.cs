@@ -26,6 +26,9 @@ namespace RoomPlanner.Import
         [SerializeField] private WallGraphRenderer walls;
         [SerializeField] private FloorController floors;
         [SerializeField] private SceneModel sceneModel;
+        [SerializeField] private Material stairMat;
+
+        private const int SelectableLayer = 6;   // picked by Select, ignored by the surface raycaster
 
         private readonly List<string> _files = new();
         private int _fileIndex = -1;
@@ -138,8 +141,11 @@ namespace RoomPlanner.Import
 
             var touched = new HashSet<WallNode>();
             var segments = new List<(WallSegment seg, int storey)>();
+            var wallSegments = new List<List<WallSegment>>();   // per imported wall, for openings
             foreach (var iw in building.Walls)
             {
+                var ownSegments = new List<WallSegment>();
+                wallSegments.Add(ownSegments);
                 for (int i = 0; i + 1 < iw.Path.Count; i++)
                 {
                     var a = graph.SnapOrCreateNode(iw.Path[i]);
@@ -153,8 +159,10 @@ namespace RoomPlanner.Import
                     touched.Add(a);
                     touched.Add(b);
                     segments.Add((seg, iw.StoreyIndex));
+                    ownSegments.Add(seg);
                 }
             }
+            int openingCount = AttachOpenings(building, wallSegments);
             walls.Sync();                                      // one view per new segment
             foreach (var n in touched) walls.RebuildAround(n); // joints need all neighbours
             foreach (var (seg, storey) in segments)
@@ -165,22 +173,82 @@ namespace RoomPlanner.Import
             }
             int wallCount = segments.Count;
 
-            int slabCount = 0;
+            int slabCount = 0, holeCount = 0;
             foreach (var slab in building.Slabs)
             {
                 var f = floors.CreateImported(slab.Outline, slab.Level, slab.Thickness);
                 if (f == null) continue;
+                foreach (var hole in slab.Holes)
+                    if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
                 _created.Add((f.GetComponent<Selectable>(), slab.StoreyIndex));
                 slabCount++;
+            }
+
+            int stairCount = 0;
+            foreach (var st in building.Stairs)
+            {
+                var go = new GameObject("Stair (imported)") { layer = SelectableLayer };
+                go.transform.SetParent(transform, false);
+                go.AddComponent<MeshFilter>();
+                var mr = go.AddComponent<MeshRenderer>();
+                if (stairMat != null) mr.sharedMaterial = stairMat;
+                var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
+                stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth);
+                var sel = go.AddComponent<Selectable>();
+                if (sceneModel != null) sceneModel.Register(sel);
+                _created.Add((sel, st.StoreyIndex));
+                stairCount++;
             }
 
             // One undo entry for the whole import (objects are already live → Record).
             if (sceneModel != null && _created.Count > 0)
                 sceneModel.History.Record(new ImportBatchCommand(CollectSelectables()));
 
-            int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs;
-            _status = $"{wallCount}w {slabCount}s" + (skipped > 0 ? $" ({skipped} skip)" : "");
-            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, skipped {skipped}");
+            int skipped = building.SkippedWalls + building.SkippedColumns
+                + building.SkippedSlabs + building.SkippedOpenings + building.SkippedStairs;
+            _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st"
+                + (skipped > 0 ? $" ({skipped} skip)" : "");
+            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, "
+                + $"{openingCount} openings, {holeCount} holes, {stairCount} stairs, skipped {skipped}");
+        }
+
+        /// <summary>
+        /// Write imported doors/windows onto their wall-graph segments as WallOpening data.
+        /// The wall mesh does not cut them yet (Phase D panelisation, docs/design/03) — the
+        /// data rides on the graph so they appear the moment that lands.
+        /// </summary>
+        private static int AttachOpenings(ImportedBuilding building, List<List<WallSegment>> wallSegments)
+        {
+            int count = 0, nextId = 1;
+            foreach (var op in building.Openings)
+            {
+                if (op.WallIndex < 0 || op.WallIndex >= wallSegments.Count) continue;
+                var segs = wallSegments[op.WallIndex];
+                if (segs.Count == 0) continue;
+
+                // locate the segment containing the opening's arc position along the path
+                float total = 0f;
+                foreach (var s in segs) total += s.Length;
+                float target = op.AlongFraction * total, run = 0f;
+                WallSegment host = segs[segs.Count - 1];
+                float local = 1f;
+                foreach (var s in segs)
+                {
+                    if (target <= run + s.Length) { host = s; local = (target - run) / s.Length; break; }
+                    run += s.Length;
+                }
+
+                host.Openings.Add(new WallOpening
+                {
+                    Id = nextId++,
+                    AlongFraction = Mathf.Clamp01(local),
+                    Width = op.Width,
+                    Height = op.Height,
+                    SillHeight = op.Sill,
+                });
+                count++;
+            }
+            return count;
         }
 
         private List<ISelectable> CollectSelectables()

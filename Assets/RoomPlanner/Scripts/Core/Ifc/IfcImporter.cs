@@ -18,10 +18,156 @@ namespace RoomPlanner.Core.Ifc
             ImportStoreys(ctx, b);
             MapElementsToStoreys(ctx, b);
             MapLayerThickness(ctx);
+            MapVoidsAndFills(ctx);
             ImportWalls(ctx, b);
             ImportColumns(ctx, b);
             ImportSlabs(ctx, b);
+            ImportStairs(ctx, b);
             return b;
+        }
+
+        // ---------------------------------------------------------------- stairs
+
+        /// <summary>
+        /// Stair flights as PARAMETERS: IfcStairFlight carries riser/tread counts and sizes
+        /// (Revit writes the sizes in FEET regardless of file units — normalised here), and
+        /// the flight's Brep bounding box supplies width, run direction and the base point.
+        /// Landings arrive separately as ordinary slabs.
+        /// </summary>
+        private static void ImportStairs(Ctx c, ImportedBuilding b)
+        {
+            foreach (int id in c.F.OfType("IFCSTAIRFLIGHT"))
+            {
+                // (…, Placement5, Representation6, Tag7, NumberOfRiser8, NumberOfTreads9,
+                //  RiserHeight10, TreadLength11)
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 12
+                    || a[8].Kind != StepKind.Number || a[10].Kind != StepKind.Number
+                    || a[11].Kind != StepKind.Number) { b.SkippedStairs++; continue; }
+
+                int risers = (int)a[8].Number;
+                float riserH = NormalizeStairSize(a[10].AsFloat, c.Scale);
+                float treadD = NormalizeStairSize(a[11].AsFloat, c.Scale);
+                if (risers < 1 || riserH <= 0f || treadD <= 0f) { b.SkippedStairs++; continue; }
+
+                if (!TryFlightFrame(c, a, risers, riserH, treadD, out var basePoint, out float yaw, out float width))
+                {
+                    b.SkippedStairs++;
+                    continue;
+                }
+
+                b.Stairs.Add(new ImportedStair
+                {
+                    Base = basePoint,
+                    YawDeg = yaw,
+                    Width = width,
+                    Risers = risers,
+                    RiserHeight = riserH,
+                    TreadDepth = treadD,
+                    StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
+                });
+            }
+        }
+
+        /// <summary>
+        /// RiserHeight/TreadLength land in one of three unit regimes in the wild: honest
+        /// file units (mm), metres, or Revit's internal feet. A real riser is 0.12–0.25 m —
+        /// pick the interpretation that lands there.
+        /// </summary>
+        public static float NormalizeStairSize(float raw, float fileScale)
+        {
+            float asFile = raw * fileScale;                    // e.g. mm → m
+            if (asFile > 0.05f && asFile < 1.2f) return asFile;
+            if (raw > 0.05f && raw < 1.2f)
+            {
+                float asFeet = raw * 0.3048f;
+                // 0.574 ft = 175 mm (plausible); 0.574 m is no riser/tread on Earth
+                return raw > 0.35f && asFeet > 0.05f && asFeet < 0.35f ? asFeet : raw;
+            }
+            return asFile;
+        }
+
+        /// <summary>
+        /// Base point / yaw / width from the flight's Brep points, measured in the solid's
+        /// LOCAL space: the horizontal axis whose extent best matches the run length is the
+        /// run; ascent points toward the z-heavy end.
+        /// </summary>
+        private static bool TryFlightFrame(Ctx c, List<StepValue> flightArgs,
+            int risers, float riserH, float treadD, out Vector3 basePoint, out float yaw, out float width)
+        {
+            basePoint = default; yaw = 0f; width = 1f;
+            var place = Placement(c, flightArgs[5]);
+
+            var pts = BrepLocalPoints(c, flightArgs[6]);
+            if (pts == null || pts.Count < 4) return false;
+
+            Vector3 min = pts[0], max = pts[0];
+            foreach (var p in pts) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+            var ext = max - min;
+
+            float runMeters = (risers - 1) * treadD;
+            float runFile = runMeters / c.Scale;               // compare in file units
+            bool runIsX = Mathf.Abs(ext.x - runFile) <= Mathf.Abs(ext.y - runFile);
+            float widthFile = runIsX ? ext.y : ext.x;
+            width = widthFile * c.Scale;
+
+            // ascend toward the end whose points sit higher (average z of each end slice)
+            float lo = runIsX ? min.x : min.y, hi = runIsX ? max.x : max.y;
+            float band = Mathf.Max((hi - lo) * 0.2f, 1e-3f);
+            float zLo = 0f, zHi = 0f; int nLo = 0, nHi = 0;
+            foreach (var p in pts)
+            {
+                float r = runIsX ? p.x : p.y;
+                if (r < lo + band) { zLo += p.z; nLo++; }
+                else if (r > hi - band) { zHi += p.z; nHi++; }
+            }
+            bool ascendsToHi = nLo == 0 || nHi == 0 || zHi / Mathf.Max(1, nHi) >= zLo / Mathf.Max(1, nLo);
+
+            // local frame: start of the run at its centerline, on the bottom plane
+            float runStart = ascendsToHi ? lo : hi;
+            float widthMid = runIsX ? (min.y + max.y) * 0.5f : (min.x + max.x) * 0.5f;
+            var baseLocal = runIsX ? new Vector3(runStart, widthMid, min.z)
+                                   : new Vector3(widthMid, runStart, min.z);
+            var stepLocal = runIsX ? new Vector3(ascendsToHi ? 1f : -1f, 0f, 0f)
+                                   : new Vector3(0f, ascendsToHi ? 1f : -1f, 0f);
+
+            var baseWorldFile = place.MultiplyPoint3x4(baseLocal);
+            var dirWorldFile = place.MultiplyVector(stepLocal);
+            basePoint = ToUnity(c, baseWorldFile);
+            var dirUnity = new Vector3(dirWorldFile.x, 0f, dirWorldFile.y);
+            if (dirUnity.sqrMagnitude < 1e-8f) return false;
+            yaw = Mathf.Atan2(dirUnity.x, dirUnity.z) * Mathf.Rad2Deg;
+            return true;
+        }
+
+        /// <summary>All vertices of the body's FacetedBrep(s), in SOLID-LOCAL coordinates.</summary>
+        private static List<Vector3> BrepLocalPoints(Ctx c, StepValue pdsRef)
+        {
+            var items = FindRepresentation(c, pdsRef, "Body");
+            if (items == null) return null;
+            var pts = new List<Vector3>();
+            foreach (var it in items)
+            {
+                if (it.Kind != StepKind.Ref || c.F.TypeOf(it.Ref) != "IFCFACETEDBREP") continue;
+                var brep = c.F.Args(it.Ref);            // (Outer shell)
+                var shell = c.F.Deref(brep[0]);         // IFCCLOSEDSHELL((faces))
+                if (shell == null || shell.Count < 1 || shell[0].Kind != StepKind.List) continue;
+                foreach (var faceRef in shell[0].Items)
+                {
+                    var face = c.F.Deref(faceRef);      // IFCFACE((bounds))
+                    if (face == null || face.Count < 1 || face[0].Kind != StepKind.List) continue;
+                    foreach (var boundRef in face[0].Items)
+                    {
+                        var bound = c.F.Deref(boundRef); // IFCFACEOUTERBOUND(loop, orientation)
+                        if (bound == null || bound.Count < 1) continue;
+                        var loop = c.F.Deref(bound[0]);  // IFCPOLYLOOP((points))
+                        if (loop == null || loop.Count < 1 || loop[0].Kind != StepKind.List) continue;
+                        foreach (var ptRef in loop[0].Items)
+                            pts.Add(Point(c, ptRef));
+                    }
+                }
+            }
+            return pts;
         }
 
         private sealed class Ctx
@@ -32,6 +178,28 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, int> StoreyIndexByRecord = new(); // storey record id → sorted index
             public readonly Dictionary<int, int> StoreyOfElement = new();   // element id → storey index
             public readonly Dictionary<int, float> LayerThickness = new();  // element id → summed layers (file units)
+            public readonly Dictionary<int, List<int>> VoidsOfElement = new(); // element id → opening ids
+            public readonly Dictionary<int, int> FillerOfOpening = new();   // opening id → door/window id
+        }
+
+        private static void MapVoidsAndFills(Ctx c)
+        {
+            // IFCRELVOIDSELEMENT(…, RelatingBuildingElement, RelatedOpeningElement)
+            foreach (int id in c.F.OfType("IFCRELVOIDSELEMENT"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref || a[5].Kind != StepKind.Ref) continue;
+                if (!c.VoidsOfElement.TryGetValue(a[4].Ref, out var list))
+                    c.VoidsOfElement[a[4].Ref] = list = new List<int>();
+                list.Add(a[5].Ref);
+            }
+            // IFCRELFILLSELEMENT(…, RelatingOpeningElement, RelatedBuildingElement)
+            foreach (int id in c.F.OfType("IFCRELFILLSELEMENT"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref || a[5].Kind != StepKind.Ref) continue;
+                c.FillerOfOpening[a[4].Ref] = a[5].Ref;
+            }
         }
 
         // IFC is right-handed Z-up; Unity is left-handed Y-up. Swapping Y/Z keeps the
@@ -153,7 +321,77 @@ namespace RoomPlanner.Core.Ifc
                     wall.Path.Add(ToUnity(c, place.MultiplyPoint3x4(Point(c, ptRef))));
                 if (wall.Path.Count < 2) { b.SkippedWalls++; continue; }
                 b.Walls.Add(wall);
+                ImportWallOpenings(c, b, id, b.Walls.Count - 1);
             }
+        }
+
+        /// <summary>
+        /// Doors/windows of one wall, from its voiding IfcOpeningElements. The opening's
+        /// profile corners are lifted to world space and measured against the wall axis —
+        /// no assumptions about which profile dimension is which (Revit rotates them).
+        /// </summary>
+        private static void ImportWallOpenings(Ctx c, ImportedBuilding b, int wallId, int wallIndex)
+        {
+            if (!c.VoidsOfElement.TryGetValue(wallId, out var openings)) return;
+            var wall = b.Walls[wallIndex];
+            Vector3 a = wall.Path[0], z = wall.Path[wall.Path.Count - 1];
+            var axis = new Vector2(z.x - a.x, z.z - a.z);
+            float len = axis.magnitude;
+            if (len < 1e-4f) return;
+            axis /= len;
+
+            foreach (int openingId in openings)
+            {
+                var corners = OpeningWorldCorners(c, openingId);
+                if (corners == null) { b.SkippedOpenings++; continue; }
+
+                float alongMin = float.MaxValue, alongMax = float.MinValue;
+                float yMin = float.MaxValue, yMax = float.MinValue;
+                foreach (var pFile in corners)
+                {
+                    var p = ToUnity(c, pFile);
+                    float along = (p.x - a.x) * axis.x + (p.z - a.z) * axis.y;
+                    alongMin = Mathf.Min(alongMin, along); alongMax = Mathf.Max(alongMax, along);
+                    yMin = Mathf.Min(yMin, p.y); yMax = Mathf.Max(yMax, p.y);
+                }
+
+                bool isDoor = c.FillerOfOpening.TryGetValue(openingId, out int filler)
+                    ? c.F.TypeOf(filler) == "IFCDOOR"
+                    : yMin - a.y < 0.1f;                         // unfilled: floor-level = a doorway
+                b.Openings.Add(new ImportedOpening
+                {
+                    WallIndex = wallIndex,
+                    AlongFraction = Mathf.Clamp01((alongMin + alongMax) * 0.5f / len),
+                    Width = alongMax - alongMin,
+                    Height = yMax - yMin,
+                    Sill = Mathf.Max(0f, yMin - a.y),
+                    IsDoor = isDoor,
+                });
+            }
+        }
+
+        /// <summary>Profile outline of an opening's extruded solid, in world FILE units; null if mesh-only.</summary>
+        private static List<Vector3> OpeningWorldCorners(Ctx c, int openingId)
+        {
+            var oa = c.F.Args(openingId);
+            if (oa == null || oa.Count < 7) return null;
+            var place = Placement(c, oa[5]);
+            int solid = ResolveExtruded(c, FindRepresentation(c, oa[6], "Body"), out var extra);
+            if (solid == 0) return null;
+            var sa = c.F.Args(solid);
+            var local = ProfileOutline(c, sa[0]);
+            if (local == null || local.Count < 3) return null;
+            var m = place * extra * Axis2Placement3D(c, sa[1]);
+            var world = new List<Vector3>(local.Count * 2);
+            // Both extremes of the extrusion matter: for a vertical profile plane the
+            // depth spans the wall thickness, but nothing in IFC forbids the opposite.
+            var dir = Direction(c, sa[2]) * sa[3].AsFloat;
+            foreach (var p in local)
+            {
+                world.Add(m.MultiplyPoint3x4(p));
+                world.Add(m.MultiplyPoint3x4(p + dir));
+            }
+            return world;
         }
 
         // ---------------------------------------------------------------- columns
@@ -237,8 +475,70 @@ namespace RoomPlanner.Core.Ifc
                     u.y = slab.Level;
                     slab.Outline.Add(u);
                 }
+
+                // Holes: inner profile curves…
+                foreach (var ring in ProfileVoidRings(c, sa[0]))
+                    AddHoleRing(c, slab, m, ring);
+                // …and IfcOpeningElements voiding this slab (how Revit writes stairwells).
+                if (c.VoidsOfElement.TryGetValue(id, out var voidIds))
+                    foreach (int openingId in voidIds)
+                    {
+                        var hole = OpeningRing(c, openingId, out var mo);
+                        if (hole == null) { b.SkippedOpenings++; continue; }
+                        AddHoleRing(c, slab, mo, hole);
+                    }
+
                 b.Slabs.Add(slab);
             }
+        }
+
+        private static void AddHoleRing(Ctx c, ImportedSlab slab, Matrix4x4 m, List<Vector3> localRing)
+        {
+            var ring = new List<Vector3>(localRing.Count);
+            foreach (var p in localRing)
+            {
+                var u = ToUnity(c, m.MultiplyPoint3x4(p));
+                u.y = slab.Level;                       // holes are vertical cuts — project to the top
+                ring.Add(u);
+            }
+            slab.Holes.Add(ring);
+        }
+
+        /// <summary>Inner rings of an IFCARBITRARYPROFILEDEFWITHVOIDS profile (empty otherwise).</summary>
+        private static List<List<Vector3>> ProfileVoidRings(Ctx c, StepValue profileRef)
+        {
+            var rings = new List<List<Vector3>>();
+            if (profileRef.Kind != StepKind.Ref
+                || c.F.TypeOf(profileRef.Ref) != "IFCARBITRARYPROFILEDEFWITHVOIDS") return rings;
+            var profile = c.F.Args(profileRef.Ref);
+            if (profile == null || profile.Count < 4 || profile[3].Kind != StepKind.List) return rings;
+            foreach (var curveRef in profile[3].Items)
+            {
+                if (curveRef.Kind != StepKind.Ref || c.F.TypeOf(curveRef.Ref) != "IFCPOLYLINE") continue;
+                var pts = new List<Vector3>();
+                foreach (var ptRef in c.F.Args(curveRef.Ref)[0].Items)
+                    pts.Add(Point(c, ptRef));
+                if (pts.Count > 1 && (pts[0] - pts[pts.Count - 1]).sqrMagnitude < 1e-6f)
+                    pts.RemoveAt(pts.Count - 1);
+                if (pts.Count >= 3) rings.Add(pts);
+            }
+            return rings;
+        }
+
+        /// <summary>Ordered profile ring of an opening's solid + its full world matrix (file units).</summary>
+        private static List<Vector3> OpeningRing(Ctx c, int openingId, out Matrix4x4 m)
+        {
+            m = Matrix4x4.identity;
+            var oa = c.F.Args(openingId);
+            if (oa == null || oa.Count < 7) return null;
+            var place = Placement(c, oa[5]);
+            int solid = ResolveExtruded(c, FindRepresentation(c, oa[6], "Body"), out var extra);
+            if (solid == 0) return null;
+            var sa = c.F.Args(solid);
+            var ring = ProfileOutline(c, sa[0]);
+            if (ring == null || ring.Count < 3) return null;
+            m = place * extra * Axis2Placement3D(c, sa[1]);
+            return ring;
         }
 
         private static List<Vector3> ProfileOutline(Ctx c, StepValue profileRef)

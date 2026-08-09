@@ -90,7 +90,12 @@ namespace RoomPlanner.Tests.Play
                 Path = { new Vector3(2f, 3f, 2f), new Vector3(2.3f, 3f, 2f) },
                 Thickness = 0.3f, Height = 3f, StoreyIndex = 1, FromColumn = true,
             });
-            b.Slabs.Add(new ImportedSlab
+            b.Openings.Add(new ImportedOpening
+            {
+                WallIndex = 0, AlongFraction = 0.5f,
+                Width = 0.9f, Height = 2.1f, Sill = 0f, IsDoor = true,
+            });
+            var slab = new ImportedSlab
             {
                 Outline =
                 {
@@ -98,6 +103,16 @@ namespace RoomPlanner.Tests.Play
                     new Vector3(5f, 0f, 5f), new Vector3(0f, 0f, 5f),
                 },
                 Thickness = 0.2f, Level = 0f, StoreyIndex = 0,
+            };
+            slab.Holes.Add(new List<Vector3>
+            {
+                new(2f, 0f, 2f), new(3f, 0f, 2f), new(3f, 0f, 3f), new(2f, 0f, 3f),
+            });
+            b.Slabs.Add(slab);
+            b.Stairs.Add(new ImportedStair
+            {
+                Base = new Vector3(1f, 0f, 1f), YawDeg = 0f, Width = 1f,
+                Risers = 3, RiserHeight = 0.2f, TreadDepth = 0.25f, StoreyIndex = 0,
             });
             return b;
         }
@@ -115,8 +130,18 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(0.15f, seg.Thickness, 1e-4);
             Assert.AreEqual(WallOffsetMode.Center, seg.Offset, "IFC axis is the centerline");
             Assert.IsTrue(walls.IsVisible(seg), "the view is alive and shown");
-            Assert.AreEqual(1, Object.FindObjectsByType<Floor>(FindObjectsSortMode.None).Length);
-            StringAssert.Contains("2w 1s", import.Status);
+            Assert.AreEqual(1, seg.Openings.Count, "the door landed on the graph segment as data");
+            Assert.AreEqual(0.9f, seg.Openings[0].Width, 1e-4);
+
+            var slabs = Object.FindObjectsByType<Floor>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, slabs.Length);
+            Assert.AreEqual(1, slabs[0].Holes.Count, "the stairwell hole was cut");
+
+            var stairs = Object.FindObjectsByType<RoomPlanner.Stairs.Stair>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, stairs.Length, "the flight became a parametric Stair");
+            Assert.AreEqual(3, stairs[0].Risers);
+
+            StringAssert.Contains("2w 1s 1o 1h 1st", import.Status);
         }
 
         [UnityTest]

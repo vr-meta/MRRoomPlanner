@@ -43,6 +43,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private float angleStep = 15f;    // degrees
         [SerializeField] private float level = 0f;         // working floor level Y (storeys); Quest floor ≈ 0
         [SerializeField] private bool scanOn = true;       // show/hide the scanned room mesh (EffectMesh)
+        [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -159,7 +160,8 @@ namespace RoomPlanner.Tools
                     var delta = BuildingNav.TeleportDelta(point, head);
                     sceneModel.History.Execute(new TeleportCommand(
                         GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
-                        TeleportCommand.CollectFloors(), delta));
+                        TeleportCommand.CollectFloors(), delta,
+                        TeleportCommand.CollectStairs()));
                     input.Pulse(0.4f, 0.02f);
                 }
             }
@@ -246,7 +248,7 @@ namespace RoomPlanner.Tools
         // Virtual Home primitives (prefabs spawned under MRUK anchors). Renderers+colliders are
         // toggled under anchors (not the anchor objects) so MRUK internals keep working.
         // Reflection by type name — no hard MRUK assembly dependency.
-        private static void SetScan(bool on)
+        private void SetScan(bool on)
         {
             // FindObjectsInactive.Include: a hidden EffectMesh is inactive — without it the
             // toggle could switch the scan off but never back on.
@@ -264,6 +266,50 @@ namespace RoomPlanner.Tools
                     foreach (var c in mb.GetComponentsInChildren<Collider>(true)) c.enabled = on;
                 }
             }
+            ApplyEnvironment(on);
+        }
+
+        private GameObject _ground;
+
+        /// <summary>
+        /// Scan OFF now also leaves passthrough: the model stands on a virtual ground in a
+        /// plain sky — the "came to design from a plan, not to scan a room" mode
+        /// (docs/design/18-ifc-import.md I10). Scan ON restores passthrough MR.
+        /// </summary>
+        private void ApplyEnvironment(bool on)
+        {
+            foreach (var layer in FindObjectsByType<OVRPassthroughLayer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                layer.enabled = on;
+
+            var cam = Camera.main;
+            if (cam != null)
+            {
+                if (on)
+                {
+                    cam.clearFlags = CameraClearFlags.SolidColor;
+                    cam.backgroundColor = Color.clear;               // passthrough shows through
+                }
+                else if (RenderSettings.skybox != null)
+                {
+                    cam.clearFlags = CameraClearFlags.Skybox;
+                }
+                else
+                {
+                    cam.clearFlags = CameraClearFlags.SolidColor;
+                    cam.backgroundColor = new Color(0.13f, 0.18f, 0.24f, 1f);   // calm dusk blue
+                }
+            }
+
+            if (!on && _ground == null && groundMat != null)
+            {
+                _ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+                _ground.name = "VirtualGround";
+                // just under Level 0 so slab tops never z-fight with it
+                _ground.transform.position = new Vector3(0f, -0.02f, 0f);
+                _ground.transform.localScale = new Vector3(30f, 1f, 30f);       // 300 × 300 m
+                _ground.GetComponent<Renderer>().sharedMaterial = groundMat;
+            }
+            if (_ground != null) _ground.SetActive(!on);
         }
 
         public void SetActiveTool(int index)

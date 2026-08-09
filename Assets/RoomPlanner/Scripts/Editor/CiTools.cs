@@ -70,6 +70,8 @@ namespace RoomPlanner.EditorTools
                     .ToArray();
                 if (scenes.Length == 0) scenes = new[] { ScenePath };
 
+                ExcludeDuplicateOpenXRLoaders();
+
                 var opts = new BuildPlayerOptions
                 {
                     scenes = scenes,
@@ -99,6 +101,27 @@ namespace RoomPlanner.EditorTools
                 Debug.LogError($"[CI] BuildAndroid failed: {e}");
                 // Exit only headless — from the GUI menu this would close the Editor.
                 if (Application.isBatchMode) EditorApplication.Exit(1);
+            }
+        }
+
+        /// <summary>
+        /// Keep exactly ONE libopenxr_loader.so in the APK — OVRPlugin's. Meta's own
+        /// build preprocessor (OVRGradleGeneration) does this when its MetaXRFeature gate
+        /// fires, but in a freshly imported Library (new worktree) the gate silently
+        /// misses and Gradle dies on the duplicate in mergeReleaseNativeLibs. Same
+        /// delegate as Meta sets → idempotent when both run.
+        /// </summary>
+        private static void ExcludeDuplicateOpenXRLoaders()
+        {
+            foreach (var importer in PluginImporter.GetAllImporters())
+            {
+                string p = importer.assetPath;
+                if (p.Contains("OVRPlugin")) continue;   // the loader that must win
+                if (p.Contains("libopenxr_loader.so") || p.Contains("openxr_loader.aar"))
+                {
+                    Debug.Log($"[CI] excluding duplicate OpenXR loader: {p}");
+                    importer.SetIncludeInBuildDelegate(path => false);
+                }
             }
         }
 

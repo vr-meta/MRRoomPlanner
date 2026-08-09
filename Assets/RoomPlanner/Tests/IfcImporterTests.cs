@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
@@ -46,15 +47,17 @@ namespace RoomPlanner.Tests
         public void ImportsWallsWithAxisThicknessHeight()
         {
             var walls = Building.Walls.Where(w => !w.FromColumn).ToList();
-            Assert.AreEqual(2, walls.Count);
+            Assert.AreEqual(3, walls.Count);
             Assert.AreEqual(0, Building.SkippedWalls);
             foreach (var w in walls)
-            {
                 Assert.AreEqual(2, w.Path.Count);
-                Assert.AreEqual(0.15f, w.Thickness, 1e-4, "thickness from material layers");
-                Assert.AreEqual(3.0f, w.Height, 1e-4, "height from extrusion depth");
-                Assert.AreEqual(0, w.StoreyIndex, "both fixture walls sit on L1");
-            }
+
+            // two Generic-150 walls (3 m) and one low Generic-125 partition (1.975 m)
+            Assert.AreEqual(2, walls.Count(w =>
+                Mathf.Abs(w.Thickness - 0.15f) < 1e-4 && Mathf.Abs(w.Height - 3f) < 1e-4));
+            Assert.AreEqual(1, walls.Count(w =>
+                Mathf.Abs(w.Thickness - 0.125f) < 1e-4 && Mathf.Abs(w.Height - 1.975f) < 1e-4),
+                "thickness comes from the material layers, height from the extrusion");
         }
 
         [Test]
@@ -85,7 +88,7 @@ namespace RoomPlanner.Tests
         [Test]
         public void ImportsSlabOutlines()
         {
-            Assert.AreEqual(2, Building.Slabs.Count);
+            Assert.AreEqual(3, Building.Slabs.Count);
             Assert.AreEqual(0, Building.SkippedSlabs);
             foreach (var slab in Building.Slabs)
             {
@@ -94,6 +97,82 @@ namespace RoomPlanner.Tests
                 foreach (var p in slab.Outline)
                     Assert.AreEqual(slab.Level, p.y, 1e-4, "outline sits on the top plane");
             }
+        }
+
+        [Test]
+        public void ImportsSlabHolesFromOpeningElements()
+        {
+            // Two voided slabs: #125193 (stairwell 2225 × 2100) and #154113 (4569 × 2101).
+            var holed = Building.Slabs.Where(s => s.Holes.Count > 0).ToList();
+            Assert.AreEqual(2, holed.Count);
+            foreach (var slab in holed)
+            {
+                Assert.AreEqual(1, slab.Holes.Count);
+                Assert.AreEqual(4, slab.Holes[0].Count);
+                foreach (var p in slab.Holes[0])
+                    Assert.AreEqual(slab.Level, p.y, 1e-4, "hole ring lives on the top plane");
+            }
+
+            (float lo, float hi) Extents(List<Vector3> ring) =>
+                (Mathf.Min(ring.Max(p => p.x) - ring.Min(p => p.x), ring.Max(p => p.z) - ring.Min(p => p.z)),
+                 Mathf.Max(ring.Max(p => p.x) - ring.Min(p => p.x), ring.Max(p => p.z) - ring.Min(p => p.z)));
+            Assert.IsTrue(holed.Any(s =>
+            {
+                var (lo, hi) = Extents(s.Holes[0]);
+                return Mathf.Abs(lo - 2.1f) < 1e-3 && Mathf.Abs(hi - 2.225f) < 1e-3;
+            }), "the stairwell hole");
+            Assert.IsTrue(holed.Any(s =>
+            {
+                var (lo, hi) = Extents(s.Holes[0]);
+                return Mathf.Abs(lo - 2.101f) < 1e-3 && Mathf.Abs(hi - 4.569f) < 1e-3;
+            }), "the terrace void");
+        }
+
+        [Test]
+        public void ImportsStairFlightAsParameters()
+        {
+            // Flight #25653: 13 risers / 12 treads, sizes written by Revit in feet.
+            Assert.AreEqual(1, Building.Stairs.Count);
+            Assert.AreEqual(0, Building.SkippedStairs);
+            var s = Building.Stairs[0];
+            Assert.AreEqual(13, s.Risers);
+            Assert.AreEqual(0.175f, s.RiserHeight, 1e-3, "0.5741 ft → 175 mm");
+            Assert.AreEqual(0.275f, s.TreadDepth, 1e-3, "0.9022 ft → 275 mm");
+            Assert.IsTrue(s.Width > 0.7f && s.Width < 2f, $"plausible flight width, got {s.Width}");
+        }
+
+        [Test]
+        public void ImportsDoorAndWindowOpenings()
+        {
+            // Wall #481 hosts a passage door; wall #189 an exterior door AND a window.
+            Assert.AreEqual(3, Building.Openings.Count);
+            Assert.AreEqual(0, Building.SkippedOpenings);
+            Assert.AreEqual(2, Building.Openings.Count(o => o.IsDoor));
+
+            string dump = string.Join("; ", Building.Openings.Select(o =>
+                $"{(o.IsDoor ? "door" : "win")} w={o.Width:0.###} h={o.Height:0.###} " +
+                $"sill={o.Sill:0.###} at={o.AlongFraction:0.###} wall={o.WallIndex}"));
+
+            // Passage door 700 × 2100 near the far end of the 2.02 m partition #481.
+            var door = Building.Openings.FirstOrDefault(o => o.IsDoor && Mathf.Abs(o.Width - 0.7f) < 1e-2);
+            Assert.IsNotNull(door, $"no 0.7 m door among: {dump}");
+            Assert.AreEqual(2.1f, door.Height, 1e-3);
+            Assert.AreEqual(0f, door.Sill, 1e-3, "doors start at the wall base");
+            Assert.AreEqual(0.802f, door.AlongFraction, 5e-3);
+            var host = Building.Walls[door.WallIndex];
+            Assert.AreEqual(2.02f, Vector3.Distance(host.Path[0], host.Path[1]), 1e-3);
+
+            // Exterior door leaf is 750 × 2000 (#64874), but its ROUGH OPENING — what we
+            // import — is cut 850 × 2100 (frame + clearances). We model the opening.
+            var exterior = Building.Openings.FirstOrDefault(o => o.IsDoor && Mathf.Abs(o.Width - 0.85f) < 1e-2);
+            Assert.IsNotNull(exterior, $"no 0.85 m door opening among: {dump}");
+            Assert.AreEqual(2.1f, exterior.Height, 1e-2);
+
+            // Double-hung window 310 × 2100 in wall #189.
+            var window = Building.Openings.Single(o => !o.IsDoor);
+            Assert.AreEqual(0.31f, window.Width, 1e-3);
+            Assert.AreEqual(2.1f, window.Height, 1e-3);
+            Assert.IsTrue(window.AlongFraction > 0f && window.AlongFraction < 1f);
         }
 
         [Test]

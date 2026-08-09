@@ -29,6 +29,7 @@ namespace RoomPlanner.Editing
         private Wall _wall;
         private Floor _floor;
         private Measurement _measurement;
+        private RoomPlanner.Stairs.Stair _stair;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -62,8 +63,10 @@ namespace RoomPlanner.Editing
             _wall = GetComponent<Wall>();
             _floor = GetComponent<Floor>();
             _measurement = GetComponent<Measurement>();
+            _stair = GetComponent<RoomPlanner.Stairs.Stair>();
             if (_wall != null) _kind = SelectableKind.Wall;
             else if (_floor != null) _kind = SelectableKind.Floor;
+            else if (_stair != null) _kind = SelectableKind.Stair;
             else _kind = SelectableKind.Measurement;
             _settingsProvider = GetComponent<ISettingsProvider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
@@ -145,6 +148,7 @@ namespace RoomPlanner.Editing
             Resolve();
             if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
+            else if (_stair != null) _stair.MoveBy(delta);
             else if (_measurement != null) _measurement.MoveBy(delta);
         }
 
@@ -162,6 +166,10 @@ namespace RoomPlanner.Editing
             {
                 case SelectableKind.Wall:
                     return $"Length {WallLength() * 100f:0} cm";
+                case SelectableKind.Stair:
+                    return _stair != null
+                        ? $"{_stair.Risers} steps, {_stair.TotalHeight * 100f:0} cm up"
+                        : "Stair";
                 case SelectableKind.Floor:
                     if (_floor != null)
                     {

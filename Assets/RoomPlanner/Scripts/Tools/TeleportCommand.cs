@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Floors;
+using RoomPlanner.Stairs;
 using RoomPlanner.Walls;
 
 namespace RoomPlanner.Tools
@@ -17,12 +18,15 @@ namespace RoomPlanner.Tools
     {
         private readonly WallGraphRenderer _walls;
         private readonly List<Floor> _floors;
+        private readonly List<Stair> _stairs;
         private readonly Vector3 _delta;
 
-        public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta)
+        public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
+            List<Stair> stairs = null)
         {
             _walls = walls;
             _floors = floors;
+            _stairs = stairs;
             _delta = delta;
         }
 
@@ -42,6 +46,9 @@ namespace RoomPlanner.Tools
             if (_floors != null)
                 foreach (var f in _floors)
                     if (f != null) f.MoveBy(d);
+            if (_stairs != null)
+                foreach (var s in _stairs)
+                    if (s != null) s.MoveBy(d);
         }
 
         /// <summary>
@@ -54,6 +61,15 @@ namespace RoomPlanner.Tools
             var list = new List<Floor>();
             foreach (var f in Object.FindObjectsByType<Floor>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (f.Outline.Count >= 3) list.Add(f);
+            return list;
+        }
+
+        /// <summary>Every stair flight, hidden ones included — same rule as slabs.</summary>
+        public static List<Stair> CollectStairs()
+        {
+            var list = new List<Stair>();
+            foreach (var s in Object.FindObjectsByType<Stair>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (s.Risers > 0) list.Add(s);
             return list;
         }
     }

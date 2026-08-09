@@ -41,6 +41,14 @@ namespace RoomPlanner.EditorTools
             // BlueprintController replaces the texture as soon as a plan is loaded.
             ctx.FloorMat = CreateFloorMat("Floor_Top", new Color(0.78f, 0.78f, 0.76f), concreteTex);
 
+            // virtual ground for the scan-off mode (design/18 I10) — muted, not attention-grabbing
+            ctx.GroundMat = CreateMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
+
+            // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
+            ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
+            // stairs share the concrete look of walls/floors until painting lands
+            ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
+
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
             ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);
