@@ -123,7 +123,9 @@ namespace RoomPlanner.Tools
             RaycastHit hit = default;
             // ANY hit on the menu layer blocks the scene tools — panel backgrounds carry
             // colliders too, so the trigger can't shoot through the gaps between buttons.
-            bool overMenu = Physics.Raycast(ray, out hit, 10f, 1 << MenuLayer, QueryTriggerInteraction.Ignore);
+            // 1.2 m limit: menus live at arm's length; a menu collider far across the room
+            // must not silently freeze the active tool (design/16 P1.2).
+            bool overMenu = Physics.Raycast(ray, out hit, 1.2f, 1 << MenuLayer, QueryTriggerInteraction.Ignore);
             if (overMenu)
             {
                 mb = hit.collider.GetComponentInParent<MenuButton>();
