@@ -71,6 +71,16 @@ namespace RoomPlanner.Floors
         }
 
         /// <summary>
+        /// Re-apply the blueprint placement WITHOUT touching the shape. Rebuilding through the
+        /// two-corner API would flatten a polygonal slab into its bounding box.
+        /// </summary>
+        public void SetPlanPlacement(float planScale, float planRotationDeg, float planOriginX, float planOriginZ)
+        {
+            BuildOutline(new List<Vector3>(_outline), Level, _thickness,
+                planScale, planRotationDeg, planOriginX, planOriginZ);
+        }
+
+        /// <summary>
         /// Move ONE outline corner (vertex editing, step C4). The caller owns undo.
         /// </summary>
         public void MoveCorner(int index, Vector3 position)

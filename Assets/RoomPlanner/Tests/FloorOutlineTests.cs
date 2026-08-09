@@ -225,6 +225,24 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void SetPlanPlacement_KeepsTheShape()
+        {
+            // Regression: re-applying the blueprint used to go through the two-corner Build(),
+            // which flattened a polygonal slab into its bounding box the moment the plan moved.
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.BuildOutline(LShape(), 0f, Thick, 5f, 0f, 0f, 0f);
+
+                floor.SetPlanPlacement(3f, 30f, 1f, 2f);
+
+                Assert.AreEqual(6, floor.Outline.Count, "the L must not become a rectangle");
+                Assert.AreEqual(14f, floor.Area, 1e-3f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
         public void Rebuild_KeepsTheOutline()
         {
             var floor = MakeFloor(out var go);
