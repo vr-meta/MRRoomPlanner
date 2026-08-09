@@ -2,6 +2,7 @@ using UnityEngine;
 using RoomPlanner.Measure;
 using RoomPlanner.Walls;
 using RoomPlanner.Floors;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.Tools
 {
@@ -20,6 +21,8 @@ namespace RoomPlanner.Tools
         [SerializeField] private Transform reticle;
         [SerializeField] private ToolMenu menu;
         [SerializeField] private InspectorPanel inspector;
+        [SerializeField] private SceneModel sceneModel;
+        [SerializeField] private SelectController select;
         [SerializeField] private MeasureController measure;
         [SerializeField] private WallController wall;
         [SerializeField] private FloorController floor;
@@ -60,19 +63,26 @@ namespace RoomPlanner.Tools
 
         public void NudgePlan(float dx, float dz) { planOffsetX += dx; planOffsetZ += dz; }
 
-        private enum Tool { Measure, Wall, Floor }
-        private Tool _active = Tool.Measure;
+        // Tool codes (must match ToolMenu.Refresh / InspectorPanel.ShowFor): 0 Select, 1 Measure, 2 Wall, 3 Floor.
+        private enum Tool { Select, Measure, Wall, Floor }
+        private Tool _active = Tool.Select;
 
-        private ITool ActiveTool() =>
-            _active == Tool.Measure ? (ITool)measure : _active == Tool.Wall ? wall : floor;
+        private ITool ActiveTool() => _active switch
+        {
+            Tool.Select => (ITool)select,
+            Tool.Measure => measure,
+            Tool.Wall => wall,
+            _ => floor
+        };
 
         private void Start()
         {
-            Debug.Log($"[Tools] v9 started. measure={(measure != null)} wall={(wall != null)} floor={(floor != null)} inspector={(inspector != null)}");
+            Debug.Log($"[Tools] v10 started. select={(select != null)} measure={(measure != null)} wall={(wall != null)} floor={(floor != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
+            if (measure != null) measure.OnDeactivate();
             if (wall != null) wall.OnDeactivate();
             if (floor != null) floor.OnDeactivate();
-            if (measure != null) measure.OnActivate();
-            _active = Tool.Measure;
+            if (select != null) select.OnActivate();
+            _active = Tool.Select;
             RefreshMenu();
         }
 
@@ -82,6 +92,13 @@ namespace RoomPlanner.Tools
         private void Update()
         {
             if (pointer == null || input == null) return;
+
+            // Global Undo/Redo (X/Y) — works regardless of the active tool.
+            if (sceneModel != null)
+            {
+                if (input.UndoPressed()) { sceneModel.History.Undo(); RefreshMenu(); }
+                else if (input.RedoPressed()) { sceneModel.History.Redo(); RefreshMenu(); }
+            }
 
             Ray ray = pointer.GetRay();
             MenuButton mb = null;
@@ -122,6 +139,7 @@ namespace RoomPlanner.Tools
         {
             switch (a)
             {
+                case MenuAction.SelectTool: SetActive(Tool.Select); break;
                 case MenuAction.SelectMeasure: SetActive(Tool.Measure); break;
                 case MenuAction.SelectWall: SetActive(Tool.Wall); break;
                 case MenuAction.SelectFloor: SetActive(Tool.Floor); break;
@@ -168,6 +186,9 @@ namespace RoomPlanner.Tools
             RefreshMenu();
         }
 
+        /// <summary>Public hook for the Select tool to refresh the inspector when selection changes.</summary>
+        public void RefreshInspector() => RefreshMenu();
+
         private void RefreshMenu()
         {
             if (menu != null)
@@ -176,7 +197,9 @@ namespace RoomPlanner.Tools
             {
                 inspector.RefreshValues(wallThickness, wallHeight, angleStep, level, planScale,
                     OffsetName(), JoinName(), PlaceName());
-                inspector.ShowFor((int)_active);
+                bool hasSel = select != null && select.HasSelection;
+                if (select != null) inspector.SetSelection(select.SelectionTitle, select.SelectionInfo);
+                inspector.ShowFor((int)_active, hasSel);
             }
         }
 

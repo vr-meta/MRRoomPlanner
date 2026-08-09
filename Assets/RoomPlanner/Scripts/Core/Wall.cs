@@ -39,7 +39,15 @@ namespace RoomPlanner.Walls
         private MeshFilter _mf;
         private Mesh _mesh;
         private Mesh _edges;
+        private MeshCollider _collider;
         private readonly List<Vector3> _pts = new();
+
+        // Cached build parameters so the wall can rebuild itself after edits (move/vertex drag).
+        private float _thickness = 0.2f;
+        private float _height = 2.7f;
+        private WallOffsetMode _mode = WallOffsetMode.Outer;
+        private WallJoin _join = WallJoin.Miter;
+        private Vector3 _interior;
 
         public IReadOnlyList<Vector3> Points => _pts;
 
@@ -56,6 +64,11 @@ namespace RoomPlanner.Walls
                 _edges = new Mesh { name = "WallEdges" };
                 edgesFilter.sharedMesh = _edges;
             }
+            if (_collider == null)
+            {
+                _collider = GetComponent<MeshCollider>();
+                if (_collider == null) _collider = gameObject.AddComponent<MeshCollider>();
+            }
         }
 
         public void Build(List<Vector3> centerline, float thickness, float height,
@@ -64,9 +77,10 @@ namespace RoomPlanner.Walls
             Ensure();
             _pts.Clear();
             _pts.AddRange(centerline);
+            _thickness = thickness; _height = height; _mode = mode; _join = join; _interior = interior;
             _mesh.Clear();
             if (_edges != null) _edges.Clear();
-            if (_pts.Count < 2) return;
+            if (_pts.Count < 2) { if (_collider != null) _collider.sharedMesh = null; return; }
 
             float dOut, dIn;
             switch (mode)
@@ -78,6 +92,21 @@ namespace RoomPlanner.Walls
 
             List<Cross> sections = BuildFootprint(_pts, dOut, dIn, OutwardSign(_pts, interior), join);
             Triangulate(sections, height);
+        }
+
+        /// <summary>Rebuild the mesh from the current centerline and cached parameters.</summary>
+        public void Rebuild()
+        {
+            var pts = new List<Vector3>(_pts);
+            Build(pts, _thickness, _height, _mode, _join, _interior);
+        }
+
+        /// <summary>Translate the whole wall (centerline + interior reference) and rebuild in place.</summary>
+        public void MoveBy(Vector3 delta)
+        {
+            for (int i = 0; i < _pts.Count; i++) _pts[i] += delta;
+            _interior += delta;
+            Rebuild();
         }
 
         // ---- footprint (cross-sections along the centerline) ----
@@ -232,6 +261,13 @@ namespace RoomPlanner.Walls
             _mesh.SetTriangles(tris, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
+
+            if (_collider != null)
+            {
+                // reassign to force the physics mesh to refresh
+                _collider.sharedMesh = null;
+                _collider.sharedMesh = _mesh;
+            }
 
             if (_edges != null)
             {

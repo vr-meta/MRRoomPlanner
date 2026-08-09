@@ -4,6 +4,7 @@ using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Measure;
 using RoomPlanner.Tools;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.Floors
 {
@@ -20,6 +21,7 @@ namespace RoomPlanner.Floors
         [SerializeField] private Floor floorPrefab;
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
+        [SerializeField] private SceneModel sceneModel;
         [SerializeField] private Material planMaterial;   // shared floor-top material; receives the plan texture
         [SerializeField] private float offsetSpeed = 0.6f; // m/s of plan nudging via stick
 
@@ -91,6 +93,7 @@ namespace RoomPlanner.Floors
         {
             var f = Instantiate(floorPrefab, transform);
             _floors.Add(f);
+            if (sceneModel != null) sceneModel.Register(f.GetComponent<Selectable>());
             f.Build(a, b, level, Thickness(), Scale(), OffX(), OffZ());
         }
 
@@ -108,7 +111,11 @@ namespace RoomPlanner.Floors
             if (_floors.Count == 0) return;
             var f = _floors[_floors.Count - 1];
             _floors.RemoveAt(_floors.Count - 1);
-            if (f != null) Destroy(f.gameObject);
+            if (f != null)
+            {
+                if (sceneModel != null) sceneModel.Unregister(f.GetComponent<Selectable>());
+                Destroy(f.gameObject);
+            }
         }
 
         private void DrawRect(Vector3 a, Vector3 b, float level)

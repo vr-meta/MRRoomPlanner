@@ -11,6 +11,7 @@ namespace RoomPlanner.Tools
     {
         [SerializeField] private Transform follow;                 // left controller
         [SerializeField] private Vector3 followOffset = new Vector3(0f, 0.10f, 0f);
+        [SerializeField] private MenuButton selectBtn;
         [SerializeField] private MenuButton measureBtn;
         [SerializeField] private MenuButton wallBtn;
         [SerializeField] private MenuButton floorBtn;
@@ -31,11 +32,13 @@ namespace RoomPlanner.Tools
             if (_hi != null) _hi.SetHighlight(true);
         }
 
+        // Tool codes: 0 Select, 1 Measure, 2 Wall, 3 Floor.
         public void Refresh(int activeTool, bool snapCorner, bool snapEdge, bool snapGrid, bool snapAngle, bool scanOn)
         {
-            if (measureBtn != null) measureBtn.SetActiveTool(activeTool == 0);
-            if (wallBtn != null) wallBtn.SetActiveTool(activeTool == 1);
-            if (floorBtn != null) floorBtn.SetActiveTool(activeTool == 2);
+            if (selectBtn != null) selectBtn.SetActiveTool(activeTool == 0);
+            if (measureBtn != null) measureBtn.SetActiveTool(activeTool == 1);
+            if (wallBtn != null) wallBtn.SetActiveTool(activeTool == 2);
+            if (floorBtn != null) floorBtn.SetActiveTool(activeTool == 3);
             if (snapCornerBtn != null) snapCornerBtn.SetActiveTool(snapCorner);
             if (snapEdgeBtn != null) snapEdgeBtn.SetActiveTool(snapEdge);
             if (snapGridBtn != null) snapGridBtn.SetActiveTool(snapGrid);

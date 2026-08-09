@@ -8,6 +8,7 @@ using RoomPlanner.Measure;
 using RoomPlanner.Tools;
 using RoomPlanner.Walls;
 using RoomPlanner.Floors;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.EditorTools
 {
@@ -22,12 +23,16 @@ namespace RoomPlanner.EditorTools
         private const string MeasurePrefabPath = PrefabDir + "/Measurement.prefab";
         private const string ContPrefabPath = PrefabDir + "/ContinueButton.prefab";
         private const string MatDir = "Assets/RoomPlanner/Materials";
+        private const int SelectableLayer = 6;   // named "Selectable" in TagManager; excluded from the surface raycaster
 
         [MenuItem("RoomPlanner/Setup Measure Rig")]
         public static void SetupMeasureRig()
         {
-            var existing = GameObject.Find("MeasureRig");
-            if (existing != null) Object.DestroyImmediate(existing);
+            // Remove previous rig AND any orphaned menu/inspector from earlier Setups
+            // (they were created as separate roots, so old runs left duplicates → purple/ghosted UI).
+            DestroyAllNamed("MeasureRig");
+            DestroyAllNamed("ToolMenu");
+            DestroyAllNamed("Inspector");
 
             Directory.CreateDirectory(MatDir);
             Directory.CreateDirectory(PrefabDir);
@@ -47,6 +52,8 @@ namespace RoomPlanner.EditorTools
             var pointer = rig.AddComponent<PointerProvider>();
             var input = rig.AddComponent<MeasureInput>();
             var controller = rig.AddComponent<MeasureController>();
+            var sceneModel = rig.AddComponent<SceneModel>();
+            var select = rig.AddComponent<SelectController>();
 
             var reticle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             reticle.name = "Reticle";
@@ -68,6 +75,7 @@ namespace RoomPlanner.EditorTools
             cso.FindProperty("reticle").objectReferenceValue = reticle.transform;
             cso.FindProperty("measurementPrefab").objectReferenceValue = measurePrefab;
             cso.FindProperty("continueButtonPrefab").objectReferenceValue = contPrefab;
+            cso.FindProperty("sceneModel").objectReferenceValue = sceneModel;
             cso.ApplyModifiedProperties();
 
             // ---- Стены + меню инструментов + менеджер ----
@@ -100,6 +108,7 @@ namespace RoomPlanner.EditorTools
             wso.FindProperty("wallPrefab").objectReferenceValue = wallPrefab;
             wso.FindProperty("previewLine").objectReferenceValue = wallPrev;
             wso.FindProperty("manager").objectReferenceValue = manager;
+            wso.FindProperty("sceneModel").objectReferenceValue = sceneModel;
             wso.ApplyModifiedProperties();
 
             // ---- Пол (план-режим) ----
@@ -125,11 +134,15 @@ namespace RoomPlanner.EditorTools
             fso.FindProperty("previewLine").objectReferenceValue = floorPrev;
             fso.FindProperty("manager").objectReferenceValue = manager;
             fso.FindProperty("planMaterial").objectReferenceValue = floorMat;
+            fso.FindProperty("sceneModel").objectReferenceValue = sceneModel;
             fso.ApplyModifiedProperties();
 
             Transform leftAnchor = FindLeftControllerAnchor();
             ToolMenu menu = BuildPalette(panelMat, btnMat, activeMat, leftAnchor);
             InspectorPanel inspector = BuildInspector(panelMat, btnMat, activeMat);
+            // Keep them under the rig so a re-run of Setup cleans them up (no duplicates).
+            menu.transform.SetParent(rig.transform, true);
+            inspector.transform.SetParent(rig.transform, true);
 
             var mgrSo = new SerializedObject(manager);
             mgrSo.FindProperty("pointer").objectReferenceValue = pointer;
@@ -137,6 +150,8 @@ namespace RoomPlanner.EditorTools
             mgrSo.FindProperty("reticle").objectReferenceValue = reticle.transform;
             mgrSo.FindProperty("menu").objectReferenceValue = menu;
             mgrSo.FindProperty("inspector").objectReferenceValue = inspector;
+            mgrSo.FindProperty("sceneModel").objectReferenceValue = sceneModel;
+            mgrSo.FindProperty("select").objectReferenceValue = select;
             mgrSo.FindProperty("measure").objectReferenceValue = controller;
             mgrSo.FindProperty("wall").objectReferenceValue = wall;
             mgrSo.FindProperty("floor").objectReferenceValue = floor;
@@ -146,21 +161,28 @@ namespace RoomPlanner.EditorTools
             cso2.FindProperty("manager").objectReferenceValue = manager;
             cso2.ApplyModifiedProperties();
 
+            var selSo = new SerializedObject(select);
+            selSo.FindProperty("pointer").objectReferenceValue = pointer;
+            selSo.FindProperty("input").objectReferenceValue = input;
+            selSo.FindProperty("sceneModel").objectReferenceValue = sceneModel;
+            selSo.FindProperty("reticle").objectReferenceValue = reticle.transform;
+            selSo.FindProperty("manager").objectReferenceValue = manager;
+            selSo.ApplyModifiedProperties();
+
             TryEnableEffectMeshColliders();
 
             Selection.activeGameObject = rig;
             EditorSceneManager.MarkSceneDirty(rig.scene);
 
             EditorUtility.DisplayDialog("Tools Rig",
-                "Rebuilt (URP): measure + walls + floor. NEW UI (Phase 1):\n" +
-                "  • Left-hand PALETTE = tool type (Meas/Wall/Floor) + snap toggles (Cor/Edg/Grd/Ang/Scan).\n" +
-                "  • Floating INSPECTOR (appears for Walls/Floor; none for Measure) holds that tool's settings;\n" +
-                "    grab its title bar with GRIP to move/park it. Steppers/cycles via right-ray + trigger.\n" +
-                "Floor tool: 2 corners → slab at Level (Thk). Plan image = plan.png in app folder;\n" +
-                "  Plan scale in inspector, right stick moves it.\n" +
+                "Rebuilt (URP): SELECT + measure + walls + floor. Phase A (editing) added:\n" +
+                "  • Left-hand PALETTE = tool type (Sel/Meas/Wall/Floor) + snap toggles (Cor/Edg/Grd/Ang/Scan).\n" +
+                "  • SELECT tool (default): point at a wall/floor/measurement + trigger to select; hold trigger\n" +
+                "    to drag it on the ground plane; B = delete; X = undo, Y = redo. Inspector shows the picked object.\n" +
+                "  • Floating INSPECTOR holds Wall/Floor settings; grip its title bar to move it.\n" +
+                "Floor tool: 2 corners → slab at Level (Thk). Plan image = plan.png in app folder.\n" +
                 "Measure: trigger = points; '+' at any point = chain; point+trigger = drag; point+B = delete.\n" +
-                "Walls: trigger = centerline points (chain), B = finish. Thickness grows outward.\n" +
-                "Common: mid-air points (depth via stick), grip = axis/angle snap.\n\n" +
+                "Walls: trigger = centerline points (chain), B = finish. Thickness grows outward.\n\n" +
                 "Next: Ctrl+S → Ctrl+B.",
                 "OK");
         }
@@ -234,6 +256,7 @@ namespace RoomPlanner.EditorTools
         {
             var root = new GameObject("Measurement");
             var measurement = root.AddComponent<Measurement>();
+            root.AddComponent<Selectable>();   // stays on the default layer; markers keep their colliders
 
             var lineGo = new GameObject("Line");
             lineGo.transform.SetParent(root.transform, false);
@@ -343,6 +366,7 @@ namespace RoomPlanner.EditorTools
             root.AddComponent<MeshFilter>();
             root.AddComponent<MeshRenderer>().sharedMaterial = mat;
             var wall = root.AddComponent<Wall>();
+            root.AddComponent<Selectable>();
 
             var edges = new GameObject("Edges");
             edges.transform.SetParent(root.transform, false);
@@ -353,6 +377,7 @@ namespace RoomPlanner.EditorTools
             wso.FindProperty("edgesFilter").objectReferenceValue = edgesFilter;
             wso.ApplyModifiedProperties();
 
+            SetLayerRecursively(root, SelectableLayer);   // picked by Select tool, ignored by surface raycaster
             string path = PrefabDir + "/Wall.prefab";
             AssetDatabase.DeleteAsset(path);
             var asset = PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -378,7 +403,9 @@ namespace RoomPlanner.EditorTools
             root.AddComponent<MeshFilter>();
             root.AddComponent<MeshRenderer>().sharedMaterial = mat;
             root.AddComponent<Floor>();
+            root.AddComponent<Selectable>();
 
+            SetLayerRecursively(root, SelectableLayer);   // picked by Select tool, ignored by surface raycaster
             string path = PrefabDir + "/Floor.prefab";
             AssetDatabase.DeleteAsset(path);
             var asset = PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -401,13 +428,15 @@ namespace RoomPlanner.EditorTools
             panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
             panel.GetComponent<Renderer>().sharedMaterial = panelMat;
 
-            var toolS = new Vector2(0.066f, 0.05f);
+            var toolS = new Vector2(0.05f, 0.05f);
+            var selectBtn = MakeMenuButton(root.transform, "BtnSelect", "Sel", MenuAction.SelectTool,
+                new Vector3(-0.087f, 0.045f, 0f), toolS, btnMat, activeMat, true);
             var measureBtn = MakeMenuButton(root.transform, "BtnMeasure", "Meas", MenuAction.SelectMeasure,
-                new Vector3(-0.075f, 0.045f, 0f), toolS, btnMat, activeMat, true);
+                new Vector3(-0.029f, 0.045f, 0f), toolS, btnMat, activeMat, true);
             var wallBtn = MakeMenuButton(root.transform, "BtnWall", "Wall", MenuAction.SelectWall,
-                new Vector3(0f, 0.045f, 0f), toolS, btnMat, activeMat, true);
+                new Vector3(0.029f, 0.045f, 0f), toolS, btnMat, activeMat, true);
             var floorBtn = MakeMenuButton(root.transform, "BtnFloor", "Floor", MenuAction.SelectFloor,
-                new Vector3(0.075f, 0.045f, 0f), toolS, btnMat, activeMat, true);
+                new Vector3(0.087f, 0.045f, 0f), toolS, btnMat, activeMat, true);
 
             var snapSize = new Vector2(0.042f, 0.04f);
             var snapCornerBtn = MakeMenuButton(root.transform, "BtnSnapCorner", "Cor", MenuAction.ToggleSnapCorner,
@@ -423,6 +452,7 @@ namespace RoomPlanner.EditorTools
 
             var so = new SerializedObject(menu);
             if (leftAnchor != null) so.FindProperty("follow").objectReferenceValue = leftAnchor;
+            so.FindProperty("selectBtn").objectReferenceValue = selectBtn;
             so.FindProperty("measureBtn").objectReferenceValue = measureBtn;
             so.FindProperty("wallBtn").objectReferenceValue = wallBtn;
             so.FindProperty("floorBtn").objectReferenceValue = floorBtn;
@@ -433,6 +463,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("scanBtn").objectReferenceValue = scanBtn;
             so.ApplyModifiedProperties();
 
+            root.transform.localScale = Vector3.one * 1.4f; // bigger, readable text
             SetLayerRecursively(root, 2);
             return menu;
         }
@@ -481,10 +512,25 @@ namespace RoomPlanner.EditorTools
             var floorThickLabel = MakeStepperRow(floorGroup.transform, "FThk", "Thickness", MenuAction.ThicknessDown, MenuAction.ThicknessUp, 0.075f, btnMat, activeMat);
             var planLabel = MakeStepperRow(floorGroup.transform, "Plan", "Plan scale", MenuAction.PlanDown, MenuAction.PlanUp, 0.02f, btnMat, activeMat);
 
+            // Selection group (shown by the Select tool when something is picked).
+            var selectionGroup = new GameObject("SelectionGroup");
+            selectionGroup.transform.SetParent(panelRoot.transform, false);
+            var selTitleLabel = MakeValueLabel(selectionGroup.transform, "SelTitle", "Nothing selected",
+                new Vector3(0f, 0.11f, 0f), new Vector2(0.32f, 0.055f));
+            var selInfoLabel = MakeValueLabel(selectionGroup.transform, "SelInfo", "",
+                new Vector3(0f, 0.03f, 0f), new Vector2(0.32f, 0.05f));
+            MakeValueLabel(selectionGroup.transform, "SelHint", "Trigger: select / drag",
+                new Vector3(0f, -0.06f, 0f), new Vector2(0.32f, 0.04f));
+            MakeValueLabel(selectionGroup.transform, "SelHint2", "B: delete    X/Y: undo/redo",
+                new Vector3(0f, -0.12f, 0f), new Vector2(0.32f, 0.04f));
+
             var so = new SerializedObject(inspector);
             so.FindProperty("panelRoot").objectReferenceValue = panelRoot;
             so.FindProperty("wallGroup").objectReferenceValue = wallGroup;
             so.FindProperty("floorGroup").objectReferenceValue = floorGroup;
+            so.FindProperty("selectionGroup").objectReferenceValue = selectionGroup;
+            so.FindProperty("selTitleLabel").objectReferenceValue = selTitleLabel;
+            so.FindProperty("selInfoLabel").objectReferenceValue = selInfoLabel;
             so.FindProperty("thickLabel").objectReferenceValue = thickLabel;
             so.FindProperty("heightLabel").objectReferenceValue = heightLabel;
             so.FindProperty("angleLabel").objectReferenceValue = angleLabel;
@@ -496,6 +542,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("planLabel").objectReferenceValue = planLabel;
             so.ApplyModifiedProperties();
 
+            panelRoot.transform.localScale = Vector3.one * 1.8f; // bigger, readable text
             SetLayerRecursively(root, 2);
             panelRoot.SetActive(false); // shown when a tool with settings becomes active
             return inspector;
@@ -580,10 +627,12 @@ namespace RoomPlanner.EditorTools
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Color.white;
             tmp.enableWordWrapping = false;
-            tmp.rectTransform.sizeDelta = new Vector2(size.x * 0.95f, size.y * 0.95f);
+            // allow text to use the full width of its cell, and keep a high floor so it never
+            // shrinks to unreadable — panels are scaled up on top of this (see Build*).
+            tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             tmp.enableAutoSizing = true;
-            tmp.fontSizeMin = 0.004f;
-            tmp.fontSizeMax = size.y * 0.6f;
+            tmp.fontSizeMin = size.y * 0.5f;
+            tmp.fontSizeMax = size.y * 0.9f;
             return tmp;
         }
 
@@ -591,6 +640,13 @@ namespace RoomPlanner.EditorTools
         {
             go.layer = layer;
             foreach (Transform c in go.transform) SetLayerRecursively(c.gameObject, layer);
+        }
+
+        private static void DestroyAllNamed(string name)
+        {
+            foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (go != null && go.name == name)
+                    Object.DestroyImmediate(go);
         }
 
         private static Transform FindLeftControllerAnchor()

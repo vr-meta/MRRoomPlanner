@@ -3,6 +3,7 @@ using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Measure;
 using RoomPlanner.Tools;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.Walls
 {
@@ -21,6 +22,7 @@ namespace RoomPlanner.Walls
         [SerializeField] private Wall wallPrefab;
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
+        [SerializeField] private SceneModel sceneModel;
         [SerializeField] private float snapDistance = 0.12f;
         [SerializeField] private float angleStepDeg = 15f;   // grip = snap wall direction to 15°
 
@@ -111,6 +113,7 @@ namespace RoomPlanner.Walls
             {
                 _current = Instantiate(wallPrefab, transform);
                 _walls.Add(_current);
+                if (sceneModel != null) sceneModel.Register(_current.GetComponent<Selectable>());
                 _pts.Clear();
                 _interior = Camera.main != null ? Camera.main.transform.position : p; // где стоим = «внутри»
             }
@@ -128,6 +131,7 @@ namespace RoomPlanner.Walls
         {
             if (_current != null && _pts.Count < 2)
             {
+                if (sceneModel != null) sceneModel.Unregister(_current.GetComponent<Selectable>());
                 _walls.Remove(_current);
                 Destroy(_current.gameObject);
             }

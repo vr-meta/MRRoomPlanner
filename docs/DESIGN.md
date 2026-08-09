@@ -15,5 +15,6 @@
 | 08 | [Импорт/экспорт (IFC, DWG, glTF)](design/08-interop.md) |
 | 09 | [Структура проекта: Дом→Этажи→Комнаты, захват и сборка](design/09-project-structure.md) |
 | 10 | [Карта кнопок (controls)](design/10-controls.md) |
+| 11 | [Манипуляции по типам объектов (роадмап редактирования)](design/11-object-operations.md) |
 
 Индекс и порядок реализации — [`docs/design/README.md`](design/README.md).

@@ -15,6 +15,11 @@ namespace RoomPlanner.Tools
         [SerializeField] private GameObject panelRoot;      // toggled visible/hidden
         [SerializeField] private GameObject wallGroup;
         [SerializeField] private GameObject floorGroup;
+        [SerializeField] private GameObject selectionGroup; // shown when the Select tool has a selection
+
+        [Header("Selection labels")]
+        [SerializeField] private TMP_Text selTitleLabel;
+        [SerializeField] private TMP_Text selInfoLabel;
 
         [Header("Wall labels")]
         [SerializeField] private TMP_Text thickLabel;
@@ -34,15 +39,31 @@ namespace RoomPlanner.Tools
         public bool IsShown => panelRoot != null && panelRoot.activeSelf;
         public Transform Panel => panelRoot != null ? panelRoot.transform : transform;
 
-        /// <summary>activeTool: 0 Measure (hide), 1 Walls, 2 Floor.</summary>
-        public void ShowFor(int activeTool)
+        /// <summary>
+        /// Tool codes: 0 Select, 1 Measure, 2 Wall, 3 Floor.
+        /// Select shows the selection group only when something is selected; Measure has no
+        /// settings (hidden); Wall/Floor show their settings group.
+        /// </summary>
+        public void ShowFor(int activeTool, bool hasSelection)
         {
-            bool show = activeTool != 0;
             if (panelRoot == null) return;
+            bool showWall = activeTool == 2;
+            bool showFloor = activeTool == 3;
+            bool showSelection = activeTool == 0 && hasSelection;
+            bool show = showWall || showFloor || showSelection;
+
             if (show && !panelRoot.activeSelf) PlaceInFront();
             panelRoot.SetActive(show);
-            if (wallGroup != null) wallGroup.SetActive(activeTool == 1);
-            if (floorGroup != null) floorGroup.SetActive(activeTool == 2);
+            if (wallGroup != null) wallGroup.SetActive(showWall);
+            if (floorGroup != null) floorGroup.SetActive(showFloor);
+            if (selectionGroup != null) selectionGroup.SetActive(showSelection);
+        }
+
+        /// <summary>Fill the selection group labels (title + one-line description).</summary>
+        public void SetSelection(string title, string info)
+        {
+            if (selTitleLabel != null) selTitleLabel.text = title;
+            if (selInfoLabel != null) selInfoLabel.text = info;
         }
 
         public void RefreshValues(float thickness, float height, float angle, float level, float plan,

@@ -37,6 +37,26 @@ namespace RoomPlanner.Measure
             return OVRInput.GetDown(OVRInput.Button.Two);
         }
 
+        /// <summary>Undo — X (Button.Three, left hand). Editor: Ctrl+Z.</summary>
+        public bool UndoPressed()
+        {
+#if UNITY_EDITOR
+            if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                && Input.GetKeyDown(KeyCode.Z)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.Three);
+        }
+
+        /// <summary>Redo — Y (Button.Four, left hand). Editor: Ctrl+Y.</summary>
+        public bool RedoPressed()
+        {
+#if UNITY_EDITOR
+            if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                && Input.GetKeyDown(KeyCode.Y)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.Four);
+        }
+
         /// <summary>Axis snap (vertical / horizontal) — GRIP held (either hand).</summary>
         public bool SnapHeld()
         {

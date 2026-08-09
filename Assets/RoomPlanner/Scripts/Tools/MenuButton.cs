@@ -24,7 +24,8 @@ namespace RoomPlanner.Tools
         ToggleScan,
         SelectFloor,
         PlanDown,
-        PlanUp
+        PlanUp,
+        SelectTool
     }
 
     /// <summary>

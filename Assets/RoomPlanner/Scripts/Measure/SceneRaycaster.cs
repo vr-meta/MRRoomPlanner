@@ -9,8 +9,9 @@ namespace RoomPlanner.Measure
     /// </summary>
     public class SceneRaycaster : MonoBehaviour
     {
-        [Tooltip("Слои для луча (все, кроме слоя меню = IgnoreRaycast).")]
-        [SerializeField] private LayerMask sceneMask = ~(1 << 2);
+        [Tooltip("Слои для луча поверхности (всё, кроме меню=2 и выбираемой геометрии=6). " +
+                 "Стены/полы выбираются инструментом Select, а не служат поверхностью для рисования.")]
+        [SerializeField] private LayerMask sceneMask = ~((1 << 2) | (1 << 6));
 
         [Tooltip("Максимальная дальность луча, м.")]
         [SerializeField] private float maxDistance = 10f;

@@ -48,6 +48,9 @@ namespace RoomPlanner.Measure
             return t != null ? t.GetComponent<MeasurePointHandle>() : null;
         }
 
+        /// <summary>Translate the whole measurement (both endpoints) — for select-and-move.</summary>
+        public void MoveBy(Vector3 delta) => Set(PointA + delta, PointB + delta);
+
         public void Set(Vector3 a, Vector3 b)
         {
             PointA = a;

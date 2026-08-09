@@ -15,10 +15,17 @@ namespace RoomPlanner.Floors
     {
         private MeshFilter _mf;
         private Mesh _mesh;
+        private MeshCollider _collider;
 
         public Vector3 CornerA { get; private set; }
         public Vector3 CornerB { get; private set; }
         public float Level { get; private set; }
+
+        // Cached build parameters so the slab can rebuild itself after edits (move/resize).
+        private float _thickness = 0.2f;
+        private float _planScale = 5f;
+        private float _planOriginX;
+        private float _planOriginZ;
 
         private void Ensure()
         {
@@ -28,6 +35,21 @@ namespace RoomPlanner.Floors
                 _mesh = new Mesh { name = "FloorMesh" };
                 _mf.sharedMesh = _mesh;
             }
+            if (_collider == null)
+            {
+                _collider = GetComponent<MeshCollider>();
+                if (_collider == null) _collider = gameObject.AddComponent<MeshCollider>();
+            }
+        }
+
+        /// <summary>Rebuild from the current corners/level and cached parameters.</summary>
+        public void Rebuild() => Build(CornerA, CornerB, Level, _thickness, _planScale, _planOriginX, _planOriginZ);
+
+        /// <summary>Translate the whole slab and rebuild in place.</summary>
+        public void MoveBy(Vector3 delta)
+        {
+            Build(CornerA + delta, CornerB + delta, Level + delta.y,
+                _thickness, _planScale, _planOriginX, _planOriginZ);
         }
 
         public void Build(Vector3 a, Vector3 b, float level, float thickness,
@@ -35,11 +57,12 @@ namespace RoomPlanner.Floors
         {
             Ensure();
             CornerA = a; CornerB = b; Level = level;
+            _thickness = thickness; _planScale = planScale; _planOriginX = planOriginX; _planOriginZ = planOriginZ;
             _mesh.Clear();
 
             float minX = Mathf.Min(a.x, b.x), maxX = Mathf.Max(a.x, b.x);
             float minZ = Mathf.Min(a.z, b.z), maxZ = Mathf.Max(a.z, b.z);
-            if (maxX - minX < 1e-4f || maxZ - minZ < 1e-4f) return;
+            if (maxX - minX < 1e-4f || maxZ - minZ < 1e-4f) { if (_collider != null) _collider.sharedMesh = null; return; }
 
             float top = level, bot = level - thickness;
             float s = planScale > 1e-4f ? planScale : 1f;
@@ -71,6 +94,12 @@ namespace RoomPlanner.Floors
             _mesh.SetTriangles(t, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
+
+            if (_collider != null)
+            {
+                _collider.sharedMesh = null;
+                _collider.sharedMesh = _mesh;
+            }
         }
 
         private static void AddTop(List<Vector3> v, List<Vector2> uv, float x, float y, float z,

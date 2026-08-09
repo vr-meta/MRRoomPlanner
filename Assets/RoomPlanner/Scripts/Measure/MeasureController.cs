@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Tools;
+using RoomPlanner.Editing;
 
 namespace RoomPlanner.Measure
 {
@@ -25,6 +26,7 @@ namespace RoomPlanner.Measure
         [SerializeField] private Measurement measurementPrefab;
         [SerializeField] private MeasureContinueButton continueButtonPrefab;
         [SerializeField] private ToolManager manager;   // snap toggles (optional; on by default if null)
+        [SerializeField] private SceneModel sceneModel; // central registry for Select tool
         [Tooltip("Радиус магнита к существующим концам, м.")]
         [SerializeField] private float snapDistance = 0.1f;
         [SerializeField] private int maxMeasurements = 40;
@@ -52,7 +54,7 @@ namespace RoomPlanner.Measure
 
         private void Start()
         {
-            Debug.Log($"[Measure] v9 started. prefab={(measurementPrefab != null)} contBtn={(continueButtonPrefab != null)}");
+            Debug.Log($"[Measure] v10 started. prefab={(measurementPrefab != null)} contBtn={(continueButtonPrefab != null)} scene={(sceneModel != null)}");
             if (continueButtonPrefab != null)
             {
                 _plus = Instantiate(continueButtonPrefab, transform);
@@ -268,6 +270,7 @@ namespace RoomPlanner.Measure
                 _preview.Set(_pendingStart.Value, p);
                 var done = _preview;
                 _measurements.Add(done);
+                if (sceneModel != null) sceneModel.Register(done.GetComponent<Selectable>());
                 _preview = null;
                 _pendingStart = null;
                 done.SetInteractable(true);
@@ -279,6 +282,7 @@ namespace RoomPlanner.Measure
         {
             if (_measurements.Count > maxMeasurements)
             {
+                if (sceneModel != null) sceneModel.Unregister(_measurements[0].GetComponent<Selectable>());
                 Destroy(_measurements[0].gameObject);
                 _measurements.RemoveAt(0);
             }
@@ -287,7 +291,11 @@ namespace RoomPlanner.Measure
         private void DeleteMeasurement(Measurement m)
         {
             _measurements.Remove(m);
-            if (m != null) Destroy(m.gameObject);
+            if (m != null)
+            {
+                if (sceneModel != null) sceneModel.Unregister(m.GetComponent<Selectable>());
+                Destroy(m.gameObject);
+            }
         }
 
         private void ClearLast()
@@ -303,6 +311,7 @@ namespace RoomPlanner.Measure
             {
                 var m = _measurements[_measurements.Count - 1];
                 _measurements.RemoveAt(_measurements.Count - 1);
+                if (sceneModel != null) sceneModel.Unregister(m.GetComponent<Selectable>());
                 Destroy(m.gameObject);
             }
         }
