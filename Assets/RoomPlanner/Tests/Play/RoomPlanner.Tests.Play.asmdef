@@ -5,6 +5,7 @@
         "RoomPlanner.Core",
         "RoomPlanner.Editing",
         "RoomPlanner.App",
+        "Unity.TextMeshPro",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

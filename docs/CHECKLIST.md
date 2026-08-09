@@ -153,6 +153,7 @@
   - [x] M5 — `InspectorPanel`: ряды из схемы в рантайме; setup собирает только каркас; `ToolMenu` — массив кнопок инструментов
   - [x] M6 — `MeasureSetup` разрезан на `Editor/Setup/*` (RigContext/Assets/CoreRig/Select/Measure/Wall/Floor/Palette/Inspector), оркестратор — тонкий
   - [~] M7 — SetupRig + полный прогон headless: EditMode 102/102, PlayMode 16/16 ✅; осталась проверка на устройстве (инспектор выглядит/работает как раньше)
+  - [x] M8 — PlayMode-тесты UI-слоя (`InspectorSchemaPlayTests`): генерация рядов из схемы (Stepper/Cycle, слой меню, OnClick-делегаты), ребинд при смене схемы, selection-режим, привязка реальных схем Wall/Floor к стору `ToolManager` (мутация + клэмпы)
 - [ ] После миграции: поток Blueprint выселяет `planScale/planOffset*` из `ToolManager` в свой контроллер (первая задача потока)
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
