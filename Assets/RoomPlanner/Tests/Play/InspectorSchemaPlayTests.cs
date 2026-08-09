@@ -79,11 +79,12 @@ namespace RoomPlanner.Tests.Play
                 Assert.IsNotNull(b.OnClick, "schema buttons are runtime-bound");
                 Assert.IsNotNull(b.GetComponent<BoxCollider>(), "button needs a hit target");
                 Assert.AreEqual(MenuLayer, b.gameObject.layer, "buttons must sit on the menu layer");
+                Assert.IsTrue(b.Repeatable, "stepper −/+ must auto-repeat on hold (UX v2 P0.2)");
             }
         }
 
         [Test]
-        public void CycleRow_BuildsCaptionValueButton()
+        public void CycleRow_BuildsCaptionValueButton_NotRepeatable()
         {
             int i = 0;
             var names = new[] { "Miter", "Bevel" };
@@ -94,7 +95,9 @@ namespace RoomPlanner.Tests.Play
             panel.ShowFor(schema, showSelection: false);
 
             Assert.AreEqual(3, rows.childCount, "caption + value + [>]");
-            Assert.AreEqual(1, rows.GetComponentsInChildren<MenuButton>(true).Length);
+            var buttons = rows.GetComponentsInChildren<MenuButton>(true);
+            Assert.AreEqual(1, buttons.Length);
+            Assert.IsFalse(buttons[0].Repeatable, "holding on a cycle must not spin modes");
         }
 
         [Test]
@@ -155,6 +158,58 @@ namespace RoomPlanner.Tests.Play
             var panel = MakePanel(out _, out var panelRoot, out _);
             panel.ShowFor(null, showSelection: false);
             Assert.IsFalse(panelRoot.activeSelf);
+        }
+
+        // ---- background auto-height (UX v2 P0.4) ----
+
+        private static Transform AddBackground(InspectorPanel panel, GameObject panelRoot)
+        {
+            var bg = new GameObject("Bg");
+            bg.transform.SetParent(panelRoot.transform, false);
+            bg.transform.localScale = new Vector3(0.36f, 0.44f, 1f);
+            SetPrivate(panel, "background", bg.transform);
+            return bg.transform;
+        }
+
+        [Test]
+        public void Background_ShrinksForShortSchemas_AndGrowsForLong()
+        {
+            int v = 0;
+            SettingsSchema Make(int n)
+            {
+                var s = new SettingsSchema();
+                for (int i = 0; i < n; i++)
+                    s.Stepper($"f{i}", $"F{i}", () => v.ToString(), () => v--, () => v++);
+                return s;
+            }
+            var panel = MakePanel(out _, out var panelRoot, out _);
+            var bg = AddBackground(panel, panelRoot);
+
+            panel.ShowFor(Make(2), showSelection: false);
+            float short2 = bg.localScale.y;
+            panel.ShowFor(Make(6), showSelection: false);
+            float long6 = bg.localScale.y;
+
+            Assert.Less(short2, long6, "background height follows the row count");
+            Assert.Less(short2, 0.30f, "2 rows must not keep the full-size quad");
+            // top edge stays fixed: center sits at Top − h/2
+            Assert.AreEqual(0.22f - long6 * 0.5f, bg.localPosition.y, 1e-4f);
+        }
+
+        [Test]
+        public void PerInstanceRows_ShiftBelowSelectionGroup()
+        {
+            int v = 0;
+            var schema = new SettingsSchema()
+                .Stepper("t", "T", () => v.ToString(), () => v--, () => v++);
+            var panel = MakePanel(out var rows, out var panelRoot, out _);
+            AddBackground(panel, panelRoot);
+
+            panel.ShowFor(schema, showSelection: false);
+            Assert.AreEqual(0f, rows.localPosition.y, 1e-5f, "tool settings sit at the top");
+
+            panel.ShowFor(schema, showSelection: true);
+            Assert.Less(rows.localPosition.y, -0.3f, "per-instance rows drop below the selection group");
         }
 
         // ---- real tool schemas against the real shared store ----
