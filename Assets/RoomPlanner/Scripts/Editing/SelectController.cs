@@ -31,7 +31,12 @@ namespace RoomPlanner.Editing
         public string PaletteLabel => "Sel";
 
         /// <summary>No parameter rows — the selection group is a dedicated panel section.</summary>
-        public SettingsSchema GetSettings() => null;
+        /// <summary>
+        /// The inspector shows the SELECTED object's own parameters — the Select tool has none
+        /// of its own. Returning a different schema instance per selection is what makes the
+        /// panel rebind to the new object (design/13-phase-b-wallgraph.md, B4).
+        /// </summary>
+        public SettingsSchema GetSettings() => HasSelection ? _selected.GetSettings() : null;
 
         public bool HasSelection => _selected != null && _selected.IsAlive && !_selected.IsHidden;
 

@@ -26,6 +26,7 @@ namespace RoomPlanner.Editing
         private Wall _wall;
         private Floor _floor;
         private Measurement _measurement;
+        private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private MaterialPropertyBlock _mpb;
         private HighlightState _state = HighlightState.None;
@@ -60,6 +61,7 @@ namespace RoomPlanner.Editing
             if (_wall != null) _kind = SelectableKind.Wall;
             else if (_floor != null) _kind = SelectableKind.Floor;
             else _kind = SelectableKind.Measurement;
+            _settingsProvider = GetComponent<ISettingsProvider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
             _mpb = new MaterialPropertyBlock();
         }
@@ -124,6 +126,13 @@ namespace RoomPlanner.Editing
             if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_measurement != null) _measurement.MoveBy(delta);
+        }
+
+        /// <summary>Per-instance rows come from a provider component, if one is present.</summary>
+        public RoomPlanner.Core.SettingsSchema GetSettings()
+        {
+            Resolve();
+            return _settingsProvider?.GetSettings();
         }
 
         public string Describe()

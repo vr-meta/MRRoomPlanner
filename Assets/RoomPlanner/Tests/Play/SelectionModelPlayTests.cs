@@ -34,6 +34,7 @@ namespace RoomPlanner.Tests.Play
             public void SetHidden(bool hidden) => gameObject.SetActive(!hidden);
             public void MoveBy(Vector3 delta) { Moved += delta; transform.position += delta; }
             public string Describe() => "fake";
+            public RoomPlanner.Core.SettingsSchema GetSettings() => null;   // no per-instance rows
         }
 
         private readonly List<GameObject> _spawned = new();

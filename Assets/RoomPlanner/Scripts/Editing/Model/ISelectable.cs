@@ -1,7 +1,17 @@
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Editing
 {
+    /// <summary>
+    /// Supplies per-instance inspector rows for the object it sits on. Implemented next to the
+    /// geometry (e.g. by the wall tool), never here — that keeps object types out of Editing.
+    /// </summary>
+    public interface ISettingsProvider
+    {
+        SettingsSchema GetSettings();
+    }
+
     /// <summary>Object families that can be selected/edited in the scene.</summary>
     public enum SelectableKind { Measurement, Wall, Floor }
 
@@ -34,5 +44,12 @@ namespace RoomPlanner.Editing
 
         /// <summary>Short human-readable summary for the inspector (e.g. "Length 3.20 m").</summary>
         string Describe();
+
+        /// <summary>
+        /// Inspector rows for THIS object (per-instance parameters), or null when it has none.
+        /// Provided by an <see cref="ISettingsProvider"/> component sitting next to it, so this
+        /// assembly needs no knowledge of walls, floors or any future object type.
+        /// </summary>
+        SettingsSchema GetSettings();
     }
 }

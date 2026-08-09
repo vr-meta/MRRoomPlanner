@@ -49,6 +49,7 @@ namespace RoomPlanner.EditorTools
             root.AddComponent<MeshFilter>();
             root.AddComponent<MeshRenderer>().sharedMaterial = mat;
             var wall = root.AddComponent<Wall>();
+            root.AddComponent<WallParameters>();   // per-instance rows in the inspector (B4)
             root.AddComponent<Selectable>();
 
             var edges = new GameObject("Edges");
