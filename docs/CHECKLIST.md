@@ -158,12 +158,12 @@
 
 ## 2h. Blueprint — чертёж на полу (дизайн: `design/15-blueprint.md`)
 
-- [~] **v1: самостоятельный инструмент «Plan»** (масштаб + поворот + смещение)
-  - [ ] BP1 — `Core/BlueprintMath.cs`: `BlueprintPlacement`, `WorldToPlanUV`/`PlanUVToWorld`, `FromPointPairs` (подобие по 2 парам точек) + юнит-тесты
-  - [ ] BP2 — `Floor`: поворот плана в UV верхней грани (перегрузка, старая сигнатура = rotation 0) + тест UV-поворота
-  - [ ] BP3 — `BlueprintController : ITool` («Plan»): состояние scale/rotation/offset/текстура у себя; стик = смещение; схема Plan scale / Rotation / Reload; выселение plan-полей из `ToolManager` и текстуры/наджа из `FloorController`; `FloorController.RefreshPlan()`
-  - [ ] BP4 — `SetupBlueprintTool` + регистрация (реестр, палитра на 5 кнопок) + PlayMode-тест схемы; обновить `10-controls.md`
-  - [ ] Прогон headless (SetupRig + тесты) + проверка на устройстве (план крутится/тянется, полы пересобираются вживую)
+- [~] **v1: самостоятельный инструмент «Plan»** (масштаб + поворот + смещение) — код готов, коммит `e2c8dfb`
+  - [x] BP1 — `Core/BlueprintMath.cs`: `BlueprintPlacement`, `WorldToPlanUV`/`PlanUVToWorld`, `FromPointPairs` (подобие по 2 парам точек) + 7 юнит-тестов
+  - [x] BP2 — `Floor`: поворот плана в UV верхней грани (перегрузка, старая сигнатура = rotation 0) + тесты UV-поворота и эквивалентности перегрузки
+  - [x] BP3 — `BlueprintController : ITool` («Plan»): состояние scale/rotation/offset/текстура у себя (первый инструмент с параметрами в себе, по дизайну 14); стик = смещение; схема Plan scale / Rotation / Reload-статус; plan-поля выселены из `ToolManager`, текстура/надж — из `FloorController`; `FloorController.RefreshPlan()` — полы пересобираются вживую из любого инструмента
+  - [x] BP4 — `SetupBlueprintTool` + регистрация (реестр, палитра центрует N кнопок) + PlayMode-тест схемы (без manager); `10-controls.md` обновлён
+  - [~] Прогон headless: EditMode 111/111 ✅, PlayMode — мои 29/29 ✅ (2 падения — в незакоммиченном WIP Фазы B, `WallGraphRendererPlayTests`); осталась проверка на устройстве (план крутится/тянется, полы пересобираются вживую)
 - [ ] **BP5 — калибровка по 2 точкам** (A′→A, B′→B, `FromPointPairs`; валидация коротких отрезков)
 - [ ] Импорт плана по-человечески (сейчас `adb push plan.png` в persistentDataPath)
 
