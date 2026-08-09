@@ -25,6 +25,7 @@ namespace RoomPlanner.EditorTools
             panel.transform.localScale = new Vector3(0.24f, 0.16f, 1f);
             panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
             panel.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
+            SetupAssets.AddRim(panel, ctx.RimMat);
 
             // ---- tool buttons from the registry order (must match ToolManager's list) ----
             ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool, ctx.Blueprint };
@@ -37,21 +38,22 @@ namespace RoomPlanner.EditorTools
                 string label = tools[i] != null ? tools[i].PaletteLabel : $"T{i}";
                 toolButtons[i] = SetupAssets.MakeMenuButton(root.transform, $"BtnTool{i}", label,
                     MenuAction.SelectTool, new Vector3(startX + i * stepX, 0.045f, 0f), toolSize,
-                    ctx.BtnMat, ctx.ActiveMat, withActiveMark: true, toolIndex: i);
+                    ctx.BtnMat, ctx.ActiveMat, withActiveMark: true, toolIndex: i,
+                    kind: MenuButtonKind.Radio);
             }
 
-            // ---- global snap toggles ----
+            // ---- global snap toggles (Toggle kind: strip + LED, not the radio inversion) ----
             var snapSize = new Vector2(0.042f, 0.04f);
             var snapCornerBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapCorner", "Cor", MenuAction.ToggleSnapCorner,
-                new Vector3(-0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true);
+                new Vector3(-0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
             var snapEdgeBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapEdge", "Edg", MenuAction.ToggleSnapEdge,
-                new Vector3(-0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true);
+                new Vector3(-0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
             var snapGridBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapGrid", "Grd", MenuAction.ToggleSnapGrid,
-                new Vector3(0f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true);
+                new Vector3(0f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
             var snapAngleBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapAngle", "Ang", MenuAction.ToggleSnapAngle,
-                new Vector3(0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true);
+                new Vector3(0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
             var scanBtn = SetupAssets.MakeMenuButton(root.transform, "BtnScan", "Scan", MenuAction.ToggleScan,
-                new Vector3(0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true);
+                new Vector3(0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
 
             var so = new SerializedObject(menu);
             Transform leftAnchor = SetupCoreRig.FindLeftControllerAnchor();

@@ -15,11 +15,14 @@ namespace RoomPlanner.Editing
     /// </summary>
     public class Selectable : MonoBehaviour, ISelectable
     {
-        private static readonly Color HoverColor = new Color(0.35f, 0.9f, 1f);   // cyan
-        private static readonly Color SelectColor = new Color(0.3f, 1f, 0.5f);   // green
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int FaceColorId = Shader.PropertyToID("_FaceColor"); // TMP labels
+
+        // Tint strength: enough to read the state, weak enough to keep the object's own color
+        // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
+        private const float HoverTint = 0.30f;
+        private const float SelectTint = 0.45f;
 
         private SelectableKind _kind;
         private bool _resolved;
@@ -28,6 +31,7 @@ namespace RoomPlanner.Editing
         private Measurement _measurement;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
+        private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
         private MaterialPropertyBlock _mpb;
         private HighlightState _state = HighlightState.None;
 
@@ -64,6 +68,16 @@ namespace RoomPlanner.Editing
             _settingsProvider = GetComponent<ISettingsProvider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
             _mpb = new MaterialPropertyBlock();
+
+            _ownColors = new Color[_renderers.Length];
+            for (int i = 0; i < _renderers.Length; i++)
+            {
+                var m = _renderers[i] != null ? _renderers[i].sharedMaterial : null;
+                _ownColors[i] = m == null ? Color.white
+                    : m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId)
+                    : m.HasProperty(ColorId) ? m.GetColor(ColorId)
+                    : Color.white;
+            }
         }
 
         public Bounds WorldBounds
@@ -95,12 +109,18 @@ namespace RoomPlanner.Editing
             if (_renderers == null) return;
 
             bool tint = state != HighlightState.None;
-            Color c = state == HighlightState.Selected ? SelectColor : HoverColor;
-            foreach (var r in _renderers)
+            Color stateColor = state == HighlightState.Selected ? RoomPlanner.Tools.UiColors.Selected
+                                                                : RoomPlanner.Tools.UiColors.Hover;
+            float t = state == HighlightState.Selected ? SelectTint : HoverTint;
+            for (int i = 0; i < _renderers.Length; i++)
             {
+                var r = _renderers[i];
                 if (r == null) continue;
                 if (tint)
                 {
+                    // Lerp toward the state color instead of repainting — the object keeps
+                    // its identity (own material/paint stays visible under the tint).
+                    Color c = Color.Lerp(_ownColors[i], stateColor, t);
                     r.GetPropertyBlock(_mpb);
                     _mpb.SetColor(BaseColorId, c);
                     _mpb.SetColor(ColorId, c);

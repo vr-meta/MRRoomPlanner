@@ -154,12 +154,13 @@ namespace RoomPlanner.Tools
                 if (mb != _hoverBtn)
                 {
                     _hoverBtn = mb;
-                    if (mb != null) input.Pulse(0.2f, 0.01f);
+                    if (mb != null && mb.Interactable) input.Pulse(0.2f, 0.01f);
                 }
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hit.point; }
 
-                if (mb != null && input.ConfirmPressed())
+                if (mb != null && mb.Interactable && input.ConfirmPressed())
                 {
+                    mb.Press();                 // visual click confirmation (dip + flash)
                     Execute(mb);
                     input.Pulse(0.6f, 0.02f);   // crisp click, not a long buzz
                     if (mb.OnClick != null && mb.Repeatable)

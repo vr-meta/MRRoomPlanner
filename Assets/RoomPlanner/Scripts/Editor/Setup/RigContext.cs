@@ -34,7 +34,7 @@ namespace RoomPlanner.EditorTools
         // shared assets
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;
         public Material WallMat, WallEdgeMat, FloorMat;
-        public Material PanelMat, BtnMat, ActiveMat;
+        public Material PanelMat, RimMat, BtnMat, ActiveMat;
     }
 }
 #endif

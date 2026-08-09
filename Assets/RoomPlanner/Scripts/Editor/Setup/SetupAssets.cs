@@ -21,10 +21,13 @@ namespace RoomPlanner.EditorTools
             Directory.CreateDirectory(MatDir);
             Directory.CreateDirectory(PrefabDir);
 
-            ctx.LineMat = CreateMat("Measure_Line", new Color(0.2f, 1f, 0.4f));
-            ctx.MarkerMat = CreateMat("Measure_Marker", new Color(0.2f, 0.8f, 1f));
-            ctx.ReticleMat = CreateMat("Measure_Reticle", new Color(1f, 0.9f, 0.2f));
-            ctx.ContMat = CreateMat("Measure_Continue", new Color(0.2f, 1f, 0.4f));
+            // Colors follow the UiColors system (design/16 P1.6): states keep the reserved
+            // cyan/mint; data hues come from the layer palette — measurement visuals moved to
+            // the Measurements violet family, freeing green (selected) and yellow (Electrical).
+            ctx.LineMat = CreateMat("Measure_Line", new Color(0.94f, 0.96f, 1f));            // neutral
+            ctx.MarkerMat = CreateMat("Measure_Marker", UiColors.LayerMeasurements);
+            ctx.ReticleMat = CreateMat("Measure_Reticle", new Color(0.94f, 0.96f, 1f));      // yellow → Electrical reserve
+            ctx.ContMat = CreateMat("Measure_Continue", UiColors.Selected);
             Texture2D badgeTex = CreateRoundedBadgeTexture();
             ctx.BadgeMat = CreateBadgeMat("Measure_Badge", new Color(0.45f, 0.32f, 0.82f), badgeTex);
 
@@ -32,9 +35,23 @@ namespace RoomPlanner.EditorTools
             ctx.WallEdgeMat = CreateMat("Wall_Edge", new Color(0.10f, 0.16f, 0.32f));
             ctx.FloorMat = CreateFloorMat("Floor_Top", Color.white);
 
-            ctx.PanelMat = CreateMat("Menu_Panel", new Color(0.06f, 0.07f, 0.10f));   // opaque (no shader-variant stripping on device)
-            ctx.BtnMat = CreateMat("Menu_Button", new Color(0.16f, 0.18f, 0.24f));
-            ctx.ActiveMat = CreateMat("Menu_Active", new Color(0.2f, 1f, 0.5f));
+            ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
+            ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
+            ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);
+            ctx.ActiveMat = CreateMat("Menu_Active", UiColors.Selected);
+        }
+
+        /// <summary>Thin rim behind a panel background — keeps the panel silhouette visible on
+        /// dark passthrough (UX v2 P1.5). Child of the bg quad, so it follows runtime resizing.</summary>
+        public static void AddRim(GameObject bgQuad, Material rimMat)
+        {
+            var rim = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            rim.name = "Rim";
+            RemoveCollider(rim);
+            rim.transform.SetParent(bgQuad.transform, false);
+            rim.transform.localScale = new Vector3(1.03f, 1.05f, 1f);
+            rim.transform.localPosition = new Vector3(0f, 0f, 0.002f);   // just behind the bg
+            rim.GetComponent<Renderer>().sharedMaterial = rimMat;
         }
 
         // ---- materials ----
@@ -161,7 +178,8 @@ namespace RoomPlanner.EditorTools
         }
 
         public static MenuButton MakeMenuButton(Transform parent, string name, string label, MenuAction action,
-            Vector3 lp, Vector2 size, Material bgMat, Material activeMat, bool withActiveMark, int toolIndex = -1)
+            Vector3 lp, Vector2 size, Material bgMat, Material activeMat, bool withActiveMark, int toolIndex = -1,
+            MenuButtonKind kind = MenuButtonKind.Momentary)
         {
             var root = new GameObject(name);
             root.transform.SetParent(parent, false);
@@ -177,7 +195,7 @@ namespace RoomPlanner.EditorTools
             bg.transform.localScale = new Vector3(size.x, size.y, 1f);
             bg.GetComponent<Renderer>().sharedMaterial = bgMat;
 
-            MakeTextChild(root.transform, "Label", label, size);
+            var text = MakeTextChild(root.transform, "Label", label, size);
 
             GameObject mark = null;
             if (withActiveMark)
@@ -192,10 +210,30 @@ namespace RoomPlanner.EditorTools
                 mark.SetActive(false);
             }
 
+            // Toggle buttons get a small LED dot — the strip alone reads like "active tool"
+            // and confuses radio vs toggle semantics (design/16 P1.3).
+            GameObject led = null;
+            if (kind == MenuButtonKind.Toggle)
+            {
+                led = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                led.name = "Led";
+                RemoveCollider(led);
+                led.transform.SetParent(root.transform, false);
+                float d = size.y * 0.18f;
+                led.transform.localScale = new Vector3(d, d, 1f);
+                led.transform.localPosition = new Vector3(size.x * 0.36f, size.y * 0.32f, -0.004f);
+                led.GetComponent<Renderer>().sharedMaterial = activeMat;
+                led.SetActive(false);
+            }
+
             var so = new SerializedObject(mb);
             so.FindProperty("action").enumValueIndex = (int)action;
             so.FindProperty("toolIndex").intValue = toolIndex;
+            so.FindProperty("kind").enumValueIndex = (int)kind;
+            so.FindProperty("bgRenderer").objectReferenceValue = bg.GetComponent<Renderer>();
+            so.FindProperty("label").objectReferenceValue = text;
             if (mark != null) so.FindProperty("activeMark").objectReferenceValue = mark;
+            if (led != null) so.FindProperty("ledDot").objectReferenceValue = led;
             so.ApplyModifiedProperties();
             return mb;
         }

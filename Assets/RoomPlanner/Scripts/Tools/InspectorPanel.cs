@@ -164,7 +164,8 @@ namespace RoomPlanner.Tools
             bg.transform.localScale = new Vector3(BtnSize.x, BtnSize.y, 1f);
             if (buttonMaterial != null) bg.GetComponent<Renderer>().sharedMaterial = buttonMaterial;
 
-            MakeText(root.transform, "Label", label, BtnSize);
+            var text = MakeText(root.transform, "Label", label, BtnSize);
+            mb.InitRuntime(MenuButtonKind.Momentary, bg.GetComponent<Renderer>(), text);
         }
 
         private TMP_Text MakeLabel(string name, string text, Vector3 lp, Vector2 size)

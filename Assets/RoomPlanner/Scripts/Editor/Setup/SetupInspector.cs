@@ -27,6 +27,7 @@ namespace RoomPlanner.EditorTools
             bg.transform.localScale = new Vector3(0.36f, 0.44f, 1f);
             bg.transform.localPosition = new Vector3(0f, 0f, 0.006f);
             bg.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
+            SetupAssets.AddRim(bg, ctx.RimMat);   // child of bg → follows runtime auto-height
 
             // title bar = grab handle
             var title = new GameObject("Title");
