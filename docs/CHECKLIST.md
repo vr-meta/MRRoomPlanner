@@ -687,6 +687,46 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   (`design/03`, `design/10` Select) + PR (Closes #50). Хвост: проверка в шлеме —
   выбор двери, toggle, Open %, ворота
 
+## 2v. Генератор ламината (дизайн: `design/22-laminate-generator.md`, ветка `worktree-laminate-generator`)
+
+Источник — D:\Maps (18 досок дуба 4096×684, diffuse+normal; лицензия не CC0 —
+в git не попадает). Паттерны запекаются в редакторе в тайлящиеся 2К-карты.
+
+- [x] L1. **`Core/LaminateLayout`** — раскладки Deck / Herringbone / Basket в квады
+  досок (квадратный период: 1.2 м, ёлочка 2.4 м; детерминированный seed) +
+  `LaminateLayoutTests` (покрытие без дыр/наложений, чередование, wrap, детерминизм)
+- [x] L2. **`LaminateBaker`** (Editor, menu + headless) — CPU-композитинг PlankQuad'ов
+  в 2048²: diffuse с цветокором пресета (natural/grey/dark/bleached) и V-фаской
+  швов (~2 мм затемнение + наклон нормали + ±5% яркости на доску), normal с
+  поворотом XY вместе с доской; 15 PNG в `Textures/Laminate/`, импорт
+  (Repeat/mips/NormalMap), пин-тест состава `LaminateCatalog`
+- [x] L3. **Нормали в рендере** (опционально per-материал): `FinishLibrary.normalMaps`
+  (+ null у старых), `Selectable` → MPB `_BumpMap`/`_HasBump`, `LitVertexAO` —
+  пертурбация по производным (cotangent frame), юниформ-ветка
+- [x] L4. **Каталог**: 12 записей ламината в Floors (`SetupPaintTool` из
+  `LaminateCatalog`, tile из периода, gloss 0.35); EditMode 370/370, PlayMode 110/110
+- [~] L5. APK собран и установлен (2026-08-12); ждём фидбек шлема: рельеф, стыки,
+  цвета, ориентация зелёного канала нормалей (если рельеф «вдавлен» — флип G)
+- [x] L6. Merge main (Openings, персист v2): restore отделки резолвит и normal map
+  (`FinishLibrary.NormalOf` в `ImportController.ApplyFinish`)
+- [~] L7. **Поворот текстур** (фидбек: «развернуть ламинат»): `SurfaceFinish.
+  RotationDeg` (+персист `ProjectFinish.RotationDeg`), `_UvRot` (cos,sin) через MPB,
+  шейдер крутит метрический uv до тайл-скейла, степпер **Rotate** 15° на текстурных
+  табах Paint; тесты (wrap угла, cos/sin, раунд-трип)
+
+## 2w. Генератор плитки — кабанчик и др. (дизайн: `design/23-tile-generator.md`, фидбек 2026-08-12)
+
+- [x] K1. Core: `LaminatePattern.Grid` + параметр `deckOffset` (½ для кабанчика,
+  ⅓-дефолт ламинату) в `LaminateLayout.Generate`; `TileCatalog` (3 паттерна ×
+  6 цветов, id `tile-<pattern>-<color>`) + тесты (покрытие Grid/subway/ёлочка-n2,
+  неизменность дефолтной палубы, пин каталога)
+- [x] K2. `TileBaker` (Editor, menu + headless): процедурное лицо (глазурь + шум +
+  пер-плиточная вариация), затирка ~1.2 мм, фаска (кабанчик 15 мм, остальные 3 мм)
+  в нормали; 18 diffuse + 3 нормали 1024² в `Textures/TilesBaked/`; тайлы
+  проверены глазами (кабанчик — широкая фаска с митровыми углами)
+- [~] K3. Wiring: записи в Tiles через `SetupPaintTool` (gloss 0.75, нормали) [x];
+  EditMode 422/422, PlayMode 124/124; APK → шлем — ждёт команды
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._
@@ -736,6 +776,21 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
 
 ## Решённые проблемы окружения (как чинили — не повторять ошибок)
 
+- [x] **Gradle `mergeReleaseNativeLibs`: дубль `libopenxr_loader.so`** при сборке из
+  СВЕЖЕЙ Library (новая worktree, 2026-08-12): `SetIncludeInBuildDelegate(false)` на
+  `openxr_loader.aar` **не учитывается** Bee-экспортом gradle с нуля (в main работало
+  только за счёт инкрементального состояния Library/Bee). Решение: в
+  `CiTools.ExcludeDuplicateOpenXRLoaders` дополнительно жёстко выключать Android-
+  платформу дублей (`SetCompatibleWithPlatform(Android,false)+SaveAndReimport`) —
+  персистится в .meta кэша пакета.
+- [x] **Worktree без бинарников**: gitignored-ассеты (Textures/*.jpg+meta) не приезжают
+  с веткой — перед батчем скопировать из основного чекаута (`robocopy /E`), иначе
+  FinishLibrary соберётся пустой. Первый батч в worktree = полный импорт Library
+  (~несколько минут).
+- [x] **Gradle-сборка упала «There is not enough space on the disk»** (2026-08-12):
+  кэш gradle жил в `C:\Users\butsc\.gradle` (15 GB) и добил переполненный C: до нуля.
+  Решение: `GRADLE_USER_HOME=D:\GradleHome` (setx + в сессии сборки), старый
+  `C:\...\.gradle\caches` удалён (C: +15 GB). Всё тяжёлое — только на D:.
 - [x] **Unity Hub (MSIX) забивал C: через свой TEMP** → `ENOSPC`. Решение: ставить
   редакторы **офлайн-инсталляторами** Unity (обычные exe слушаются нашего `TEMP=D:\Temp`),
   а не через Hub. URL берём из release API Unity по changeset.

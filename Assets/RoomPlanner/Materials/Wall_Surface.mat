@@ -27,13 +27,19 @@ Material:
         m_Texture: {fileID: 2800000, guid: 3dbf348b5d0a9b045882b51feac3a413, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _Cull: 2
+    - _HasBump: 0
     - _Smoothness: 0.08
     - _UseUV1: 0
     m_Colors:
     - _BaseColor: {r: 0.82, g: 0.82, b: 0.8, a: 1}
+    - _UvRot: {r: 1, g: 0, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!114 &6758616331405845445

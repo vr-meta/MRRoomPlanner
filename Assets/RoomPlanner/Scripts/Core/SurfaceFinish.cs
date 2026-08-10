@@ -33,6 +33,7 @@ namespace RoomPlanner.Core
         public float TileMeters;   // metric tile size for the UV scale (1 m UV / TileMeters)
         public float TileMetersY;  // vertical/second-axis tile; 0 = square (use TileMeters)
         public float Smoothness;   // 0 matte … 1 gloss (shader _Smoothness; design/04 v1.2)
+        public float RotationDeg;  // texture rotation in the metric UV plane (turn laminate)
 
         public static readonly SurfaceFinish None = new() { Kind = FinishKind.None };
 
@@ -40,7 +41,8 @@ namespace RoomPlanner.Core
             new() { Kind = FinishKind.Color, Color = c, Smoothness = Mathf.Clamp01(smoothness) };
 
         public static SurfaceFinish OfTexture(string id, float tileMeters,
-            float tileMetersY = 0f, Color? tint = null, float smoothness = 0f) =>
+            float tileMetersY = 0f, Color? tint = null, float smoothness = 0f,
+            float rotationDeg = 0f) =>
             new()
             {
                 Kind = FinishKind.Texture,
@@ -49,6 +51,7 @@ namespace RoomPlanner.Core
                 TileMetersY = tileMetersY > 0f ? Mathf.Max(0.05f, tileMetersY) : 0f,
                 Color = tint ?? UnityEngine.Color.white,
                 Smoothness = Mathf.Clamp01(smoothness),
+                RotationDeg = Mathf.Repeat(rotationDeg, 360f),
             };
 
         public bool IsNone => Kind == FinishKind.None;
@@ -63,6 +66,14 @@ namespace RoomPlanner.Core
             float ty = EffectiveTileY;
             float sy = ty > 0f ? 1f / ty : 1f;
             return new Vector4(sx, sy, 0f, 0f);
+        }
+
+        /// <summary>(cos, sin) of the rotation for the shader's _UvRot — applied to the
+        /// METRIC uv before the tile scale, so non-square tiles rotate without shear.</summary>
+        public Vector4 UvRotation()
+        {
+            float r = RotationDeg * Mathf.Deg2Rad;
+            return new Vector4(Mathf.Cos(r), Mathf.Sin(r), 0f, 0f);
         }
 
         public override string ToString() => Kind switch

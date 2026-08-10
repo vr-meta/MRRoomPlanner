@@ -46,6 +46,10 @@ ci-shots/
 Assets/RoomPlanner/Textures/**/*.jpg
 Assets/RoomPlanner/Textures/**/*.jpg.meta
 
+# baked laminate (sources in D:\Maps are NOT CC0) — restored via RoomPlanner > Bake Laminate
+Assets/RoomPlanner/Textures/**/*.png
+Assets/RoomPlanner/Textures/**/*.png.meta
+
 # temporary IFC samples (github.com/youshengCode/IfcSampleFiles)
 TestData/
 

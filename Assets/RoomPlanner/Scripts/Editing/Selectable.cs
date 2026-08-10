@@ -25,6 +25,9 @@ namespace RoomPlanner.Editing
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
+        private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
+        private static readonly int UvRotId = Shader.PropertyToID("_UvRot");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -127,8 +130,10 @@ namespace RoomPlanner.Editing
 
         private SurfaceFinish _finish = SurfaceFinish.None;
         private Texture2D _finishTexture;   // resolved by the caller (FinishLibrary)
+        private Texture2D _finishNormal;    // optional relief — null for most finishes (design/22)
         private SurfaceFinish _finishOuter = SurfaceFinish.None;
         private Texture2D _finishTextureOuter;
+        private Texture2D _finishNormalOuter;
 
         public bool IsPainted { get { Resolve(); return !_finish.IsNone || !_finishOuter.IsNone; } }
 
@@ -137,6 +142,7 @@ namespace RoomPlanner.Editing
 
         public SurfaceFinish Finish { get { Resolve(); return _finish; } }
         public Texture2D FinishTexture { get { Resolve(); return _finishTexture; } }
+        public Texture2D FinishNormal { get { Resolve(); return _finishNormal; } }
 
         /// <summary>Per-side view: non-walls answer with their single finish.</summary>
         public SurfaceFinish FinishOf(WallSide side)
@@ -149,6 +155,12 @@ namespace RoomPlanner.Editing
         {
             Resolve();
             return side == WallSide.Outer && _wall != null ? _finishTextureOuter : _finishTexture;
+        }
+
+        public Texture2D FinishNormalOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishNormalOuter : _finishNormal;
         }
 
         /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
@@ -166,27 +178,37 @@ namespace RoomPlanner.Editing
         public void SetPaint(Color color) => SetFinish(SurfaceFinish.OfColor(color), null);
 
         /// <summary>Apply a finish to the WHOLE object (both wall sides); for Texture
-        /// kind the caller resolves the Texture2D through FinishLibrary (the model
-        /// itself never touches assets).</summary>
-        public void SetFinish(SurfaceFinish finish, Texture2D texture)
+        /// kind the caller resolves the Texture2D (and the optional normal map) through
+        /// FinishLibrary — the model itself never touches assets.</summary>
+        public void SetFinish(SurfaceFinish finish, Texture2D texture, Texture2D normal = null)
         {
             Resolve();
             _finish = finish;
             _finishTexture = finish.Kind == FinishKind.Texture ? texture : null;
+            _finishNormal = finish.Kind == FinishKind.Texture ? normal : null;
             _finishOuter = _wall != null ? finish : SurfaceFinish.None;
             _finishTextureOuter = _wall != null ? _finishTexture : null;
+            _finishNormalOuter = _wall != null ? _finishNormal : null;
             ApplyVisual();
         }
 
         /// <summary>Apply a finish to ONE wall side (issue #34); anything that is not
         /// a wall degrades to the whole-object path.</summary>
-        public void SetFinishSide(WallSide side, SurfaceFinish finish, Texture2D texture)
+        public void SetFinishSide(WallSide side, SurfaceFinish finish, Texture2D texture,
+            Texture2D normal = null)
         {
             Resolve();
-            if (_wall == null) { SetFinish(finish, texture); return; }
+            if (_wall == null) { SetFinish(finish, texture, normal); return; }
             var tex = finish.Kind == FinishKind.Texture ? texture : null;
-            if (side == WallSide.Outer) { _finishOuter = finish; _finishTextureOuter = tex; }
-            else { _finish = finish; _finishTexture = tex; }
+            var nrm = finish.Kind == FinishKind.Texture ? normal : null;
+            if (side == WallSide.Outer)
+            {
+                _finishOuter = finish; _finishTextureOuter = tex; _finishNormalOuter = nrm;
+            }
+            else
+            {
+                _finish = finish; _finishTexture = tex; _finishNormal = nrm;
+            }
             ApplyVisual();
         }
 
@@ -196,8 +218,10 @@ namespace RoomPlanner.Editing
             Resolve();
             _finish = SurfaceFinish.None;
             _finishTexture = null;
+            _finishNormal = null;
             _finishOuter = SurfaceFinish.None;
             _finishTextureOuter = null;
+            _finishNormalOuter = null;
             ApplyVisual();
         }
 
@@ -234,9 +258,12 @@ namespace RoomPlanner.Editing
                 // the outer look, as real decorating leaves reveals unpapered.
                 if (i == 0 && _wall != null && r.sharedMaterials.Length >= 5)
                 {
-                    BodyBlock(r, 0, _finish, _finishTexture, tint, stateColor, t, _ownColors[i]);
-                    BodyBlock(r, 3, _finishOuter, _finishTextureOuter, tint, stateColor, t, _ownColors[i]);
-                    BodyBlock(r, 4, _finishOuter, _finishTextureOuter, tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 0, _finish, _finishTexture, _finishNormal,
+                        tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 3, _finishOuter, _finishTextureOuter, _finishNormalOuter,
+                        tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 4, _finishOuter, _finishTextureOuter, _finishNormalOuter,
+                        tint, stateColor, t, _ownColors[i]);
                     continue;
                 }
 
@@ -248,7 +275,8 @@ namespace RoomPlanner.Editing
                 if (needBlock)
                 {
                     var finish = body ? _finish : SurfaceFinish.None;
-                    FillBlock(finish, body ? _finishTexture : null, tint, stateColor, t, _ownColors[i]);
+                    FillBlock(finish, body ? _finishTexture : null, body ? _finishNormal : null,
+                        tint, stateColor, t, _ownColors[i]);
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
@@ -263,16 +291,16 @@ namespace RoomPlanner.Editing
         /// <summary>One body submesh of a per-side wall: block when painted or
         /// highlighted, cleared otherwise.</summary>
         private void BodyBlock(Renderer r, int index, SurfaceFinish finish, Texture2D tex,
-            bool tint, Color stateColor, float t, Color ownColor)
+            Texture2D normal, bool tint, Color stateColor, float t, Color ownColor)
         {
             if (!tint && finish.IsNone) { r.SetPropertyBlock(null, index); return; }
-            FillBlock(finish, tex, tint, stateColor, t, ownColor);
+            FillBlock(finish, tex, normal, tint, stateColor, t, ownColor);
             r.SetPropertyBlock(_mpb, index);
         }
 
         /// <summary>Fill _mpb for one surface: paint/texture/tint — the single place
         /// deciding what a finish looks like.</summary>
-        private void FillBlock(SurfaceFinish finish, Texture2D tex,
+        private void FillBlock(SurfaceFinish finish, Texture2D tex, Texture2D normal,
             bool tint, Color stateColor, float t, Color ownColor)
         {
             bool hasFinish = !finish.IsNone;
@@ -294,9 +322,19 @@ namespace RoomPlanner.Editing
                 _mpb.SetTexture(MainTexId, tex);
                 _mpb.SetVector(BaseMapStId, finish.UvScaleOffset());
                 _mpb.SetVector(MainTexStId, finish.UvScaleOffset());
+                // turn the texture in the metric plane (rotate laminate etc.);
+                // (cos,sin), default (1,0) = no rotation
+                _mpb.SetVector(UvRotId, finish.UvRotation());
                 // floors keep the blueprint projection in uv0; finish textures
                 // tile over the metric uv1 channel (design/04, T4)
                 if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
+                // optional relief (design/22): the shader derives the TBN from
+                // derivatives, so no mesh tangents are needed
+                if (normal != null)
+                {
+                    _mpb.SetTexture(BumpMapId, normal);
+                    _mpb.SetFloat(HasBumpId, 1f);
+                }
             }
         }
 

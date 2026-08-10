@@ -38,6 +38,7 @@ namespace RoomPlanner.EditorTools
             var tiles = new List<float>();
             var glosses = new List<float>();
             var cats = new List<string>();
+            var normals = new List<Texture2D>();   // null for the CC0 set (design/22)
 
             int missing = 0;
             foreach (var (cat, _, id, tile, gloss) in TextureDownloader.Curated)
@@ -49,10 +50,47 @@ namespace RoomPlanner.EditorTools
                 tiles.Add(tile);
                 glosses.Add(gloss);
                 cats.Add(cat);
+                normals.Add(null);
             }
             if (missing > 0)
                 Debug.LogWarning($"[Setup] FinishLibrary: {missing} texture(s) missing — " +
                     "run RoomPlanner → Download Textures, then SetupRig again");
+
+            // baked laminate (design/22): pattern × color variants into Floors, with the
+            // pattern's shared normal map; missing bakes are a warning, not a failure
+            int lamMissing = 0;
+            foreach (var e in RoomPlanner.Core.LaminateCatalog.Entries)
+            {
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(LaminateBaker.DiffusePath(e));
+                if (tex == null) { lamMissing++; continue; }
+                ids.Add(e.Id);
+                textures.Add(tex);
+                tiles.Add(e.TileMeters);
+                glosses.Add(RoomPlanner.Core.LaminateCatalog.Gloss);
+                cats.Add("Floors");
+                normals.Add(AssetDatabase.LoadAssetAtPath<Texture2D>(LaminateBaker.NormalPath(e.Pattern)));
+            }
+            if (lamMissing > 0)
+                Debug.LogWarning($"[Setup] FinishLibrary: {lamMissing} laminate bake(s) missing — " +
+                    "run RoomPlanner → Bake Laminate, then SetupRig again");
+
+            // procedural ceramic tiles (design/23): subway/grid/herringbone glazes into
+            // Tiles, with the pattern's shared normal map
+            int tileMissing = 0;
+            foreach (var e in RoomPlanner.Core.TileCatalog.Entries)
+            {
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TileBaker.DiffusePath(e));
+                if (tex == null) { tileMissing++; continue; }
+                ids.Add(e.Id);
+                textures.Add(tex);
+                tiles.Add(e.TileMeters);
+                glosses.Add(RoomPlanner.Core.TileCatalog.Gloss);
+                cats.Add("Tiles");
+                normals.Add(AssetDatabase.LoadAssetAtPath<Texture2D>(TileBaker.NormalPath(e.Pattern)));
+            }
+            if (tileMissing > 0)
+                Debug.LogWarning($"[Setup] FinishLibrary: {tileMissing} ceramic bake(s) missing — " +
+                    "run RoomPlanner → Bake Tiles, then SetupRig again");
 
             var so = new SerializedObject(lib);
             FillArray(so.FindProperty("ids"), ids.Count, (p, i) => p.stringValue = ids[i]);
@@ -60,6 +98,7 @@ namespace RoomPlanner.EditorTools
             FillArray(so.FindProperty("tileMeters"), tiles.Count, (p, i) => p.floatValue = tiles[i]);
             FillArray(so.FindProperty("gloss"), glosses.Count, (p, i) => p.floatValue = glosses[i]);
             FillArray(so.FindProperty("categories"), cats.Count, (p, i) => p.stringValue = cats[i]);
+            FillArray(so.FindProperty("normalMaps"), normals.Count, (p, i) => p.objectReferenceValue = normals[i]);
             so.ApplyModifiedProperties();
             return lib;
         }

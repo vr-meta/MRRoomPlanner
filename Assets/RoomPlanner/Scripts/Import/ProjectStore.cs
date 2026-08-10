@@ -227,6 +227,7 @@ namespace RoomPlanner.Import
                 TileW = f.TileMeters,
                 TileH = f.TileMetersY,
                 Gloss = f.Smoothness,
+                RotationDeg = f.RotationDeg,
             };
         }
 
@@ -242,6 +243,7 @@ namespace RoomPlanner.Import
                     TileMeters = p.TileW,
                     TileMetersY = p.TileH,
                     Smoothness = p.Gloss,
+                    RotationDeg = p.RotationDeg,
                 };
 
         /// <summary>Recreate saved measurements (format v2, audit B3). Public for tests.</summary>

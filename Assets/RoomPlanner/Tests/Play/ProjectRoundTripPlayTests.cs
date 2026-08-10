@@ -203,6 +203,7 @@ namespace RoomPlanner.Tests.Play
             var slab = Object.FindObjectsByType<Floor>(FindObjectsSortMode.None)[0];
             var fin = SurfaceFinish.OfTexture("oak-01", 2f, 0f);
             fin.Smoothness = 0.35f;
+            fin.RotationDeg = 45f;   // turned laminate (design/22) must survive too
             slab.GetComponent<Selectable>().SetFinish(fin, null);
 
             var data = ProjectStore.Capture(walls, null);
@@ -223,6 +224,7 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(FinishKind.Texture, rf.Kind);
             Assert.AreEqual(2f, rf.TileMeters, 1e-4f);
             Assert.AreEqual(0.35f, rf.Smoothness, 1e-4f, "per-finish gloss survives too");
+            Assert.AreEqual(45f, rf.RotationDeg, 1e-4f, "texture rotation survives too");
         }
 
         [UnityTest]

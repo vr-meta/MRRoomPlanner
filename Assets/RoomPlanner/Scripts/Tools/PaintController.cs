@@ -15,35 +15,42 @@ namespace RoomPlanner.Tools
         private readonly Selectable _target;
         private readonly SurfaceFinish _after;
         private readonly Texture2D _afterTex;
+        private readonly Texture2D _afterNormal;
         private readonly bool _sideOnly;
         private readonly WallSide _side;
         private readonly SurfaceFinish _beforeInner, _beforeOuter;
         private readonly Texture2D _beforeInnerTex, _beforeOuterTex;
+        private readonly Texture2D _beforeInnerNormal, _beforeOuterNormal;
 
         public PaintCommand(Selectable target, Color color)
             : this(target, SurfaceFinish.OfColor(color), null) { }
 
-        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex)
-            : this(target, after, afterTex, sideOnly: false, WallSide.Inner) { }
+        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
+            Texture2D afterNormal = null)
+            : this(target, after, afterTex, sideOnly: false, WallSide.Inner, afterNormal) { }
 
         /// <summary>Paint one wall side (Apply: Side, the default).</summary>
-        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex, WallSide side)
-            : this(target, after, afterTex, sideOnly: true, side) { }
+        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
+            WallSide side, Texture2D afterNormal = null)
+            : this(target, after, afterTex, sideOnly: true, side, afterNormal) { }
 
         private PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
-            bool sideOnly, WallSide side)
+            bool sideOnly, WallSide side, Texture2D afterNormal)
         {
             _target = target;
             _after = after;
             _afterTex = afterTex;
+            _afterNormal = afterNormal;
             _sideOnly = sideOnly;
             _side = side;
             if (target != null)
             {
                 _beforeInner = target.FinishOf(WallSide.Inner);
                 _beforeInnerTex = target.FinishTextureOf(WallSide.Inner);
+                _beforeInnerNormal = target.FinishNormalOf(WallSide.Inner);
                 _beforeOuter = target.FinishOf(WallSide.Outer);
                 _beforeOuterTex = target.FinishTextureOf(WallSide.Outer);
+                _beforeOuterNormal = target.FinishNormalOf(WallSide.Outer);
             }
         }
 
@@ -56,15 +63,15 @@ namespace RoomPlanner.Tools
         public void Do()
         {
             if (!Alive) return;
-            if (_sideOnly) _target.SetFinishSide(_side, _after, _afterTex);
-            else _target.SetFinish(_after, _afterTex);
+            if (_sideOnly) _target.SetFinishSide(_side, _after, _afterTex, _afterNormal);
+            else _target.SetFinish(_after, _afterTex, _afterNormal);
         }
 
         public void Undo()
         {
             if (!Alive) return;
-            _target.SetFinishSide(WallSide.Inner, _beforeInner, _beforeInnerTex);
-            _target.SetFinishSide(WallSide.Outer, _beforeOuter, _beforeOuterTex);
+            _target.SetFinishSide(WallSide.Inner, _beforeInner, _beforeInnerTex, _beforeInnerNormal);
+            _target.SetFinishSide(WallSide.Outer, _beforeOuter, _beforeOuterTex, _beforeOuterNormal);
         }
     }
 
@@ -115,6 +122,8 @@ namespace RoomPlanner.Tools
         // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
         private readonly float[] _tileW = new float[TexTabs.Length];
         private readonly float[] _tileH = new float[TexTabs.Length];
+        // texture rotation per category tab, degrees (turn laminate/tiles); 15° steps
+        private readonly float[] _rot = new float[TexTabs.Length];
         // gloss override per TAB (index 0 = Color); -1 = auto (catalog / matte paint)
         private readonly float[] _gloss = { -1f, -1f, -1f, -1f, -1f };
         private readonly string[][] _catIds = new string[TexTabs.Length][];
@@ -187,7 +196,11 @@ namespace RoomPlanner.Tools
                     .Stepper($"th-{k}", "Tile H",
                         () => _tileH[c] > 0f ? $"{_tileH[c] * 100f:0} cm" : "= W",
                         () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), -1),
-                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), +1));
+                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), +1))
+                    .Stepper($"rot-{k}", "Rotate",
+                        () => $"{_rot[c]:0}°",
+                        () => _rot[c] = Mathf.Repeat(_rot[c] - 15f, 360f),
+                        () => _rot[c] = Mathf.Repeat(_rot[c] + 15f, 360f));
                 AddGlossStepper(page, $"gl-{k}", c + 1);
                 // Apply scope only where a wall can be the target (Walls, Tiles)
                 if (CategoryAccepts(TexTabs[c].cat, SelectableKind.Wall))
@@ -236,10 +249,12 @@ namespace RoomPlanner.Tools
 
         /// <summary>The finish the trigger applies, decided by the active tab; false if
         /// the tab has no usable pick (textures not downloaded).</summary>
-        private bool TryCurrentFinish(out SurfaceFinish finish, out Texture2D texture)
+        private bool TryCurrentFinish(out SurfaceFinish finish, out Texture2D texture,
+            out Texture2D normal)
         {
             finish = SurfaceFinish.None;
             texture = null;
+            normal = null;
             if (_tab == 0)
             {
                 finish = SurfaceFinish.OfColor(CurrentColor, GlossFor(0));
@@ -250,9 +265,10 @@ namespace RoomPlanner.Tools
             if (ids == null || ids.Length == 0 || library == null) return false;
             int pick = Mathf.Clamp(_pick[c], 0, ids.Length - 1);
             if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
+            normal = library.NormalOf(ids[pick]);   // optional relief (design/22)
             // per-axis overrides: 0 = catalog tile; H unset follows W (square)
             float w = _tileW[c] > 0f ? _tileW[c] : tile;
-            finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab));
+            finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab), _rot[c]);
             return true;
         }
 
@@ -331,7 +347,7 @@ namespace RoomPlanner.Tools
 
             if (input.ConfirmPressed() && _hover != null)
             {
-                if (mismatch || !TryCurrentFinish(out var finish, out var texture))
+                if (mismatch || !TryCurrentFinish(out var finish, out var texture, out var normal))
                 {
                     input.Pulse(0.2f, 0.01f);   // refusal — the cursor is already red
                 }
@@ -342,8 +358,8 @@ namespace RoomPlanner.Tools
                     var wallView = _scope == 0 && _hover.Kind == SelectableKind.Wall
                         ? _hover.GetComponent<Wall>() : null;
                     var cmd = wallView != null
-                        ? new PaintCommand(_hover, finish, texture, wallView.SideOf(point))
-                        : new PaintCommand(_hover, finish, texture);
+                        ? new PaintCommand(_hover, finish, texture, wallView.SideOf(point), normal)
+                        : new PaintCommand(_hover, finish, texture, normal);
                     sceneModel.History.Execute(cmd);
                     input.Pulse(0.5f, 0.02f);
                 }

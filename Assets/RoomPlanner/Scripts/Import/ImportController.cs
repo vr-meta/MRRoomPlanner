@@ -316,7 +316,7 @@ namespace RoomPlanner.Import
         private bool ApplyFinish(Selectable sel, Core.SurfaceFinish finish)
         {
             if (sel == null || finish.IsNone) return false;
-            sel.SetFinish(finish, ResolveFinishTexture(finish));
+            sel.SetFinish(finish, ResolveFinishTexture(finish), ResolveFinishNormal(finish));
             return true;
         }
 
@@ -328,8 +328,10 @@ namespace RoomPlanner.Import
             if (sel == null) return false;
             if (inner.IsNone && outer.IsNone) return false;
             if (inner.Equals(outer)) return ApplyFinish(sel, inner);
-            sel.SetFinishSide(Core.WallSide.Inner, inner, ResolveFinishTexture(inner));
-            sel.SetFinishSide(Core.WallSide.Outer, outer, ResolveFinishTexture(outer));
+            sel.SetFinishSide(Core.WallSide.Inner, inner,
+                ResolveFinishTexture(inner), ResolveFinishNormal(inner));
+            sel.SetFinishSide(Core.WallSide.Outer, outer,
+                ResolveFinishTexture(outer), ResolveFinishNormal(outer));
             return true;
         }
 
@@ -340,6 +342,14 @@ namespace RoomPlanner.Import
             Texture2D tex = null;
             if (_finishLibrary != null) _finishLibrary.TryGet(finish.TextureId, out tex, out _);
             return tex;
+        }
+
+        /// <summary>Optional relief of the finish (laminate — design/22); null otherwise.</summary>
+        private Texture2D ResolveFinishNormal(Core.SurfaceFinish finish)
+        {
+            if (finish.Kind != Core.FinishKind.Texture) return null;
+            if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+            return _finishLibrary != null ? _finishLibrary.NormalOf(finish.TextureId) : null;
         }
 
         /// <summary>Material by category; strongly transparent surfaces (glass shower
