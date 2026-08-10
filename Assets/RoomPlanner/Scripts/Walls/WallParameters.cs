@@ -50,9 +50,10 @@ namespace RoomPlanner.Walls
                 .Segmented("woff", "Offset", new[] { "Outer", "Center", "Inner" },
                     () => Segment != null ? (int)Segment.Offset : 0,
                     i => { if (Segment != null) Apply(WallParamCommand.ForOffset(this, (WallOffsetMode)i)); })
-                .Segmented("wjoin", "Corner", new[] { "Miter", "Bevel", "Round" },
-                    () => Segment != null ? (int)Segment.Join : 0,
-                    i => { if (Segment != null) Apply(WallParamCommand.ForJoin(this, (WallJoin)i)); })
+                // NOTE: no "Corner" row. WallMesh always miters (with the ×4 limit) and
+                // never read Segment.Join — the row was UI with no effect (audit B8).
+                // Bevel/Round live only in the legacy polyline path; bring the row back
+                // if they are ever implemented for graph joints.
                 .Segmented("wside", "Side", new[] { "Right", "Left" },
                     () => Segment != null && Segment.SideSign < 0f ? 1 : 0,
                     i => { if (Segment != null) Apply(WallParamCommand.ForSide(this, i == 0 ? 1f : -1f)); });

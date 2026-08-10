@@ -91,7 +91,8 @@ namespace RoomPlanner.Tests.Play
             var ids = new List<string>();
             foreach (var f in schema.Fields) ids.Add(f.Id);
 
-            CollectionAssert.AreEquivalent(new[] { "wthk", "wh", "woff", "wjoin", "wside" }, ids);
+            // no "wjoin": the Corner row was UI with no effect — WallMesh always miters (B8)
+            CollectionAssert.AreEquivalent(new[] { "wthk", "wh", "woff", "wside" }, ids);
             Assert.AreEqual("20 cm", Row(r, s, "wthk").Value(), "the row shows THIS wall's value");
         }
 
@@ -158,23 +159,18 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
-        public IEnumerator CyclingOffsetAndJoin_IsUndoable()
+        public IEnumerator CyclingOffset_IsUndoable()
         {
             var (r, model) = MakeRig();
             var s = Draw(r, P(0, 0), P(3, 0));
             s.Offset = WallOffsetMode.Outer;
-            s.Join = WallJoin.Miter;
             yield return null;
 
             NextOption(Row(r, s, "woff"));
-            NextOption(Row(r, s, "wjoin"));
             Assert.AreEqual(WallOffsetMode.Center, s.Offset);
-            Assert.AreEqual(WallJoin.Bevel, s.Join);
 
             model.History.Undo();
-            model.History.Undo();
             Assert.AreEqual(WallOffsetMode.Outer, s.Offset);
-            Assert.AreEqual(WallJoin.Miter, s.Join);
         }
 
         [UnityTest]
