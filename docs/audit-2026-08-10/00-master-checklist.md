@@ -11,14 +11,14 @@
 
 ## P0 — баги с потерей данных или обманом пользователя
 
-- [ ] **B1.** Электрика не сохраняется в проект, а загрузка её уничтожает → [08-electrical.md](08-electrical.md) §Б1
-- [ ] **B2.** Текстурная отделка при save/load деградирует в белый цвет → [06-paint-textures.md](06-paint-textures.md) §Б1
-- [ ] **B3.** Измерения не сохраняются; после загрузки проекта висят от прошлой сцены → [01-measure.md](01-measure.md) §Б1
+- [x] **B1.** Электрика не сохраняется в проект, а загрузка её уничтожает → [08-electrical.md](08-electrical.md) §Б1
+- [x] **B2.** Текстурная отделка при save/load деградирует в белый цвет → [06-paint-textures.md](06-paint-textures.md) §Б1
+- [x] **B3.** Измерения не сохраняются; после загрузки проекта висят от прошлой сцены → [01-measure.md](01-measure.md) §Б1
 - [x] **B4.** Сплит стены теряет проёмы (T-стык через стену с окном ломает окно) → [02-walls.md](02-walls.md) §Б1
 - [x] **B5.** `Floor.AddHole`: непостроенный мост молча уничтожает плиту → [04-floors.md](04-floors.md) §Б1
 - [x] **B6.** `ProjectMep.Storey` не заполняется в Capture → фильтр этажей мёртв после загрузки → [09-ifc-import.md](09-ifc-import.md) §Б1
 - [x] **B7.** Ряд «Original look» в Paint никогда не срабатывает → [06-paint-textures.md](06-paint-textures.md) §Б2
-- [ ] **B8.** Ряд «Corner» (Bevel/Round) стен — UI без эффекта → [02-walls.md](02-walls.md) §Б2
+- [x] **B8.** Ряд «Corner» (Bevel/Round) стен — UI без эффекта → [02-walls.md](02-walls.md) §Б2
 - [x] **B9.** Калибровка Blueprint выставляет масштаб вне диапазона слайдера → [07-blueprint.md](07-blueprint.md) §Б1
 - [x] **B10.** `Switch To URP` затирает Renderer-ассет вместе с SSAO-фичей → [06-paint-textures.md](06-paint-textures.md) §Б3
 - [x] **B11.** Скрытая (удалённая) стена продолжает формировать стыки соседей → [02-walls.md](02-walls.md) §Б3
@@ -28,7 +28,7 @@
 ## P1 — системные разрывы контракта
 
 - [~] **S1.** Undo создания объектов: стены/плиты/дыры/измерения/фикстуры/трассы рождаются мимо `EditHistory` → [12-persistence.md](12-persistence.md) §С1 (общий паттерн `CreateCommand`), применение по подсистемам: [01](01-measure.md) §Р1, [02](02-walls.md) §Р1, [04](04-floors.md) §Р1, [08](08-electrical.md) §Р1
-- [ ] **S2.** Формат проекта v2: Version-проверка + миграция v1→v2 + электрика + измерения + отделки + Storey → [12-persistence.md](12-persistence.md) §Р1
+- [~] **S2.** Формат проекта v2: Version-проверка + миграция v1→v2 + электрика + измерения + отделки + Storey → [12-persistence.md](12-persistence.md) §Р1
 - [~] **S3.** Единая политика снапов через `SnapService.SnapFinder` (рулетка, драг узлов стен, инструмент пола) → [01-measure.md](01-measure.md) §Р2, [02-walls.md](02-walls.md) §Р2, [04-floors.md](04-floors.md) §Р2
 - [ ] **S4.** Перф: убрать `FindObjectsByType` из телепорта/Scan (реестры), отложенный коллайдер в драге угла пола → [11-locomotion.md](11-locomotion.md) §Р3, [04-floors.md](04-floors.md) §Б2
 
