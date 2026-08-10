@@ -4,16 +4,14 @@ using RoomPlanner.Core;
 namespace RoomPlanner.Tools
 {
     /// <summary>
-    /// Left-hand palette, v2 = the Snap &amp; Layers STRIP (design/20 §1.9): tool switching
-    /// moved to the radial (L3); what stays here is the snap toggles (icon buttons with a
-    /// LED), a passive current-tool chip with the layer edge stripe, and the reserved spot
-    /// for layer chips. Lazy-follow and palm-gating unchanged (design/16 P1.2).
+    /// The snap strip, v3: a small FLOATING panel (device feedback 2026-08-11 — nothing
+    /// may live on the left hand, both hands belong to the tape measure). Behaves like
+    /// the inspector: spawns near the gaze low-left, world-locked, follows only when
+    /// parked out of view, and grip-drag parks it anywhere. Content: 5 snap toggles,
+    /// the current-tool chip and the rendering-settings gear.
     /// </summary>
     public class ToolMenu : MonoBehaviour
     {
-        [SerializeField] private Transform follow;                 // left controller
-        [SerializeField] private Vector3 followOffset = new Vector3(0f, 0.10f, 0f);
-        [SerializeField] private bool palmGating = true;           // show only when the palm faces the head
         [SerializeField] private IconRenderer chipIcon;            // current-tool chip (non-interactive)
         [SerializeField] private TMPro.TMP_Text chipLabel;
         [SerializeField] private Renderer chipStripe;              // 4 mm layer-hue edge
@@ -22,22 +20,12 @@ namespace RoomPlanner.Tools
         [SerializeField] private MenuButton snapGridBtn;
         [SerializeField] private MenuButton snapAngleBtn;
         [SerializeField] private MenuButton scanBtn;
-
-        private const float RotStartDeg = 5f;    // billboard re-orients only past this error
-        private const float RotSettleDeg = 0.5f;
-        private const float FadeTime = 0.15f;
+        [SerializeField] private TMPro.TMP_Text tooltipLabel;      // full-word hint under the strip
 
         private Transform _cam;
         private MenuButton _hi;
         private bool _placed;
-        private bool _rotating;
-        private bool _gateVisible = true;
-        private float _visW = 1f;
-        private Vector3 _baseScale;
-
-        private void Awake() => _baseScale = transform.localScale;
-
-        [SerializeField] private TMPro.TMP_Text tooltipLabel;   // full-word hint under the palette
+        private MaterialPropertyBlock _stripeMpb;
 
         public void Highlight(MenuButton b)
         {
@@ -47,9 +35,9 @@ namespace RoomPlanner.Tools
             if (_hi != null) _hi.SetHighlight(true);
             if (tooltipLabel != null)
             {
-                // no hover → the radial discoverability hint (design/20 §1.9 mitigation)
+                // no hover → the radial discoverability hint
                 string tip = _hi != null ? _hi.Tooltip : null;
-                if (string.IsNullOrEmpty(tip)) tip = "Tools: click left stick";
+                if (string.IsNullOrEmpty(tip)) tip = "Tools: hold A";
                 tooltipLabel.gameObject.SetActive(true);
                 tooltipLabel.text = tip;
             }
@@ -64,8 +52,7 @@ namespace RoomPlanner.Tools
             if (scanBtn != null) scanBtn.SetActiveTool(scanOn);
         }
 
-        /// <summary>The passive current-tool chip — the left wrist answers "what tool am I
-        /// holding" at a glance (design/20 §1.9).</summary>
+        /// <summary>The passive current-tool chip — answers "what tool am I holding".</summary>
         public void SetToolChip(string iconId, string label, Color layerTint)
         {
             if (chipIcon != null && !string.IsNullOrEmpty(iconId)) chipIcon.SetIcon(iconId);
@@ -80,50 +67,35 @@ namespace RoomPlanner.Tools
             }
         }
 
-        private MaterialPropertyBlock _stripeMpb;
-
         private void LateUpdate()
         {
-            if (follow != null)
-            {
-                Vector3 target = follow.position + followOffset;
-                if (!_placed) { transform.position = target; _placed = true; }
-                else transform.position = PaletteMath.SmoothFollow(transform.position, target, Time.deltaTime);
-            }
             if (_cam == null)
             {
                 if (Camera.main == null) return;
                 _cam = Camera.main.transform;
             }
 
-            // billboard with a threshold: re-orient only past 5° of error, settle smoothly —
-            // full-rate LookRotation jitters with the hand
+            // inspector-style parking: place once near the gaze (low-left, out of the
+            // pointer's way), then world-lock; re-place only when parked out of reach
+            if (!_placed || OutOfView())
+            {
+                transform.position = _cam.position
+                    + _cam.forward * 0.55f - _cam.right * 0.28f - _cam.up * 0.20f;
+                _placed = true;
+            }
+
+            // yaw-only billboard (a pitched strip reads at a slant when parked low)
             Vector3 dir = transform.position - _cam.position;
+            dir.y = 0f;
             if (dir.sqrMagnitude > 0.0001f)
-            {
-                Quaternion desired = Quaternion.LookRotation(dir);
-                float ang = Quaternion.Angle(transform.rotation, desired);
-                if (ang > RotStartDeg) _rotating = true;
-                if (_rotating)
-                {
-                    float k = 1f - Mathf.Exp(-Time.deltaTime / 0.2f);
-                    transform.rotation = Quaternion.Slerp(transform.rotation, desired, k);
-                    if (ang < RotSettleDeg) _rotating = false;
-                }
-            }
+                transform.rotation = Quaternion.LookRotation(dir);
+        }
 
-            // palm gating: visible while the controller faces the head (hysteresis, 150 ms fade).
-            // Kills both the always-on visual noise and accidental tool-blocking when the left
-            // hand crosses the pointer ray.
-            if (palmGating && follow != null)
-            {
-                float palmDot = Vector3.Dot(follow.up, (_cam.position - follow.position).normalized);
-                _gateVisible = PaletteMath.GateVisible(_gateVisible, palmDot);
-            }
-            else _gateVisible = true;
-
-            _visW = Mathf.MoveTowards(_visW, _gateVisible ? 1f : 0f, Time.deltaTime / FadeTime);
-            transform.localScale = _baseScale * Mathf.Max(0.0001f, _visW);
+        private bool OutOfView()
+        {
+            Vector3 to = transform.position - _cam.position;
+            if (to.magnitude > 2.2f) return true;
+            return Vector3.Angle(_cam.forward, to) > 70f;   // parked behind the back
         }
     }
 }

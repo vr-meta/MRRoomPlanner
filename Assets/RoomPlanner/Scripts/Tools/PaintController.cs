@@ -48,8 +48,6 @@ namespace RoomPlanner.Tools
         [SerializeField] private MeasureInput input;
         [SerializeField] private ToolManager manager;
         [SerializeField] private SceneModel sceneModel;
-        [SerializeField] private RoomPlanner.Walls.WallGraphRenderer walls;
-        [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
         [SerializeField] private Transform reticle;   // visible aim point (device feedback 2026-08-10)
         [SerializeField] private FinishLibrary library;   // texture catalog (design/04 «Текстуры v1»)
 
@@ -103,11 +101,8 @@ namespace RoomPlanner.Tools
                     .Swatch("color", "Color", _palette, () => _preset,
                         i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
                     .Readout("cname", "Preset", () => Presets[_preset].Name)
-                    .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered)
-                    .Header("shade", "Shading")
-                    .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
-                    .Toggle("ssao", "SSAO",
-                        () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+                    .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered);
+                // NOTE: the Shading toggles moved to the Rendering page (snap-strip gear).
 
                 var wallsPage = new SettingsSchema()
                     .Readout("howw", "How to", () => "aim a wall · Trigger = apply");
@@ -152,21 +147,6 @@ namespace RoomPlanner.Tools
             if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
             finish = SurfaceFinish.OfTexture(ids[pick], tile);
             return true;
-        }
-
-        /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>
-        private void ToggleVertexAO()
-        {
-            Core.MeshShading.VertexAO = !Core.MeshShading.VertexAO;
-            if (walls != null && walls.Graph != null)
-                foreach (var s in walls.Graph.Segments) walls.RebuildSegment(s);
-            foreach (var f in TeleportCommand.CollectFloors()) f.Rebuild();
-            foreach (var st in TeleportCommand.CollectStairs()) st.Rebuild();
-        }
-
-        private void ToggleSsao()
-        {
-            if (ssaoFeature != null) ssaoFeature.SetActive(!ssaoFeature.isActive);
         }
 
         public void OnActivate() { }

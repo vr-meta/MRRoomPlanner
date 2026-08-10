@@ -97,6 +97,12 @@ namespace RoomPlanner.Measure
         {
             if (pointer == null || raycaster == null || input == null) return;
 
+            // A teleport (or its undo) shifts every Measurement including the live preview —
+            // the already-pinned first point must stay glued to the model, not to the user
+            // (headset feedback 2026-08-11). Re-adopt the start the command moved.
+            if (_preview != null && _pendingStart.HasValue)
+                _pendingStart = _preview.PointA;
+
             if (blocked)
             {
                 HidePlus();
@@ -214,6 +220,14 @@ namespace RoomPlanner.Measure
             UpdateHover(null, null);
 
             Vector3 tip = ray.origin + ray.direction * TipOffset;
+
+            // vertex drag in progress: hold = keep dragging, release decides tap vs move
+            if (_dragging != null)
+            {
+                DoDragHands(tip);
+                return;
+            }
+
             Vector3 target = tip;
 
             bool corners = manager == null || manager.SnapCorner;
@@ -238,10 +252,60 @@ namespace RoomPlanner.Measure
             }
 
             if (input.ConfirmPressed())
-                PlacePoint(target);   // pin A, walk, pin B — same chain machinery
+            {
+                // Tip on an existing vertex (not while stretching): HOLD drags it, a quick
+                // TAP starts a new tape from that vertex (headset feedback 2026-08-11).
+                var handle = _pendingStart.HasValue ? null : FindEndpointHandle(target);
+                if (handle != null && handle.Owner != null)
+                {
+                    _dragging = handle;
+                    _dragPressedAt = Time.time;
+                    _dragOrigin = handle.IsEndA ? handle.Owner.PointA : handle.Owner.PointB;
+                    handle.Owner.SetInteractable(false);
+                }
+                else
+                    PlacePoint(target);   // pin A, walk, pin B — same chain machinery
+            }
 
             if (_pendingStart.HasValue && _preview != null)
                 _preview.Set(_pendingStart.Value, target);   // live tape with the size badge
+        }
+
+        private const float TapSeconds = 0.25f;   // shorter press on a vertex = tap, not drag
+        private float _dragPressedAt;
+        private Vector3 _dragOrigin;
+
+        /// <summary>Hands-mode vertex drag: the tape tip carries the point (same magnets as
+        /// placing). Releasing within the tap window undoes the micro-move and starts a new
+        /// chain from the vertex instead — "press and release = place a point".</summary>
+        private void DoDragHands(Vector3 tip)
+        {
+            if (input.ConfirmHeld())
+            {
+                Vector3 t = tip;
+                if (TrySnapToEndpoint(tip, out var sp, _dragging.Owner)) t = sp;
+                else if (TrySnapToNearbySurface(tip, out var sfc)) t = sfc;
+                if (manager != null && manager.SnapGrid)
+                    t = MeasureMath.SnapToGridXZ(t, manager.GridSize);
+                if (input.SnapHeld() && _dragging.Owner != null)
+                {
+                    Vector3 other = _dragging.IsEndA ? _dragging.Owner.PointB : _dragging.Owner.PointA;
+                    t = SnapToAxis(other, t);
+                }
+                ApplyDrag(_dragging, t);
+                if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
+            }
+            else
+            {
+                var h = _dragging;
+                _dragging = null;
+                if (h.Owner != null) h.Owner.SetInteractable(true);
+                if (Time.time - _dragPressedAt < TapSeconds)
+                {
+                    ApplyDrag(h, _dragOrigin);        // barely moved — put it back
+                    StartChainFrom(_dragOrigin);      // tap on a vertex = continue from it
+                }
+            }
         }
 
         /// <summary>Closest point on any nearby surface (scan or own geometry) within the

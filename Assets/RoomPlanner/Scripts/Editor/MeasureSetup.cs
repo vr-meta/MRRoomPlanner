@@ -80,6 +80,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("locomotion").objectReferenceValue = ctx.Locomotion;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
             so.FindProperty("skyMat").objectReferenceValue = ctx.SkyMat;
+            so.FindProperty("ssaoFeature").objectReferenceValue = ctx.Ssao;
             so.ApplyModifiedProperties();
         }
     }

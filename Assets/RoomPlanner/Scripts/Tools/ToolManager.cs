@@ -51,6 +51,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private bool scanOn = false;
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
+        [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -92,6 +93,8 @@ namespace RoomPlanner.Tools
 
         private ITool[] _tools;
         private int _active;
+        private bool _showRenderSettings;   // gear on the snap strip → Rendering page
+        private SettingsSchema _renderSchema;
 
         private ITool ActiveTool() =>
             _tools != null && _active >= 0 && _active < _tools.Length ? _tools[_active] : null;
@@ -172,6 +175,7 @@ namespace RoomPlanner.Tools
 
         private bool _grabbing;
         private float _grabDist = 0.55f;
+        private Transform _grabTarget;   // what the current grip-drag moves (InspectorGrab.MoveTarget)
 
         // radial state: capture window + the 150 ms post-close input debounce (design/20 §1.8)
         private bool _radialWasCapturing;
@@ -353,8 +357,16 @@ namespace RoomPlanner.Tools
             bool grabStart = !_grabbing && grab != null && input.SnapPressed();
             if ((_grabbing && input.SnapHeld()) || grabStart)
             {
-                if (!_grabbing) { _grabbing = true; _grabDist = Mathf.Max(0.3f, hit.distance); }
-                if (inspector != null) inspector.MovePanel(ray.origin + ray.direction * _grabDist);
+                if (!_grabbing)
+                {
+                    _grabbing = true;
+                    _grabDist = Mathf.Max(0.3f, hit.distance);
+                    // the marker says WHAT to move (snap strip root, panel…); legacy null = inspector
+                    _grabTarget = grab != null ? grab.MoveTarget : null;
+                }
+                Vector3 target = ray.origin + ray.direction * _grabDist;
+                if (_grabTarget != null) _grabTarget.position = target;
+                else if (inspector != null) inspector.MovePanel(target);
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 if (menu != null) menu.Highlight(null);
                 return; // don't tick tools or press buttons while dragging
@@ -517,6 +529,7 @@ namespace RoomPlanner.Tools
                 case MenuAction.ToggleSnapGrid: snapGrid = !snapGrid; break;
                 case MenuAction.ToggleSnapAngle: snapAngle = !snapAngle; break;
                 case MenuAction.ToggleScan: scanOn = !scanOn; SetScan(scanOn); break;
+                case MenuAction.ToggleRenderSettings: _showRenderSettings = !_showRenderSettings; break;
             }
             RefreshMenu();
         }
@@ -611,6 +624,7 @@ namespace RoomPlanner.Tools
         public void SetActiveTool(int index)
         {
             if (_tools == null || index < 0 || index >= _tools.Length) return;
+            _showRenderSettings = false;   // picking a tool always returns its own settings
             if (index != _active)
             {
                 _prevTool = _active;   // R3 jumps back here
@@ -647,8 +661,38 @@ namespace RoomPlanner.Tools
                 bool hasSel = select != null && select.HasSelection;
                 bool showSelection = act != null && ReferenceEquals(act, select) && hasSel;
                 if (select != null) inspector.SetSelection(select.SelectionTitle, select.SelectionInfo);
-                inspector.ShowFor(act?.GetSettings(), showSelection);
+                // gear page replaces the tool schema until toggled off or a tool is picked
+                var schema = _showRenderSettings ? RenderSettingsSchema() : act?.GetSettings();
+                inspector.ShowFor(schema, showSelection && !_showRenderSettings);
             }
+        }
+
+        // ---- Rendering page (gear on the snap strip; moved out of Paint 2026-08-11) ----
+
+        private SettingsSchema RenderSettingsSchema()
+        {
+            _renderSchema ??= new SettingsSchema()
+                .Header("rhead", "Rendering")
+                .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
+                .Toggle("ssao", "SSAO",
+                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+            return _renderSchema;
+        }
+
+        /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>
+        private void ToggleVertexAO()
+        {
+            Core.MeshShading.VertexAO = !Core.MeshShading.VertexAO;
+            var wallsRenderer = GetComponent<WallGraphRenderer>();
+            if (wallsRenderer != null && wallsRenderer.Graph != null)
+                foreach (var s in wallsRenderer.Graph.Segments) wallsRenderer.RebuildSegment(s);
+            foreach (var f in TeleportCommand.CollectFloors()) f.Rebuild();
+            foreach (var st in TeleportCommand.CollectStairs()) st.Rebuild();
+        }
+
+        private void ToggleSsao()
+        {
+            if (ssaoFeature != null) ssaoFeature.SetActive(!ssaoFeature.isActive);
         }
     }
 }

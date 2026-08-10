@@ -22,8 +22,6 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("input").objectReferenceValue = ctx.Input;
             so.FindProperty("manager").objectReferenceValue = ctx.Manager;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
-            so.FindProperty("walls").objectReferenceValue = ctx.Rig.GetComponent<RoomPlanner.Walls.WallGraphRenderer>();
-            so.FindProperty("ssaoFeature").objectReferenceValue = ctx.Ssao;
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
             so.FindProperty("library").objectReferenceValue = ctx.Finishes;
             so.ApplyModifiedProperties();

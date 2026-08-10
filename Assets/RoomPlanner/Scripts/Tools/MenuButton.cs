@@ -15,7 +15,8 @@ namespace RoomPlanner.Tools
         ToggleSnapEdge,
         ToggleSnapGrid,
         ToggleSnapAngle,
-        ToggleScan
+        ToggleScan,
+        ToggleRenderSettings   // gear: the Rendering page in the inspector (feedback 2026-08-11)
     }
 
     /// <summary>Button semantics (design/16 P1.3): one-of selection (tool), on/off toggle
