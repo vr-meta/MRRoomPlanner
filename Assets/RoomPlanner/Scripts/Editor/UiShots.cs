@@ -36,9 +36,9 @@ namespace RoomPlanner.EditorTools
 
                 ShotRadial(cam, ctx);
                 ShotStrip(cam, ctx);
-                ShotInspectorElectric(cam, ctx);
                 ShotInspectorShowcase(cam, ctx);
                 ShotNumpad(cam, ctx);
+                ShotEveryTool(cam, ctx);
 
                 Debug.Log("[CI] ui-shots saved to Build/ui-shots");
             }
@@ -86,25 +86,63 @@ namespace RoomPlanner.EditorTools
             UnityEngine.Object.DestroyImmediate(menu.gameObject);
         }
 
-        private static void ShotInspectorElectric(Camera cam, RigContext ctx)
+        /// <summary>One shot per REAL tool schema — the actual controllers' GetSettings(),
+        /// so the gallery always matches the app (user request 2026-08-10: «скриншот от
+        /// всех опций, всех разделов»).</summary>
+        private static void ShotEveryTool(Camera cam, RigContext ctx)
         {
-            int mode = 0, posts = 2;
-            float height = 0.30f, coff = 0.20f;
-            var outlet = new SettingsSchema()
-                .Stepper("posts", "Posts", () => $"{posts}", () => posts--, () => posts++)
-                .Slider("oh", "Height", 0.1f, 2.0f, 0.01f, () => height, v => height = v,
-                    (_, v) => height = v, () => $"{height * 100f:0} cm", 100f);
-            var sw = new SettingsSchema();
-            var wire = new SettingsSchema()
-                .Segmented("cable", "Cable", new[] { "3x1.5", "3x2.5" }, () => 0, _ => { })
-                .Segmented("routing", "Route", new[] { "Ortho", "Free" }, () => 0, _ => { })
-                .Slider("coff", "Ceiling off", 0.05f, 1f, 0.01f, () => coff, v => coff = v,
-                    (_, v) => coff = v, () => $"{coff * 100f:0} cm", 100f);
-            var panel = new SettingsSchema();
-            var schema = SettingsSchema.Tabbed(new[] { "Outlet", "Switch", "Wire", "Panel" },
-                () => mode, i => mode = i, outlet, sw, wire, panel);
+            var host = new GameObject("ToolsHost");
+            try
+            {
+                var manager = host.AddComponent<ToolManager>();
 
-            RenderInspector(cam, ctx, schema, "inspector-electric");
+                var wall = host.AddComponent<RoomPlanner.Walls.WallController>();
+                Wire(wall, "manager", manager);
+                RenderInspector(cam, ctx, wall.GetSettings(), "tool-wall");
+
+                var floor = host.AddComponent<RoomPlanner.Floors.FloorController>();
+                Wire(floor, "manager", manager);
+                RenderInspector(cam, ctx, floor.GetSettings(), "tool-floor");
+
+                var blueprint = host.AddComponent<RoomPlanner.Floors.BlueprintController>();
+                RenderInspector(cam, ctx, blueprint.GetSettings(), "tool-blueprint");
+
+                var import = host.AddComponent<RoomPlanner.Import.ImportController>();
+                RenderInspector(cam, ctx, import.GetSettings(), "tool-import");
+
+                var paint = host.AddComponent<PaintController>();
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint");
+
+                var electric = host.AddComponent<RoomPlanner.Electrical.ElectricController>();
+                var schema = electric.GetSettings();
+                for (int tab = 0; tab < schema.Tabs.Length; tab++)
+                {
+                    schema.SelectTab(tab);
+                    RenderInspector(cam, ctx, schema,
+                        $"tool-electric-{schema.Tabs[tab].ToLowerInvariant()}");
+                }
+
+                // Select: the selection group with a sample pick
+                cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                var inspector = SetupInspector.Build(ctx);
+                inspector.SetSelection("Wall #3", "Length 3.2 m · Height 2.7 m · 20 cm");
+                inspector.ShowFor(null, showSelection: true);
+                RebuildVisuals(inspector.gameObject);
+                Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.13f,
+                    "tool-select", 1200, 1500);
+                UnityEngine.Object.DestroyImmediate(inspector.gameObject);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
+        private static void Wire(Component target, string field, UnityEngine.Object value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).objectReferenceValue = value;
+            so.ApplyModifiedProperties();
         }
 
         private static void ShotInspectorShowcase(Camera cam, RigContext ctx)
@@ -145,6 +183,7 @@ namespace RoomPlanner.EditorTools
                 .Numeric("h", "Height", 0.1f, 5f, () => 2.8f, (_, __) => { }, () => "280 cm", 100f)
                 .Fields[0];
 
+            cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             var inspector = SetupInspector.Build(ctx);
             var schema = new SettingsSchema()
                 .Numeric("h", "Height", 0.1f, 5f, () => 2.8f, (_, __) => { }, () => "280 cm", 100f);
@@ -152,7 +191,7 @@ namespace RoomPlanner.EditorTools
             inspector.Popups.OpenNumpad(field, null);
             RebuildVisuals(inspector.gameObject);
 
-            Shoot(cam, Vector3.zero, inspector.Panel.position + Vector3.down * 0.10f,
+            Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.10f,
                 "numpad", 1200, 1500);
             UnityEngine.Object.DestroyImmediate(inspector.gameObject);
         }
@@ -160,11 +199,14 @@ namespace RoomPlanner.EditorTools
         private static void RenderInspector(Camera cam, RigContext ctx, SettingsSchema schema,
             string shotName)
         {
+            // PlaceInFront reads the camera's CURRENT forward — reset it, or every next
+            // panel spirals away from the previous shot's aim and shows its back side
+            cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             var inspector = SetupInspector.Build(ctx);
             inspector.ShowFor(schema, false);
             RebuildVisuals(inspector.gameObject);
             // panel origin is TOP-center — aim at the content middle so nothing crops
-            Shoot(cam, Vector3.zero, inspector.Panel.position + Vector3.down * 0.13f,
+            Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.13f,
                 shotName, 1200, 1500);
             UnityEngine.Object.DestroyImmediate(inspector.gameObject);
         }

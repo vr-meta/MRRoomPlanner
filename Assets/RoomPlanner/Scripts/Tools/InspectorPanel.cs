@@ -413,6 +413,7 @@ namespace RoomPlanner.Tools
                 new Vector2(PanelLayout.ContentWidth, UiTokens.RowHeight),
                 () => f.Increase?.Invoke());
             mb.Destructive = f.Destructive;
+            mb.SetEnabled(true);   // re-apply visuals: the Danger label needs the flag set
             if (!string.IsNullOrEmpty(f.IconId))
                 AddRowIcon(mb.transform, f.IconId,
                     new Vector3(-PanelLayout.ContentWidth * 0.5f + 0.016f, 0f, -0.004f), 0.013f);
