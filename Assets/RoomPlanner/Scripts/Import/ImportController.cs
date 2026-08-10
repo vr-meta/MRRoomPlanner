@@ -241,6 +241,7 @@ namespace RoomPlanner.Import
                 var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
                 stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
                     st.Kind);
+                go.AddComponent<RoomPlanner.Stairs.StairParameters>();   // per-instance rows (F2)
                 var sel = go.AddComponent<Selectable>();
                 if (!ApplyFinish(sel, st.Finish) && st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);

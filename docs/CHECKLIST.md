@@ -640,7 +640,7 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   `door-window`): табы Door/Window/Garage (Numeric-размеры), ghost-рамка с цветом
   валидности, триггер = `CreateOpeningCommand` (undo), B у проёма = `DeleteOpening`,
   B по пустоте = Esc; `SetupOpeningsTool` + реестр + слот; +Play-тесты
-- [ ] **S1** — `StairParameters : ISettingsProvider` (Steps/Riser/Tread/Width/Kind
+- [x] **S1** — `StairParameters : ISettingsProvider` (Steps/Riser/Tread/Width/Kind
   за экземпляр, before/after-команды) + навешивание при создании лестниц (импорт и
   restore); Readout Total; +Play-тесты
 - [ ] **S2** — SetupRig + полный прогон + синхронизация доков (10-controls при смене
