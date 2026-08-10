@@ -106,11 +106,16 @@ namespace RoomPlanner.Tools
             _root = MakeRoot("Numpad", w + 0.012f, h);
 
             float top = h * 0.5f - 0.008f;
+            // Backspace moves up beside the entry so the bottom row can hold the decimal
+            // point — without "." fractional values could only ride DisplayScale (10 §Б1).
             _entryLabel = MakeText(_root.transform, "Entry",
-                CurrentDisplay(), new Vector3(0f, top - 0.015f, -0.002f),
-                new Vector2(w, 0.026f));
+                CurrentDisplay(), new Vector3(-key * 0.5f, top - 0.015f, -0.002f),
+                new Vector2(w - key - gap, 0.026f));
+            MakeButton(_root.transform, "KeyBack", "⌫",
+                new Vector3((w - key) * 0.5f, top - 0.015f, 0f),
+                new Vector2(key, 0.026f), () => PressKey("⌫"));
 
-            string[] keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "±", "0", "⌫" };
+            string[] keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "±", "0", "." };
             for (int i = 0; i < keys.Length; i++)
             {
                 int r = i / 3, c = i % 3;
@@ -225,18 +230,7 @@ namespace RoomPlanner.Tools
 
         private void PressKey(string k)
         {
-            switch (k)
-            {
-                case "⌫":
-                    if (_entry.Length > 0) _entry = _entry.Substring(0, _entry.Length - 1);
-                    break;
-                case "±":
-                    _entry = _entry.StartsWith("-") ? _entry.Substring(1) : "-" + _entry;
-                    break;
-                default:
-                    if (_entry.Length < 7) _entry += k;   // first digit replaces the old value
-                    break;
-            }
+            _entry = PanelLayout.NumpadPress(_entry, k);
             if (_entryLabel != null) _entryLabel.text = CurrentDisplay();
         }
 
