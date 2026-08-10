@@ -612,6 +612,20 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   в артефакте (тонемап-кривая в шейдере, NormalGL/Roughness из ambientCG-архивов,
   баланс солнце/ambient, пресеты времени дня, френель неба)
 
+## 2s. IFC coverage v2 (сэмплы youshengCode/IfcSampleFiles, 2026-08-11)
+
+- [x] S1. **IfcAnalyzer** — отчёт покрытия по `TestData/ifc/*.ifc` (menu + headless);
+  сэмплы на шлеме в папке приложения (Download недоступен без спец-разрешения)
+- [x] S2. **BakedTypes v2**: IfcFurniture/IfcSanitaryTerminal (IFC4),
+  FlowController/FlowMovingDevice/EnergyConversionDevice, Covering/Beam/Member/
+  Plate/CurtainWall/Roof — бейкаются мешами
+- [x] S3. **Фолбэк-бейк** стен (нет Axis / нет высоты) и маршей (нет чисел
+  подступёнков) — Proxy-меш вместо пропуска
+- [x] S4. **New project**: + удаление измерений рулетки (фидбек «не очищает сцену»);
+  если проблема воспроизведётся — проверить, что hold 0.5 с доведён до конца
+- [ ] S5. Прогон анализатора после фиксов, тесты, APK, шлем; IfcSpace → комнаты
+  (док 09) — отдельной фичей
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

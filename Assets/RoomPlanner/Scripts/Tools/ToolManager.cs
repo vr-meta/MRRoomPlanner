@@ -150,6 +150,10 @@ namespace RoomPlanner.Tools
             }
             RefreshMenu();
 
+            // SSAO ships ACTIVE in the URP asset (so its shaders survive build stripping)
+            // but the runtime default is OFF — the Rendering-page toggle opts in.
+            if (ssaoFeature != null) ssaoFeature.SetActive(false);
+
             // Enforce the serialized scan default (OFF since 2026-08-10). MRUK spawns the
             // scan meshes asynchronously, so a single early SetScan would miss them —
             // re-apply a few times while the scene settles.

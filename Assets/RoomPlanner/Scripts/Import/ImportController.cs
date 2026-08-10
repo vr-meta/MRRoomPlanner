@@ -450,6 +450,10 @@ namespace RoomPlanner.Import
                 if (s != null) Destroy(s.gameObject);
             foreach (var m in TeleportCommand.CollectMep())
                 if (m != null) Destroy(m.gameObject);
+            // Tape measurements are scene content too ("New project leaves the tape
+            // hanging" — headset feedback 2026-08-11).
+            foreach (var m in TeleportCommand.CollectMeasurements())
+                if (m != null) Destroy(m.gameObject);
             // The electrical layer is scene content too — "New project" must not leave
             // orphaned outlets and wires behind (headset feedback 2026-08-10). Only
             // REGISTERED objects: the parked fixture template and the tool's ghost
@@ -457,8 +461,7 @@ namespace RoomPlanner.Import
             if (sceneModel != null)
                 foreach (var item in new List<ISelectable>(sceneModel.Items))
                     if (item is Selectable s && s.IsAlive
-                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire
-                            || s.GetComponent<Measure.Measurement>() != null))
+                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
                         Destroy(s.gameObject);
             _created.Clear();
             _importedSegments.Clear();

@@ -404,7 +404,7 @@ namespace RoomPlanner.Tools
         private void BuildTextureSwatchInline(SettingField f, float y)
         {
             var options = f.TextureOptions;
-            const int perRow = 4;
+            const int perRow = TexChipsPerRow;
             const float gap = 0.005f;
             float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
             var rims = new GameObject[options.Length];
@@ -441,10 +441,15 @@ namespace RoomPlanner.Tools
         /// <summary>Extra row slots a texture-swatch grid occupies beyond its first —
         /// textured chips are taller than a standard row, so convert real height into
         /// RowStep units for the layout/auto-height math.</summary>
+        /// <summary>6 chips per row since v1.2: 16-18 materials per category at 4/row
+        /// blew the panel up to a wall of chips taller than the user (headset feedback
+        /// 2026-08-11 — "громадный набор букв вместо панели").</summary>
+        private const int TexChipsPerRow = 6;
+
         internal static int ExtraRowsFor(SettingField f)
         {
             if (f.Kind != SettingKind.Swatch || f.TextureOptions == null) return 0;
-            const int perRow = 4;
+            const int perRow = TexChipsPerRow;
             const float gap = 0.005f;
             float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
             int chipRows = (f.TextureOptions.Length + perRow - 1) / perRow;

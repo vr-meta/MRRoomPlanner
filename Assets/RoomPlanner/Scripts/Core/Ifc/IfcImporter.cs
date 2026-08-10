@@ -36,6 +36,19 @@ namespace RoomPlanner.Core.Ifc
             ("IFCFURNISHINGELEMENT", MepCategory.Furniture),    // furniture (IKEA Breps)
             ("IFCBUILDINGELEMENTPROXY", MepCategory.Proxy),     // shower boxes, decor, …
             ("IFCRAILING", MepCategory.Railing),                // stair/balcony railings
+            // coverage v2 (Duplex/SampleHouse gap analysis 2026-08-11): IFC4 renames
+            // and structural/finish elements we can at least SHOW as baked meshes
+            ("IFCFURNITURE", MepCategory.Furniture),            // IFC4 furniture
+            ("IFCSANITARYTERMINAL", MepCategory.Plumbing),      // IFC4 basins/WCs
+            ("IFCFLOWCONTROLLER", MepCategory.Proxy),           // switches, valves
+            ("IFCFLOWMOVINGDEVICE", MepCategory.Plumbing),      // pumps, fans
+            ("IFCENERGYCONVERSIONDEVICE", MepCategory.Proxy),   // boilers, AHUs
+            ("IFCCOVERING", MepCategory.Proxy),                 // finish layers, ceilings
+            ("IFCBEAM", MepCategory.Proxy),
+            ("IFCMEMBER", MepCategory.Proxy),                   // frame members (pergolas)
+            ("IFCPLATE", MepCategory.Proxy),                    // curtain-wall panels
+            ("IFCCURTAINWALL", MepCategory.Proxy),              // glazed facades
+            ("IFCROOF", MepCategory.Proxy),                     // usually an aggregate; baked when it owns geometry
         };
 
         /// <summary>
@@ -48,39 +61,44 @@ namespace RoomPlanner.Core.Ifc
         {
             foreach (var (type, category) in BakedTypes)
             foreach (int id in c.F.OfType(type))
+                if (!BakeProduct(c, b, id, category)) b.SkippedMep++;
+        }
+
+        /// <summary>Bake one product's Body geometry as a mesh element. Also the visual
+        /// FALLBACK for elements whose parametric route failed (Brep-only walls,
+        /// non-parametric stair flights) — better a frozen mesh than a hole in the house
+        /// (coverage v2, 2026-08-11). False when the product has no meshable body.</summary>
+        private static bool BakeProduct(Ctx c, ImportedBuilding b, int id, MepCategory category)
+        {
+            var a = c.F.Args(id);
+            if (a == null || a.Count < 7) return false;
+            var place = Placement(c, a[5]);
+
+            var verts = new List<Vector3>();
+            var tris = new List<int>();
+            if (!BrepWorldMesh(c, a[6], place, verts, tris, out bool hasColor, out Color color,
+                    out float transparency) || verts.Count == 0)
+                return false;
+
+            // bake local around the bbox centre so a teleport is a transform shift
+            Vector3 min = verts[0], max = verts[0];
+            foreach (var p in verts) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+            var origin = (min + max) * 0.5f;
+            for (int i = 0; i < verts.Count; i++) verts[i] -= origin;
+
+            b.Plumbing.Add(new ImportedMep
             {
-                var a = c.F.Args(id);
-                if (a == null || a.Count < 7) { b.SkippedMep++; continue; }
-                var place = Placement(c, a[5]);
-
-                var verts = new List<Vector3>();
-                var tris = new List<int>();
-                if (!BrepWorldMesh(c, a[6], place, verts, tris, out bool hasColor, out Color color,
-                        out float transparency) || verts.Count == 0)
-                {
-                    b.SkippedMep++;
-                    continue;
-                }
-
-                // bake local around the bbox centre so a teleport is a transform shift
-                Vector3 min = verts[0], max = verts[0];
-                foreach (var p in verts) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
-                var origin = (min + max) * 0.5f;
-                for (int i = 0; i < verts.Count; i++) verts[i] -= origin;
-
-                b.Plumbing.Add(new ImportedMep
-                {
-                    Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
-                    Category = category,
-                    Origin = origin,
-                    Vertices = verts,
-                    Triangles = tris,
-                    StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
-                    HasColor = hasColor,
-                    Color = color,
-                    Transparency = transparency,
-                });
-            }
+                Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
+                Category = category,
+                Origin = origin,
+                Vertices = verts,
+                Triangles = tris,
+                StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
+                HasColor = hasColor,
+                Color = color,
+                Transparency = transparency,
+            });
+            return true;
         }
 
         /// <summary>
@@ -309,16 +327,25 @@ namespace RoomPlanner.Core.Ifc
                 var a = c.F.Args(id);
                 if (a == null || a.Count < 12
                     || a[8].Kind != StepKind.Number || a[10].Kind != StepKind.Number
-                    || a[11].Kind != StepKind.Number) { b.SkippedStairs++; continue; }
+                    || a[11].Kind != StepKind.Number)
+                {
+                    // non-parametric flight (no riser/tread numbers) → bake the mesh
+                    if (!BakeProduct(c, b, id, MepCategory.Proxy)) b.SkippedStairs++;
+                    continue;
+                }
 
                 int risers = (int)a[8].Number;
                 float riserH = NormalizeStairSize(a[10].AsFloat, c.Scale);
                 float treadD = NormalizeStairSize(a[11].AsFloat, c.Scale);
-                if (risers < 1 || riserH <= 0f || treadD <= 0f) { b.SkippedStairs++; continue; }
+                if (risers < 1 || riserH <= 0f || treadD <= 0f)
+                {
+                    if (!BakeProduct(c, b, id, MepCategory.Proxy)) b.SkippedStairs++;
+                    continue;
+                }
 
                 if (!TryFlightFrame(c, a, risers, riserH, treadD, out var basePoint, out float yaw, out float width))
                 {
-                    b.SkippedStairs++;
+                    if (!BakeProduct(c, b, id, MepCategory.Proxy)) b.SkippedStairs++;
                     continue;
                 }
 
@@ -632,7 +659,12 @@ namespace RoomPlanner.Core.Ifc
 
                 var axisItems = FindRepresentation(c, a[6], "Axis");
                 var poly = FirstOfType(c, axisItems, "IFCPOLYLINE");
-                if (poly == 0) { b.SkippedWalls++; continue; }
+                // no axis (curved / IFC4 body-only walls) → show the mesh at least
+                if (poly == 0)
+                {
+                    if (!BakeProduct(c, b, id, MepCategory.Proxy)) b.SkippedWalls++;
+                    continue;
+                }
 
                 float height = 0f, profileThickness = 0f;
                 var bodyItems = FindRepresentation(c, a[6], "Body");
@@ -645,7 +677,11 @@ namespace RoomPlanner.Core.Ifc
                     if (profile != null && c.F.TypeOf(sa[0].Ref) == "IFCRECTANGLEPROFILEDEF")
                         profileThickness = Mathf.Min(profile[3].AsFloat, profile[4].AsFloat);
                 }
-                if (height <= 0f) { b.SkippedWalls++; continue; } // Brep-only wall — no parametric height
+                if (height <= 0f)   // Brep-only wall — no parametric height → bake it
+                {
+                    if (!BakeProduct(c, b, id, MepCategory.Proxy)) b.SkippedWalls++;
+                    continue;
+                }
 
                 float thickness = c.LayerThickness.TryGetValue(id, out float lt) ? lt : profileThickness;
                 if (thickness <= 0f) thickness = 150f; // last-resort default, file units (mm)

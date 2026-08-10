@@ -190,7 +190,21 @@ namespace RoomPlanner.EditorTools
 
             foreach (var sub in AssetDatabase.LoadAllAssetsAtPath(path))
                 if (sub is UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion existing)
+                {
+                    // The feature must be ACTIVE in the asset at build time or Unity strips
+                    // its shaders from the player and the runtime toggle spams
+                    // "Couldn't find the required resources" every frame (device log
+                    // 2026-08-11). ToolManager.Start turns it OFF at runtime instead.
+                    var eso = new SerializedObject(existing);
+                    if (!eso.FindProperty("m_Active").boolValue)
+                    {
+                        eso.FindProperty("m_Active").boolValue = true;
+                        eso.ApplyModifiedProperties();
+                        EditorUtility.SetDirty(data);
+                        AssetDatabase.SaveAssets();
+                    }
                     return existing;
+                }
 
             var feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion>();
             feature.name = "SSAO";
@@ -207,7 +221,9 @@ namespace RoomPlanner.EditorTools
             so.ApplyModifiedProperties();
 
             var fso = new SerializedObject(feature);
-            fso.FindProperty("m_Active").boolValue = false;                    // opt-in
+            // active in the ASSET so the player keeps the shaders (stripping);
+            // the runtime default is OFF — ToolManager.Start disables it
+            fso.FindProperty("m_Active").boolValue = true;
             var settings = fso.FindProperty("m_Settings");
             settings.FindPropertyRelative("Source").enumValueIndex = 1;        // Depth
             settings.FindPropertyRelative("Downsample").boolValue = true;

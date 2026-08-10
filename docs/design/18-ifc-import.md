@@ -76,6 +76,24 @@ Import/ImportController.cs  — ITool "Imp": ряды IFC file (листать) 
 Editor/Setup/SetupImportTool.cs + строка в реестре ToolManager.Start + SetupPalette
 ```
 
+## Покрытие v2 (2026-08-11, по анализу сэмплов youshengCode/IfcSampleFiles)
+
+Инструмент анализа — `RoomPlanner → Analyze IFC Samples` (`IfcAnalyzer`, headless
+через `ci/unity-run.ps1 -Method RoomPlanner.EditorTools.IfcAnalyzer.Analyze`):
+по каждому файлу из `TestData/ifc` печатает импортировано/пропущено/неподдержанные
+типы. Изменения покрытия:
+
+- **BakedTypes расширен**: IFC4-переименования (`IfcFurniture`, `IfcSanitaryTerminal`)
+  и «показать хотя бы мешем» — `IfcFlowController` (выключатели), `IfcFlowMovingDevice`,
+  `IfcEnergyConversionDevice`, `IfcCovering`, `IfcBeam`, `IfcMember`, `IfcPlate`,
+  `IfcCurtainWall`, `IfcRoof`.
+- **Фолбэк-бейк**: стены без Axis-полилинии или без параметрической высоты и
+  непараметрические лестничные марши больше не пропадают — бейкаются Proxy-мешем
+  (`BakeProduct`, общий с MEP-петлёй). Заморожённый меш лучше дыры в доме;
+  редактируемость — только у параметрического пути.
+- Не покрыто и осознанно: `IfcSpace` (не геометрия — пригодится для комнат, док 09),
+  `IfcFooting` (фундаменты под землёй), 2D-аннотации (`IfcGeometricSet`).
+
 ## Осознанно откладываем
 
 - **Вырез дверей/окон в меше стены** — Фаза D (панелизация, док 03); импорт уже кладёт
