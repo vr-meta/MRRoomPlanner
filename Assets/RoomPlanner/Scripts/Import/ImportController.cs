@@ -286,6 +286,8 @@ namespace RoomPlanner.Import
                     Height = op.Height,
                     SillHeight = op.Sill,
                     IsDoor = op.IsDoor,
+                    SwingDir = op.SwingDir,
+                    HingeDir = op.HingeDir,
                 });
                 count++;
             }

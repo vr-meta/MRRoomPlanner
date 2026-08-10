@@ -18,6 +18,12 @@ namespace RoomPlanner.Walls
         /// <summary>Doors get a leaf, windows get glass. Comes from the IFC type — a sill
         /// heuristic fails on panoramic windows, which also start at the floor.</summary>
         public bool IsDoor;
+        /// <summary>World-horizontal direction the door leaf opens toward. Zero = closed
+        /// leaf (hand-drawn doors, unknown swing).</summary>
+        public Vector3 SwingDir;
+        /// <summary>World-horizontal direction from the hinge jamb toward the leaf's free
+        /// edge. Zero = closed leaf.</summary>
+        public Vector3 HingeDir;
     }
 
     /// <summary>

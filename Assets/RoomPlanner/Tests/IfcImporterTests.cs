@@ -88,15 +88,37 @@ namespace RoomPlanner.Tests
         [Test]
         public void ImportsSlabOutlines()
         {
-            Assert.AreEqual(3, Building.Slabs.Count);
+            // 3 extruded slabs + the Brep-only stair landing (#25807).
+            Assert.AreEqual(4, Building.Slabs.Count);
             Assert.AreEqual(0, Building.SkippedSlabs);
-            foreach (var slab in Building.Slabs)
+            var extruded = Building.Slabs.Where(s => s.Outline.Count == 4).ToList();
+            Assert.AreEqual(3, extruded.Count);
+            foreach (var slab in extruded)
             {
-                Assert.AreEqual(4, slab.Outline.Count, "closing duplicate point must be dropped");
                 Assert.AreEqual(0.2f, slab.Thickness, 1e-4);
                 foreach (var p in slab.Outline)
                     Assert.AreEqual(slab.Level, p.y, 1e-4, "outline sits on the top plane");
             }
+        }
+
+        [Test]
+        public void ImportsBrepLandingAsSlab()
+        {
+            // Landing #25807 has no extrusion — a FacetedBrep whose top face (7 points,
+            // 2100 × 1050 at (3400, 5800)) sits at z 2275; the sloped soffit bottoms out
+            // at 1922.2, so the honest thickness is the full shell height.
+            var landing = Building.Slabs.Single(s => s.Outline.Count == 7);
+            Assert.AreEqual(2.275f, landing.Level, 1e-3);
+            Assert.AreEqual(0.3528f, landing.Thickness, 1e-3);
+            Assert.AreEqual(0, landing.StoreyIndex, "storey inherited from the stair via IfcRelAggregates");
+            float dx = landing.Outline.Max(p => p.x) - landing.Outline.Min(p => p.x);
+            float dz = landing.Outline.Max(p => p.z) - landing.Outline.Min(p => p.z);
+            Assert.AreEqual(2.1f, dx, 1e-3);
+            Assert.AreEqual(1.05f, dz, 1e-3);
+            Assert.AreEqual(3.4f, landing.Outline.Min(p => p.x), 1e-3);
+            Assert.AreEqual(5.8f, landing.Outline.Min(p => p.z), 1e-3);
+            foreach (var p in landing.Outline)
+                Assert.AreEqual(landing.Level, p.y, 1e-4, "outline sits on the top plane");
         }
 
         [Test]
@@ -139,6 +161,8 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(0.175f, s.RiserHeight, 1e-3, "0.5741 ft → 175 mm");
             Assert.AreEqual(0.275f, s.TreadDepth, 1e-3, "0.9022 ft → 275 mm");
             Assert.IsTrue(s.Width > 0.7f && s.Width < 2f, $"plausible flight width, got {s.Width}");
+            Assert.IsTrue(s.Open, "imports default to the open kind");
+            Assert.AreEqual(0, s.StoreyIndex, "storey inherited from the stair via IfcRelAggregates");
         }
 
         [Test]
@@ -194,6 +218,25 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void DoorSwingComesFromStyleAndPlacement()
+        {
+            // Exterior door #64874: style #64867 is SINGLE_SWING_RIGHT and the placement
+            // parent #177 turns X → −X, so the door faces file −Y (Unity −Z) and hinges
+            // on the world +X side of its opening.
+            var exterior = Building.Openings.First(o => o.IsDoor && Mathf.Abs(o.Width - 0.85f) < 1e-2);
+            Assert.AreEqual(0f, Vector3.Distance(exterior.SwingDir, new Vector3(0f, 0f, -1f)), 1e-3);
+            Assert.AreEqual(0f, Vector3.Distance(exterior.HingeDir, new Vector3(1f, 0f, 0f)), 1e-3);
+
+            // The passage door's style is not in the fixture — swing stays unknown (closed).
+            var passage = Building.Openings.First(o => o.IsDoor && Mathf.Abs(o.Width - 0.7f) < 1e-2);
+            Assert.AreEqual(Vector3.zero, passage.SwingDir);
+
+            // Windows never swing.
+            var window = Building.Openings.Single(o => !o.IsDoor);
+            Assert.AreEqual(Vector3.zero, window.SwingDir);
+        }
+
+        [Test]
         public void ArbitraryProfileSlabKeepsItsShape()
         {
             // Slab #154113 (on L4 Terrace): trapezoid 8500 × (8600/7300) mm in a frame
@@ -209,7 +252,8 @@ namespace RoomPlanner.Tests
         public void FoundationSlabTopSitsAtGroundLevel()
         {
             // Slab #236 on L1: extruded 200 mm; the top face is the storey plane.
-            var slab = Building.Slabs.First(s => s.StoreyIndex == 0);
+            // (the stair landing is also on L1 — filter to the 4-point extruded slab)
+            var slab = Building.Slabs.First(s => s.StoreyIndex == 0 && s.Outline.Count == 4);
             Assert.AreEqual(0f, slab.Level, 1e-3);
         }
     }

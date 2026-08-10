@@ -39,6 +39,9 @@ namespace RoomPlanner.Walls
 
         private const int RoundSegments = 5;
         private const float MinSize = 0.001f;        // smallest sane thickness/height, m
+        /// <summary>How far an imported door leaf stands open (degrees around the hinge) —
+        /// wide enough to walk through, closed enough to read as a door.</summary>
+        public const float DoorOpenAngleDeg = 75f;
         private const float DupEpsSqr = 1e-6f;       // consecutive points closer than 1 mm collapse
         private const float MiterLimit = 4f;         // max miter length in multiples of the offset
 
@@ -274,6 +277,55 @@ namespace RoomPlanner.Walls
                 Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1), VV(y1));
             }
 
+            // Box() with WORLD axes: x along `ax`, y along `ay`, z along `az` (full-length
+            // vectors, corner at `o`). Same face pattern, so the winding stays verified as
+            // long as (ax, ay, az) matches the handedness of the wall's (t, y, d) frame.
+            void BoxWorld(Vector3 o, Vector3 ax, Vector3 ay, Vector3 az)
+            {
+                Vector3 Q(float x, float y, float z) => o + ax * x + ay * y + az * z;
+                Face(joinery, Q(0, 0, 0), Q(0, 1, 0), Q(1, 1, 0), Q(1, 0, 0), 0f, 0f, 1f, 1f);
+                Face(joinery, Q(0, 1, 1), Q(0, 0, 1), Q(1, 0, 1), Q(1, 1, 1), 0f, 1f, 1f, 0f);
+                Face(joinery, Q(0, 1, 0), Q(0, 1, 1), Q(1, 1, 1), Q(1, 1, 0), 0f, 1f, 1f, 1f);
+                Face(joinery, Q(0, 0, 1), Q(0, 0, 0), Q(1, 0, 0), Q(1, 0, 1), 0f, 0f, 1f, 0f);
+                Face(joinery, Q(0, 0, 1), Q(0, 1, 1), Q(0, 1, 0), Q(0, 0, 0), 0f, 0f, 0f, 1f);
+                Face(joinery, Q(1, 0, 0), Q(1, 1, 0), Q(1, 1, 1), Q(1, 0, 1), 1f, 0f, 1f, 1f);
+            }
+
+            // A door leaf swung open around its hinge jamb (imported swing data). Returns
+            // false when the swing is unknown or degenerate — caller emits the closed leaf.
+            bool OpenLeaf(float t0, float t1, float ys, float yh, WallOpening src)
+            {
+                if (src == null) return false;
+                if (src.SwingDir.sqrMagnitude < 1e-6f || src.HingeDir.sqrMagnitude < 1e-6f) return false;
+
+                var alongW = P(1f, 0f, 0.5f) - P(0f, 0f, 0.5f); alongW.y = 0f;
+                var depthW = P(0.5f, 0f, 1f) - P(0.5f, 0f, 0f); depthW.y = 0f;
+                if (alongW.sqrMagnitude < 1e-8f || depthW.sqrMagnitude < 1e-8f) return false;
+                alongW.Normalize(); depthW.Normalize();
+
+                bool hingeAtEnd = Vector3.Dot(src.HingeDir, alongW) < 0f;
+                var pHinge = P(hingeAtEnd ? t1 : t0, ys, 0.5f);
+                var pFree = P(hingeAtEnd ? t0 : t1, ys, 0.5f);
+                var run = pFree - pHinge; run.y = 0f;
+                float w = run.magnitude;
+                float leafH = yh - ys;
+                if (w < 1e-3f || leafH < 1e-3f) return false;
+                run /= w;
+
+                var side = Vector3.Dot(src.SwingDir, depthW) >= 0f ? depthW : -depthW;
+                float a = DoorOpenAngleDeg * Mathf.Deg2Rad;
+                var leafDir = run * Mathf.Cos(a) + side * Mathf.Sin(a);
+                // keep the box frame's handedness equal to the wall frame's, or every
+                // face of the leaf would point inward
+                float hand = Vector3.Dot(Vector3.Cross(alongW, Vector3.up), depthW) >= 0f ? 1f : -1f;
+                var leafN = Vector3.Cross(leafDir, Vector3.up).normalized * hand;
+                float leafT = Mathf.Min(0.04f, thickness * 0.4f);
+
+                BoxWorld(pHinge - leafN * (leafT * 0.5f),
+                    leafDir * w, Vector3.up * leafH, leafN * leafT);
+                return true;
+            }
+
             void EdgeRect(System.Func<float, float, Vector3> at, float t0, float t1, float y0, float y1)
             {
                 int e0 = ev.Count;
@@ -283,7 +335,7 @@ namespace RoomPlanner.Walls
             }
 
             // ---- openings, sanitised: sorted, clamped, non-overlapping ----
-            var ops = new List<(float t0, float t1, float ys, float yh, bool hasGlass)>();
+            var ops = new List<(float t0, float t1, float ys, float yh, bool hasGlass, WallOpening src)>();
             foreach (var op in openings)
             {
                 float halfT = Mathf.Max(0.01f, op.Width) / Mathf.Max(centerlineLength, MinSize) * 0.5f;
@@ -292,7 +344,7 @@ namespace RoomPlanner.Walls
                 float ys = Mathf.Clamp(op.SillHeight, 0f, height - 0.02f);
                 float yh = Mathf.Clamp(op.SillHeight + op.Height, ys + 0.02f, height);
                 if (t1 - t0 < 1e-3f) continue;
-                ops.Add((t0, t1, ys, yh, !op.IsDoor));
+                ops.Add((t0, t1, ys, yh, !op.IsDoor, op));
             }
             ops.Sort((x, y) => x.t0.CompareTo(y.t0));
             for (int i = ops.Count - 1; i > 0; i--)
@@ -358,10 +410,10 @@ namespace RoomPlanner.Walls
                 {
                     Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.ys + frameY, fd0, fd1); // sill board
                 }
-                else
+                else if (!OpenLeaf(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY, op.src))
                 {
-                    // door leaf: fills the frame, thinner than the wall, closed for now —
-                    // hinging/opening is a Phase D interaction
+                    // door leaf: fills the frame, thinner than the wall; closed when the
+                    // swing side is unknown (hand-drawn walls) — opening it is Phase D
                     float leafHalf = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
                     Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY,
                         0.5f - leafHalf, 0.5f + leafHalf);

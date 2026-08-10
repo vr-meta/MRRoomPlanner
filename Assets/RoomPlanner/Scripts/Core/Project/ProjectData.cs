@@ -21,6 +21,7 @@ namespace RoomPlanner.Core.Project
     {
         public float Along, Width, Height, Sill;
         public bool IsDoor;
+        public Vector3 Swing, Hinge;   // door swing directions; zero = closed leaf
     }
 
     [Serializable]
