@@ -41,10 +41,11 @@ namespace RoomPlanner.EditorTools
             EditorSceneManager.MarkSceneDirty(ctx.Rig.scene);
 
             EditorUtility.DisplayDialog("Tools Rig",
-                "Rebuilt (modular setup): SELECT + measure + walls + floor.\n" +
-                "  • Left-hand PALETTE = tool buttons (from registry) + snap toggles.\n" +
-                "  • Floating INSPECTOR renders rows from each tool's SettingsSchema at runtime;\n" +
-                "    grip its title bar to move it. Select shows the picked object.\n" +
+                "Rebuilt (UI v2, design/20):\n" +
+                "  • RADIAL tool menu on LEFT STICK CLICK (flick to pick, ray+trigger works too).\n" +
+                "  • Left-hand strip = snap toggles (icons) + current-tool chip.\n" +
+                "  • Floating INSPECTOR v2: sliders, segmented rows, selects, numpad, swatches;\n" +
+                "    grip its title bar to move it. Right stick click = previous tool.\n" +
                 "  • X = undo, Y = redo; B = delete/cancel.\n\n" +
                 "Next: Ctrl+S → Ctrl+B.",
                 "OK");
@@ -54,15 +55,18 @@ namespace RoomPlanner.EditorTools
         {
             var menu = SetupPalette.Build(ctx);
             var inspector = SetupInspector.Build(ctx);
+            var radial = SetupRadial.Build(ctx);
             // Keep them under the rig so a re-run of Setup cleans them up (no duplicates).
             menu.transform.SetParent(ctx.Rig.transform, true);
             inspector.transform.SetParent(ctx.Rig.transform, true);
+            radial.transform.SetParent(ctx.Rig.transform, true);
 
             var so = new SerializedObject(ctx.Manager);
             so.FindProperty("pointer").objectReferenceValue = ctx.Pointer;
             so.FindProperty("input").objectReferenceValue = ctx.Input;
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
             so.FindProperty("menu").objectReferenceValue = menu;
+            so.FindProperty("radial").objectReferenceValue = radial;
             so.FindProperty("inspector").objectReferenceValue = inspector;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.FindProperty("select").objectReferenceValue = ctx.Select;

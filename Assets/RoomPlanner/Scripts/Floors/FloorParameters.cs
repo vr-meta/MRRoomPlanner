@@ -25,27 +25,30 @@ namespace RoomPlanner.Floors
         public SettingsSchema GetSettings()
         {
             if (Slab == null) return null;
+            // v2: numeric fields — exact entry, one undoable command per commit (design/20 §2.6)
             _schema ??= new SettingsSchema()
-                .Stepper("fthk", "Thickness",
-                    () => $"{Slab.Thickness * 100f:0} cm",
-                    () => AdjustThickness(-0.02f), () => AdjustThickness(0.02f))
-                .Stepper("flvl", "Level",
-                    () => $"{Slab.Level * 100f:0} cm",
-                    () => AdjustLevel(-0.1f), () => AdjustLevel(0.1f));
+                .Numeric("fthk", "Thickness", MinThickness, MaxThickness,
+                    () => Slab != null ? Slab.Thickness : 0f,
+                    (_, v) => SetThickness(v),
+                    () => $"{(Slab != null ? Slab.Thickness : 0f) * 100f:0} cm", displayScale: 100f)
+                .Numeric("flvl", "Level", -20f, 20f,
+                    () => Slab != null ? Slab.Level : 0f,
+                    (_, v) => SetLevel(v),
+                    () => $"{(Slab != null ? Slab.Level : 0f) * 100f:0} cm", displayScale: 100f);
             return _schema;
         }
 
-        private void AdjustThickness(float delta)
+        private void SetThickness(float value)
         {
             if (Slab == null) return;
             Apply(FloorParamCommand.ForThickness(this,
-                Mathf.Clamp(Slab.Thickness + delta, MinThickness, MaxThickness)));
+                Mathf.Clamp(value, MinThickness, MaxThickness)));
         }
 
-        private void AdjustLevel(float delta)
+        private void SetLevel(float value)
         {
             if (Slab == null) return;
-            Apply(FloorParamCommand.ForLevel(this, Mathf.Round((Slab.Level + delta) * 100f) / 100f));
+            Apply(FloorParamCommand.ForLevel(this, Mathf.Round(value * 100f) / 100f));
         }
 
         private void Apply(FloorParamCommand cmd)

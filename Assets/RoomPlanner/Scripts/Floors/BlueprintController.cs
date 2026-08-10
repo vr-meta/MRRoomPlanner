@@ -47,6 +47,7 @@ namespace RoomPlanner.Floors
 
         public string Id => "blueprint";
         public string PaletteLabel => "Plan";
+        public string IconId => "blueprint";
 
         public float PlanScale => planScale;
         public float PlanRotationDeg => planRotationDeg;
@@ -66,20 +67,40 @@ namespace RoomPlanner.Floors
         public SettingsSchema GetSettings()
         {
             // Plan parameters are THIS tool's state — no ToolManager store involved.
+            // v2 (design/20 §2): file picking is a real Select list, actions are buttons.
             _settings ??= new SettingsSchema()
-                .Stepper("scale", "Plan scale",
-                    () => $"{planScale:0.0} m",
-                    () => { planScale = Mathf.Clamp(planScale - 0.25f, 0.5f, 50f); Refresh(); },
-                    () => { planScale = Mathf.Clamp(planScale + 0.25f, 0.5f, 50f); Refresh(); })
+                .Slider("scale", "Plan scale", 0.5f, 50f, 0.25f,
+                    () => planScale,
+                    v => { planScale = Mathf.Clamp(v, 0.5f, 50f); Refresh(); },
+                    (_, v) => { planScale = Mathf.Clamp(v, 0.5f, 50f); Refresh(); },
+                    () => $"{planScale:0.0} m")
                 .Stepper("rot", "Rotation",
                     () => $"{planRotationDeg:0}°",
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg - 5f, 360f); Refresh(); },
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg + 5f, 360f); Refresh(); })
-                .Cycle("calib", "Calibrate", CalibrationLabel,
+                .Select("file", "Plan file", FileOptions, () => Mathf.Max(0, _fileIndex), SelectFile)
+                .Action("load", "Load plan", "folder", ReloadPlan)
+                .Action("calib", "Calibrate (2 points)", "calibrate",
                     () => { if (_calibStep < 0) BeginCalibration(); else CancelCalibration(); })
-                .Cycle("file", "Plan file", SelectedFileLabel, NextFile)
-                .Cycle("load", "Load", () => _planStatus, ReloadPlan);
+                .Readout("status", "Status",
+                    () => _calibStep >= 0 ? CalibrationLabel() : _planStatus);
             return _settings;
+        }
+
+        /// <summary>Select-list options: rescans on open so new downloads appear (design/20 §2.4).</summary>
+        private string[] FileOptions()
+        {
+            RefreshFileList();
+            if (_files.Count == 0) return new[] { "no files" };
+            var names = new string[_files.Count];
+            for (int i = 0; i < _files.Count; i++) names[i] = Path.GetFileName(_files[i]);
+            return names;
+        }
+
+        private void SelectFile(int index)
+        {
+            if (_files.Count == 0) { _fileIndex = -1; return; }
+            _fileIndex = Mathf.Clamp(index, 0, _files.Count - 1);
         }
 
         // ---- file picking ----

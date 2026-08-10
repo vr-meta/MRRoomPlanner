@@ -38,6 +38,8 @@ namespace RoomPlanner.EditorTools
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;
         public Material WallMat, WallEdgeMat, FloorMat;
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
+        public Material IconMat, InsetMat, ScrimMat;   // UI v2 (design/20): icons, wells, radial scrim
+        public RoomPlanner.Tools.RadialMenu Radial;
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
         public Material FurnitureMat, ProxyMat, RailingMat;
         public Material WireMat, FixtureMat;

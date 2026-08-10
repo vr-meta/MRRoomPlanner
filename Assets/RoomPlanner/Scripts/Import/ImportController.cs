@@ -49,15 +49,35 @@ namespace RoomPlanner.Import
 
         public string Id => "import";
         public string PaletteLabel => "Imp";
+        public string IconId => "import-file";
 
         public SettingsSchema GetSettings()
         {
+            // v2 (design/20 §2): Select lists for files/storeys, Load is a button,
+            // "New project" is DESTRUCTIVE — hold 0.5 s to fire, no accidental resets.
             _settings ??= new SettingsSchema()
-                .Cycle("file", "IFC file", SelectedFileLabel, NextFile)
-                .Cycle("load", "Load", () => _status, Load)
-                .Cycle("storey", "Storey", StoreyLabel, NextStorey)
-                .Cycle("new", "New project", () => "reset all", NewProject);
+                .Select("file", "IFC file", FileOptions, () => Mathf.Max(0, _fileIndex), SelectFile)
+                .Action("load", "Load IFC", "folder", Load)
+                .Select("storey", "Storey", StoreyOptions,
+                    () => _storeyFilter + 1, i => SetStoreyFilter(i - 1))
+                .Readout("status", "Status", () => _status)
+                .Action("new", "New project", "trash", NewProject, destructive: true);
             return _settings;
+        }
+
+        private string[] FileOptions()
+        {
+            RefreshFileList();
+            if (_files.Count == 0) return new[] { "no files" };
+            var names = new string[_files.Count];
+            for (int i = 0; i < _files.Count; i++) names[i] = Path.GetFileName(_files[i]);
+            return names;
+        }
+
+        private void SelectFile(int index)
+        {
+            if (_files.Count == 0) { _fileIndex = -1; return; }
+            _fileIndex = Mathf.Clamp(index, 0, _files.Count - 1);
         }
 
         public void OnActivate()
@@ -418,6 +438,24 @@ namespace RoomPlanner.Import
         {
             if (_building == null || _building.Storeys.Count == 0) return;
             _storeyFilter = _storeyFilter + 1 >= _building.Storeys.Count ? -1 : _storeyFilter + 1;
+            ApplyStoreyFilter();
+        }
+
+        /// <summary>Select-list options for the v2 storey filter: "All" + every storey name.</summary>
+        private string[] StoreyOptions()
+        {
+            if (_building == null || _building.Storeys.Count == 0) return new[] { "All" };
+            var names = new string[_building.Storeys.Count + 1];
+            names[0] = "All";
+            for (int i = 0; i < _building.Storeys.Count; i++)
+                names[i + 1] = _building.Storeys[i].Name;
+            return names;
+        }
+
+        private void SetStoreyFilter(int storey)
+        {
+            int max = _building != null ? _building.Storeys.Count - 1 : -1;
+            _storeyFilter = Mathf.Clamp(storey, -1, max);
             ApplyStoreyFilter();
         }
 

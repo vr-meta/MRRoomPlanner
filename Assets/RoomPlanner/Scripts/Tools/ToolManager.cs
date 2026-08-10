@@ -22,6 +22,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private MeasureInput input;
         [SerializeField] private Transform reticle;
         [SerializeField] private ToolMenu menu;
+        [SerializeField] private RadialMenu radial;
         [SerializeField] private InspectorPanel inspector;
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private SelectController select;
@@ -71,13 +72,16 @@ namespace RoomPlanner.Tools
         public void AdjustWallHeight(float d) => wallHeight = Mathf.Clamp(wallHeight + d, 0.2f, 5f);
         public void AdjustAngleStep(float d) => angleStep = Mathf.Clamp(angleStep + d, 5f, 90f);
         public void AdjustLevel(float d) => level = Mathf.Round((level + d) * 100f) / 100f;
-        public void CycleOffsetMode() => offsetMode = (offsetMode + 1) % 3;
-        public void CyclePlaceMode() => placeMode = (placeMode + 1) % 3;
-        public void CycleJoinMode() => joinMode = (joinMode + 1) % 3;
 
-        public string OffsetName() => offsetMode == 0 ? "Outer" : offsetMode == 1 ? "Center" : "Inner";
-        public string PlaceName() => placeMode == 0 ? "Surface" : placeMode == 1 ? "Free" : "Floor";
-        public string JoinName() => joinMode == 0 ? "Miter" : joinMode == 1 ? "Bevel" : "Round";
+        // absolute setters for the v2 sliders/numpad (design/20 §2.2, §2.6)
+        public void SetWallThickness(float v) => wallThickness = Mathf.Clamp(v, 0.02f, 1f);
+        public void SetWallHeight(float v) => wallHeight = Mathf.Clamp(v, 0.2f, 5f);
+        public void SetLevel(float v) => level = Mathf.Round(v * 100f) / 100f;
+
+        // index accessors for the v2 segmented rows (design/20 §2.3)
+        public int OffsetModeIndex { get => offsetMode; set => offsetMode = Mathf.Clamp(value, 0, 2); }
+        public int PlaceModeIndex { get => placeMode; set => placeMode = Mathf.Clamp(value, 0, 2); }
+        public int JoinModeIndex { get => joinMode; set => joinMode = Mathf.Clamp(value, 0, 2); }
 
         // ---- tool registry ----
 
@@ -87,22 +91,81 @@ namespace RoomPlanner.Tools
         private ITool ActiveTool() =>
             _tools != null && _active >= 0 && _active < _tools.Length ? _tools[_active] : null;
 
+        /// <summary>
+        /// The radial's fixed compass layout (design/20 §1.6): slot → registry tool id,
+        /// icon and layer tint. Positions are permanent — spatial memory is the payoff;
+        /// null tool id = reserved slot (faint dot until the tool ships).
+        /// </summary>
+        private static readonly (string toolId, string icon, string label, Color tint)[] RadialSlots =
+        {
+            ("select", "select-cursor", "Select", new Color(0.91f, 0.93f, 0.96f)),
+            ("measure", "tape-measure", "Measure", new Color(0.61f, 0.48f, 1f)),      // Measurements
+            ("wall", "wall", "Wall", new Color(0.60f, 0.65f, 0.75f)),                 // Structure
+            ("floor", "floor-slab", "Floor", new Color(0.60f, 0.65f, 0.75f)),
+            (null, "door-window", "Openings", Color.gray),
+            (null, "furniture", "Furniture", Color.gray),
+            ("blueprint", "blueprint", "Blueprint", new Color(0.54f, 0.82f, 0.78f)),  // Blueprint
+            ("import", "import-file", "Import", new Color(0.91f, 0.93f, 0.96f)),
+            ("electric", "electric-plug", "Electric", new Color(1f, 0.79f, 0.30f)),   // Electrical
+            (null, "radiator", "Heating", Color.gray),
+            (null, "pipe", "Plumbing", Color.gray),
+            ("paint", "paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f)),       // Interior
+        };
+
         private void Start()
         {
             // Registration point: adding a tool = wiring its controller + one entry here
-            // (palette buttons are generated from the same order by SetupPalette).
+            // (the radial's fixed slot table above maps tools to compass positions).
             _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint };
 
-            Debug.Log($"[Tools] v11 registry: {_tools.Length} tools, scene={(sceneModel != null)} inspector={(inspector != null)}");
+            Debug.Log($"[Tools] v12 registry: {_tools.Length} tools, radial={(radial != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)
                 if (t != null) t.OnDeactivate();
             _active = 0;
             if (ActiveTool() != null) ActiveTool().OnActivate();
+
+            if (radial != null)
+            {
+                var defs = new RadialSlotDef[RadialSlots.Length];
+                for (int i = 0; i < RadialSlots.Length; i++)
+                {
+                    var s = RadialSlots[i];
+                    defs[i] = new RadialSlotDef
+                    {
+                        IconId = s.icon, Label = s.label, Tint = s.tint,
+                        ToolIndex = IndexOfTool(s.toolId),
+                    };
+                }
+                radial.Configure(defs);
+                radial.OnPicked = i => { if (i >= 0) SetActiveTool(i); };
+            }
             RefreshMenu();
+        }
+
+        private int IndexOfTool(string id)
+        {
+            if (id == null || _tools == null) return -1;
+            for (int i = 0; i < _tools.Length; i++)
+                if (_tools[i] != null && _tools[i].Id == id) return i;
+            return -1;
         }
 
         private bool _grabbing;
         private float _grabDist = 0.55f;
+
+        // radial state: capture window + the 150 ms post-close input debounce (design/20 §1.8)
+        private bool _radialWasCapturing;
+        private float _uiDebounceUntil;
+        private int _prevTool = -1;   // R3 = previous tool (16 P2.3)
+
+        // slider drag capture (design/20 §2.2)
+        private SliderWidget _slider;
+        private float _sliderX;
+        private float _sliderLastX;
+
+        // destructive hold (design/20 §2.8): fill for 0.5 s, then fire
+        private MenuButton _holdBtn;
+        private float _holdStart;
 
         // stepper auto-repeat (UX v2 P0.2): hold trigger on a −/+ row to keep stepping
         private MenuButton _repeatBtn;
@@ -124,6 +187,44 @@ namespace RoomPlanner.Tools
             }
 
             Ray ray = pointer.GetRay();
+
+            // ---- tool radial (L3) captures ALL input while open (design/20 §1) ----
+            var cam = Camera.main != null ? Camera.main.transform : null;
+            if (radial != null)
+            {
+                if (input.RadialPressed())
+                {
+                    if (radial.IsOpen) radial.Close();
+                    else if (cam != null)
+                    {
+                        radial.Open(cam, _active);
+                        input.PulseLeft(0.3f, 0.012f);
+                    }
+                }
+                bool captures = radial.Tick(input.LeftThumbstick(), ray,
+                    input.ConfirmPressed(), input.ClearPressed(), cam, input);
+                if (captures)
+                {
+                    _radialWasCapturing = true;
+                    ITool blocked = ActiveTool();
+                    if (blocked != null) blocked.Tick(true);
+                    if (menu != null) menu.Highlight(null);
+                    if (reticle != null) reticle.gameObject.SetActive(false);
+                    return;
+                }
+                if (_radialWasCapturing)
+                {
+                    // just closed: swallow trailing clicks so a confirm can't leak into the scene
+                    _radialWasCapturing = false;
+                    _uiDebounceUntil = Time.time + 0.15f;
+                }
+            }
+
+            // R3 — jump back to the previous tool without aiming at anything
+            if (_prevTool >= 0 && input.PrevToolPressed()) SetActiveTool(_prevTool);
+
+            bool debounced = Time.time < _uiDebounceUntil;
+
             MenuButton mb = null;
             InspectorGrab grab = null;
             RaycastHit hit = default;
@@ -136,6 +237,67 @@ namespace RoomPlanner.Tools
             {
                 mb = hit.collider.GetComponentInParent<MenuButton>();
                 grab = hit.collider.GetComponentInParent<InspectorGrab>();
+            }
+
+            // ---- modal popups (design/20 §3.8): one layer, B or click-outside closes ----
+            var popups = inspector != null ? inspector.Popups : null;
+            if (popups != null && popups.IsOpen)
+            {
+                popups.Tick(input.Thumbstick(), input.ClearPressed());
+                if (popups.IsOpen && input.ConfirmPressed()
+                    && (!overMenu || !popups.Owns(hit.collider)))
+                {
+                    popups.CloseAll();
+                    RefreshMenu();
+                }
+                // while (still) modal, scene tools stay blocked even off-panel; on ANY
+                // close path (B included) the closing frame stays blocked too + 150 ms
+                // debounce — otherwise the same B press reaches the tool and deletes
+                // the selection (review 2026-08-10, finding 1)
+                overMenu = true;
+                if (!popups.IsOpen) _uiDebounceUntil = Time.time + 0.15f;
+            }
+
+            // ---- slider drag (design/20 §2.2): trigger captured, grip = fine ×0.1 ----
+            if (_slider != null)
+            {
+                if (!input.ConfirmHeld())
+                {
+                    _slider.EndDrag();
+                    _slider = null;
+                    RefreshMenu();
+                }
+                else
+                {
+                    var plane = new Plane(-_slider.transform.forward, _slider.transform.position);
+                    if (plane.Raycast(ray, out float d))
+                    {
+                        float x = _slider.transform.InverseTransformPoint(ray.GetPoint(d)).x;
+                        float gain = input.SnapHeld() ? Core.PanelLayout.FineGain : 1f;
+                        _sliderX += (x - _sliderLastX) * gain;
+                        _sliderLastX = x;
+                        _slider.PreviewAt(_sliderX);
+                    }
+                    ITool draggingTool = ActiveTool();
+                    if (draggingTool != null) draggingTool.Tick(true);
+                    if (menu != null) menu.Highlight(null);
+                    return;
+                }
+            }
+            if (overMenu && !debounced && _slider == null && input.ConfirmPressed())
+            {
+                var sw = hit.collider != null ? hit.collider.GetComponentInParent<SliderWidget>() : null;
+                if (sw != null)
+                {
+                    _slider = sw;
+                    sw.BeginDrag();
+                    float x = sw.transform.InverseTransformPoint(hit.point).x;
+                    _sliderX = x;          // absolute jump on track press (§2.2)
+                    _sliderLastX = x;
+                    sw.PreviewAt(_sliderX);
+                    input.Pulse(0.4f, 0.015f);
+                    return;
+                }
             }
 
             // --- Grab-to-move the floating inspector (grip PRESSED on its title bar) ---
@@ -154,7 +316,7 @@ namespace RoomPlanner.Tools
 
             // Global teleport (A): bring the aimed slab spot under your feet — the model
             // moves, never the camera (passthrough; design/18 I6). Works from any tool.
-            if (!overMenu && sceneModel != null && input.TeleportPressed()
+            if (!overMenu && !debounced && sceneModel != null && input.TeleportPressed()
                 && (select == null || !select.IsDragging))
             {
                 // Slabs AND stair treads are teleport targets — aiming a step is how you
@@ -178,7 +340,7 @@ namespace RoomPlanner.Tools
             }
 
             ITool act = ActiveTool();
-            if (act != null) act.Tick(overMenu);
+            if (act != null) act.Tick(overMenu || debounced);
 
             if (overMenu)
             {
@@ -189,18 +351,56 @@ namespace RoomPlanner.Tools
                     _hoverBtn = mb;
                     if (mb != null && mb.Interactable) input.Pulse(0.2f, 0.01f);
                 }
-                if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hit.point; }
-
-                if (mb != null && mb.Interactable && input.ConfirmPressed())
+                // popup-forced overMenu can come without a physics hit — a default hit.point
+                // would park the reticle at the world origin (review finding 4)
+                if (reticle != null)
                 {
-                    mb.Press();                 // visual click confirmation (dip + flash)
-                    Execute(mb);
-                    input.Pulse(0.6f, 0.02f);   // crisp click, not a long buzz
-                    if (mb.OnClick != null && mb.Repeatable)
+                    reticle.gameObject.SetActive(hit.collider != null);
+                    if (hit.collider != null) reticle.position = hit.point;
+                }
+
+                if (mb != null && mb.Interactable && !debounced && input.ConfirmPressed())
+                {
+                    if (mb.Destructive && mb.OnClick != null)
                     {
-                        _repeatBtn = mb;
-                        _repeatStart = Time.time;
-                        _repeatNext = Time.time + 0.4f;   // initial delay before repeating
+                        // destructive: arm the hold — the plate fills with Danger and only
+                        // a completed 0.5 s hold fires (design/20 §2.8)
+                        _holdBtn = mb;
+                        _holdStart = Time.time;
+                    }
+                    else
+                    {
+                        mb.Press();                 // visual click confirmation (dip + flash)
+                        Execute(mb);
+                        input.Pulse(0.6f, 0.02f);   // crisp click, not a long buzz
+                        if (mb.OnClick != null && mb.Repeatable)
+                        {
+                            _repeatBtn = mb;
+                            _repeatStart = Time.time;
+                            _repeatNext = Time.time + 0.4f;   // initial delay before repeating
+                        }
+                    }
+                }
+                else if (_holdBtn != null)
+                {
+                    if (!input.ConfirmHeld() || mb != _holdBtn)
+                    {
+                        _holdBtn.SetDangerFill(0f);   // released early → disarm silently
+                        _holdBtn = null;
+                    }
+                    else
+                    {
+                        float fill = (Time.time - _holdStart) / Core.UiTokens.DestructiveHoldSeconds;
+                        _holdBtn.SetDangerFill(fill);
+                        if (fill >= 1f)
+                        {
+                            var fired = _holdBtn;
+                            _holdBtn = null;
+                            fired.SetDangerFill(0f);
+                            fired.Press();
+                            Execute(fired);
+                            input.Pulse(0.7f, 0.03f);
+                        }
                     }
                 }
                 else if (_repeatBtn != null)
@@ -222,6 +422,11 @@ namespace RoomPlanner.Tools
                 if (menu != null) menu.Highlight(null);
                 _hoverBtn = null;
                 _repeatBtn = null;
+                if (_holdBtn != null)
+                {
+                    _holdBtn.SetDangerFill(0f);
+                    _holdBtn = null;
+                }
             }
         }
 
@@ -347,6 +552,7 @@ namespace RoomPlanner.Tools
             if (_tools == null || index < 0 || index >= _tools.Length) return;
             if (index != _active)
             {
+                _prevTool = _active;   // R3 jumps back here
                 ITool prev = ActiveTool();
                 if (prev != null) prev.OnDeactivate();
             }
@@ -362,7 +568,17 @@ namespace RoomPlanner.Tools
         private void RefreshMenu()
         {
             if (menu != null)
+            {
                 menu.Refresh(_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn);
+                ITool a = ActiveTool();
+                if (a != null)
+                    foreach (var s in RadialSlots)
+                        if (s.toolId == a.Id)
+                        {
+                            menu.SetToolChip(s.icon, s.label, s.tint);
+                            break;
+                        }
+            }
             if (inspector != null)
             {
                 ITool act = ActiveTool();

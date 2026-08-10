@@ -68,19 +68,30 @@ namespace RoomPlanner.Tools
 
         public string Id => "paint";
         public string PaletteLabel => "Pnt";
+        public string IconId => "paint-roller";
 
         public Color CurrentColor => Presets[_preset].Color;
 
+        private static Color[] _palette;
+
         public SettingsSchema GetSettings()
         {
+            // v2 (design/20 §2.7): the color is a real swatch grid — hue here IS the data;
+            // booleans became toggles; "Original look" is an eraser action.
+            if (_palette == null)
+            {
+                _palette = new Color[Presets.Length];
+                for (int i = 0; i < Presets.Length; i++) _palette[i] = Presets[i].Color;
+            }
             _settings ??= new SettingsSchema()
-                .Cycle("color", "Color", () => Presets[_preset].Name,
-                    () => _preset = (_preset + 1) % Presets.Length)
-                .Cycle("clear", "Original look", () => "apply", ClearHovered)
-                .Cycle("vao", "Vertex AO", () => Core.MeshShading.VertexAO ? "On" : "Off", ToggleVertexAO)
-                .Cycle("ssao", "SSAO",
-                    () => ssaoFeature == null ? "—" : ssaoFeature.isActive ? "On" : "Off",
-                    ToggleSsao);
+                .Swatch("color", "Color", _palette, () => _preset,
+                    i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
+                .Readout("cname", "Preset", () => Presets[_preset].Name)
+                .Action("clear", "Original look", "eraser", ClearHovered)
+                .Header("shade", "Shading")
+                .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
+                .Toggle("ssao", "SSAO",
+                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
             return _settings;
         }
 

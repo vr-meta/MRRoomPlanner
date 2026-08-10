@@ -60,6 +60,13 @@ namespace RoomPlanner.Tests.Play
             _spawned.Clear();
         }
 
+        // v2: slab rows are numeric fields (design/20 §2.6) — commit an absolute value
+        private static void Bump(RoomPlanner.Core.SettingField f, float delta)
+        {
+            float before = f.GetNumber();
+            f.CommitNumber(before, before + delta);
+        }
+
         [UnityTest]
         public IEnumerator SlabOffersItsOwnRows()
         {
@@ -80,7 +87,7 @@ namespace RoomPlanner.Tests.Play
             var (slab, model) = MakeSlab(LShape());
             yield return null;
 
-            Row(slab, "fthk").Increase();
+            Bump(Row(slab, "fthk"), +0.02f);
             Assert.AreEqual(0.22f, slab.Thickness, 1e-4f);
 
             model.History.Undo();
@@ -93,7 +100,7 @@ namespace RoomPlanner.Tests.Play
             var (slab, _) = MakeSlab(LShape());
             yield return null;
 
-            Row(slab, "fthk").Increase();
+            Bump(Row(slab, "fthk"), +0.02f);
 
             Assert.AreEqual(6, slab.Outline.Count, "an L must not turn into a box");
             Assert.AreEqual(14f, slab.Area, 1e-3f);
@@ -105,7 +112,7 @@ namespace RoomPlanner.Tests.Play
             var (slab, model) = MakeSlab(LShape());
             yield return null;
 
-            Row(slab, "flvl").Increase();
+            Bump(Row(slab, "flvl"), +0.1f);
             Assert.AreEqual(0.1f, slab.Level, 1e-3f);
             foreach (var p in slab.Outline)
                 Assert.AreEqual(0.1f, p.y, 1e-3f, "the outline travels with the level");

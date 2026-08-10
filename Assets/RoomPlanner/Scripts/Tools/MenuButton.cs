@@ -48,6 +48,10 @@ namespace RoomPlanner.Tools
         /// <summary>Holding the trigger auto-repeats OnClick (stepper −/+ rows; UX v2 P0.2).</summary>
         public bool Repeatable;
 
+        /// <summary>Destructive action (design/20 §2.8): fires only after a 0.5 s hold while
+        /// the plate fills with Danger. ToolManager drives the hold and the fill.</summary>
+        public bool Destructive;
+
         /// <summary>Full-word hint shown by the palette while hovered — the button labels
         /// are abbreviations ("Sel") and need explaining (headset feedback 2026-08-10).</summary>
         [SerializeField] private string tooltip;
@@ -69,6 +73,7 @@ namespace RoomPlanner.Tools
         private bool _on;              // Radio: active tool; Toggle: switched on
         private bool _enabled = true;
         private float _pressedAt = -10f;
+        private float _dangerFill;     // 0..1 hold progress on a destructive button
         private MaterialPropertyBlock _mpb;
 
         private void Awake()
@@ -76,6 +81,14 @@ namespace RoomPlanner.Tools
             _baseScale = transform.localScale;
             _mpb = new MaterialPropertyBlock();
             Apply();
+        }
+
+        /// <summary>Apply() can run before Awake (editor renders, InitRuntime) — lazily
+        /// mirror Awake's state so scale never multiplies by zero and MPB never NREs.</summary>
+        private void EnsureInit()
+        {
+            if (_baseScale == Vector3.zero) _baseScale = transform.localScale;
+            _mpb ??= new MaterialPropertyBlock();
         }
 
         private void Update()
@@ -124,8 +137,17 @@ namespace RoomPlanner.Tools
             Apply();
         }
 
+        /// <summary>Hold progress on a destructive button — the plate fills with Danger
+        /// (design/20 §2.8). Pass 0 to reset when the hold is released early.</summary>
+        public void SetDangerFill(float t)
+        {
+            _dangerFill = Mathf.Clamp01(t);
+            Apply();
+        }
+
         private void Apply()
         {
+            EnsureInit();
             bool flashing = _pressedAt > 0f && Time.time - _pressedAt < PressFlash;
             // pressed dips; hover lifts slightly (1.06 — the old 1.12 overlapped neighbours)
             float s = flashing ? 0.97f : _hovered ? 1.06f : 1f;
@@ -139,6 +161,8 @@ namespace RoomPlanner.Tools
                 : _hovered ? UiColors.ButtonHoverBg
                 : UiColors.ButtonBg;
             if (flashing) bg = Color.Lerp(bg, Color.white, 0.35f);
+            if (Destructive && _dangerFill > 0f)
+                bg = Color.Lerp(bg, RoomPlanner.Core.UiTokens.Danger, _dangerFill);
 
             if (bgRenderer != null)
             {
@@ -149,7 +173,10 @@ namespace RoomPlanner.Tools
             }
             if (label != null)
             {
-                Color lc = inverted ? UiColors.LabelDark : UiColors.LabelLight;
+                Color lc = inverted ? UiColors.LabelDark
+                    : Destructive ? (_dangerFill > 0.6f
+                        ? UiColors.LabelDark : RoomPlanner.Core.UiTokens.Danger)
+                    : UiColors.LabelLight;
                 if (!_enabled) lc.a = UiColors.DisabledLabelAlpha;
                 label.color = lc;
             }

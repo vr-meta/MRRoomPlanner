@@ -103,7 +103,46 @@ namespace RoomPlanner.Measure
         /// <summary>Air-cursor depth — thumbstick up/down (either controller).</summary>
         public float DepthAdjust() => Thumbstick().y;
 
+        /// <summary>LEFT stick click — opens/closes the tool radial (design/20 §1). Editor: Tab.</summary>
+        public bool RadialPressed()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.Tab)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.LTouch);
+        }
+
+        /// <summary>RIGHT stick click — previous tool (16 P2.3). Editor: Q.</summary>
+        public bool PrevToolPressed()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.Q)) return true;
+#endif
+            return OVRInput.GetDown(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.RTouch);
+        }
+
+        /// <summary>The LEFT stick specifically — drives the radial's flick gesture
+        /// (the generic Thumbstick() is "larger magnitude wins", wrong for the radial).</summary>
+        public Vector2 LeftThumbstick()
+        {
+#if UNITY_EDITOR
+            var k = new Vector2(
+                (Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f),
+                (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
+            if (k.sqrMagnitude > 0f) return k.normalized;
+#endif
+            return OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch);
+        }
+
         private float _hapticUntil;
+        private float _leftHapticUntil;
+
+        /// <summary>Left-controller haptics — radial and palette events (design/20 §4.2).</summary>
+        public void PulseLeft(float amplitude = 0.5f, float duration = 0.02f)
+        {
+            OVRInput.SetControllerVibration(1f, amplitude, OVRInput.Controller.LTouch);
+            _leftHapticUntil = Time.time + duration;
+        }
 
         /// <summary>Короткий вибро-отклик правого контроллера (например, при наведении на кнопку).</summary>
         public void Pulse(float amplitude = 0.5f, float duration = 0.06f)
@@ -119,6 +158,11 @@ namespace RoomPlanner.Measure
                 OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
                 _hapticUntil = 0f;
             }
+            if (_leftHapticUntil > 0f && Time.time >= _leftHapticUntil)
+            {
+                OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.LTouch);
+                _leftHapticUntil = 0f;
+            }
         }
 
         private void OnDisable()
@@ -128,6 +172,11 @@ namespace RoomPlanner.Measure
             {
                 OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
                 _hapticUntil = 0f;
+            }
+            if (_leftHapticUntil > 0f)
+            {
+                OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.LTouch);
+                _leftHapticUntil = 0f;
             }
         }
     }

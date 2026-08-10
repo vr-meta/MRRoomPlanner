@@ -64,6 +64,7 @@ namespace RoomPlanner.Measure
 
         public string Id => "measure";
         public string PaletteLabel => "Meas";
+        public string IconId => "tape-measure";
 
         /// <summary>Measure has no settings panel.</summary>
         public SettingsSchema GetSettings() => null;

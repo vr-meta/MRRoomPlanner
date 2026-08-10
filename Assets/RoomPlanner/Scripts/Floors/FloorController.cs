@@ -41,17 +41,19 @@ namespace RoomPlanner.Floors
 
         public string Id => "floor";
         public string PaletteLabel => "Floor";
+        public string IconId => "floor-slab";
 
         public SettingsSchema GetSettings()
         {
             if (manager == null) return null;
             _settings ??= new SettingsSchema()
-                .Stepper("lvl", "Level",
-                    () => $"{manager.Level * 100f:0} cm",
-                    () => manager.AdjustLevel(-0.1f), () => manager.AdjustLevel(0.1f))
-                .Stepper("thk", "Thickness",
-                    () => $"{defaultThickness * 100f:0} cm",
-                    () => AdjustDefaultThickness(-0.02f), () => AdjustDefaultThickness(0.02f));
+                .Numeric("lvl", "Level", -20f, 20f,
+                    () => manager.Level, (_, v) => manager.SetLevel(v),
+                    () => $"{manager.Level * 100f:0} cm", displayScale: 100f)
+                .Slider("thk", "Thickness", 0.05f, 0.6f, 0.01f,
+                    () => defaultThickness, v => defaultThickness = Mathf.Clamp(v, 0.05f, 0.6f),
+                    (_, v) => defaultThickness = Mathf.Clamp(v, 0.05f, 0.6f),
+                    () => $"{defaultThickness * 100f:0} cm", displayScale: 100f);
             return _settings;
         }
 

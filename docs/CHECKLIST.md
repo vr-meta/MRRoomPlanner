@@ -422,6 +422,50 @@
 - [ ] **P6 — прогон тестов headless + SetupRig + проверка на устройстве** (вместе с E8;
   палитра теперь 8 кнопок: +Elec и +Pnt)
 
+## 2m. UI Design System (дизайн: `design/20-ui-design-system.md`, ветка `worktree-ui-design`)
+
+Радиальное меню инструментов (Rust-style, клик левого стика), словарь из 12 типов
+виджетов инспектора, SVG-иконки (текст → тесселяция в меши, без бинарных ассетов),
+дизайн-токены. Итог двух экспертных панелей 2026-08-10.
+
+- [x] U1. Core-фундамент: `SvgPath` (парсер M/L/H/V/C/Q/Z), `SvgTessellator`
+  (evenodd-дыры → `Polygon.TriangulateWithHoles`), `UiTokens`, `UiMeshes` + тесты.
+  Попутно **исправлены два бага `Polygon`** (вложенное кольцо перекраивало депт по
+  внутренней точке; два шва в одну вершину = дедлок клиппера) + regression-тесты
+  (`PolygonSeamRegressionTests`); пути провалидированы вне Unity JS-зеркалом пайплайна
+- [x] U2. `IconPaths`: 45 путей 24×24 (12 слотов радиала + stairs + 4 суб-иконки
+  Electric + folder/calibrate/storey/eraser + глифы) + `IconPathsTests`
+- [x] U3. `SettingsSchema` v2 (Slider/Segmented/Select/Toggle/Numeric/Swatch/
+  Action/Readout/Progress/Header + Tabs; Cycle оставлен как LEGACY для тестов) +
+  `PanelLayout` (сетка 6 мм, слайдер-математика) + тесты
+- [x] U4. `RadialMath` + `RadialTracker` (гистерезис +4°, пороги 0.55/0.45,
+  флик-vs-browse <400 мс) + тесты
+- [x] U5. `RadialMenu` (процедурные сектора/хаб/скрим, стик+луч, L3/R3 в
+  `MeasureInput`) + `SetupRadial` + `10-controls.md`
+- [x] U6. `InspectorPanel` v2 (реальные метры, 12 типов рядов, табы) + `UiPopups`
+  (Select-список со stick-скроллом, numpad c DisplayScale, свотч-сетка, модальный
+  слой) + `SliderWidget` + драг/деструктив-холд/дебаунс в `ToolManager` +
+  PlayMode-тесты обновлены и дополнены
+- [x] U7. Миграция всех инструментов и per-instance провайдеров на новые виджеты
+  (Wall/Floor/Blueprint/Import/Paint; Electric на Tabs; Wall/Floor/Fixture/Wire
+  параметры на Numeric/Segmented с командами) + палитра-полоска Snap & Layers
+  (иконки-тумблеры + чип инструмента) + `IconId` у всех ITool
+- [~] U8. Синхронизация доков (10-controls ✓, 20 ✓; HTML-превью артефактом ✓)
+- [~] U9. Headless-конвейер в worktree — **зелёный** (2026-08-10): SetupRig ✓ →
+  EditMode **336/336** ✓ (после двух фиксов: вырожденный хвост-треугольник клиппера
+  фильтруется в `SvgTessellator`; убран искусственный пол высоты панели) → PlayMode
+  **107/107** ✓ → APK ✓ → установлен на шлем (`adb install` Success, запуск без
+  исключений). Независимое ревью диффа: 2 бага исправлены (B-закрытие попапа
+  протекало в инструмент; заливка слайдера в 1% ширины) + 4 мелочи; компиляция/
+  правила/меши/MPB/аллокации проверены чистыми.
+  - [ ] 👤 **Проверка на устройстве в шлеме**: радиал (L3 → флик), полоска снапов,
+    инспектор v2 (слайдер+грип, сегменты, Select-список, numpad, свотчи Paint,
+    деструктив-hold в Import), **читаемость шрифтов** (ревью-находка 3: коэффициенты
+    подняты до валидированного режима, но нужен глаз)
+  - Примечание сборки: на свежей Library первого запуска gradle может упасть на
+    дубле `libopenxr_loader.so` (гейт Meta-препроцессора, см. I7) — повторная
+    сборка на прогретой Library проходит
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

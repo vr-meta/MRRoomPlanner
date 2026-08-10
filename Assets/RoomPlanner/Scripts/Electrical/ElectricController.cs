@@ -57,17 +57,18 @@ namespace RoomPlanner.Electrical
         private SubMode _ghostMode = (SubMode)(-1);
         private int _ghostPosts = -1, _ghostKeys = -1;
 
-        private SettingsSchema[] _schemas;       // one per sub-mode; switching re-binds the panel
+        private SettingsSchema _schema;          // tabbed root (design/20 §2.12) — one instance
 
         public string Id => "electric";
         public string PaletteLabel => "Elec";
+        public string IconId => "electric-plug";
 
         // ---- ITool ----
 
         public SettingsSchema GetSettings()
         {
-            _schemas ??= BuildSchemas();
-            return _schemas[(int)_mode];
+            _schema ??= BuildSchema();
+            return _schema;
         }
 
         public void OnActivate() { }
@@ -455,52 +456,65 @@ namespace RoomPlanner.Electrical
             return sel != null ? sel.Id : null;
         }
 
-        // ---- settings schemas (one per sub-mode; the Mode row is shared) ----
+        // ---- settings: ONE tabbed schema (design/20 §2.12) — the schema-swap hack is gone,
+        // sub-modes are visible stateful tabs with the outlet/switch/wire/breaker icons ----
 
-        private SettingsSchema[] BuildSchemas()
+        private SettingsSchema BuildSchema()
         {
-            var s = new SettingsSchema[4];
-            s[(int)SubMode.Outlet] = WithModeRow()
+            var outlet = new SettingsSchema()
                 .Stepper("posts", "Posts", () => $"{_posts}",
                     () => _posts = Mathf.Max(1, _posts - 1),
                     () => _posts = Mathf.Min(ElectricalDefaults.MaxPosts, _posts + 1))
-                .Stepper("oh", "Height", () => $"{_outletHeight * 100f:0} cm",
-                    () => _outletHeight = AdjustHeight(_outletHeight, -1, ElectricalDefaults.MinOutletHeight),
-                    () => _outletHeight = AdjustHeight(_outletHeight, +1, ElectricalDefaults.MinOutletHeight));
-            s[(int)SubMode.Switch] = WithModeRow()
+                .Slider("oh", "Height", ElectricalDefaults.MinOutletHeight,
+                    ElectricalDefaults.MaxMountHeight, ElectricalDefaults.HeightStep,
+                    () => _outletHeight,
+                    v => _outletHeight = ClampHeight(v, ElectricalDefaults.MinOutletHeight),
+                    (_, v) => _outletHeight = ClampHeight(v, ElectricalDefaults.MinOutletHeight),
+                    () => $"{_outletHeight * 100f:0} cm", displayScale: 100f);
+            var sw = new SettingsSchema()
                 .Stepper("keys", "Keys", () => $"{_keys}",
                     () => _keys = Mathf.Max(1, _keys - 1),
                     () => _keys = Mathf.Min(ElectricalDefaults.MaxKeys, _keys + 1))
-                .Stepper("sh", "Height", () => $"{_switchHeight * 100f:0} cm",
-                    () => _switchHeight = AdjustHeight(_switchHeight, -1, ElectricalDefaults.MinSwitchHeight),
-                    () => _switchHeight = AdjustHeight(_switchHeight, +1, ElectricalDefaults.MinSwitchHeight));
-            s[(int)SubMode.Wire] = WithModeRow()
-                .Cycle("cable", "Cable", () => Cable.Label(_cable), () => _cable = Cable.Next(_cable))
-                .Cycle("routing", "Route", () => _ortho ? "Ortho" : "Free", () => _ortho = !_ortho)
-                .Stepper("coff", "Ceiling off", () => $"{_ceilingOff * 100f:0} cm",
-                    () => _ceilingOff = Mathf.Clamp(_ceilingOff - ElectricalDefaults.CeilingOffsetStep,
-                        ElectricalDefaults.MinCeilingOffset, ElectricalDefaults.MaxCeilingOffset),
-                    () => _ceilingOff = Mathf.Clamp(_ceilingOff + ElectricalDefaults.CeilingOffsetStep,
-                        ElectricalDefaults.MinCeilingOffset, ElectricalDefaults.MaxCeilingOffset));
-            s[(int)SubMode.Panel] = WithModeRow()
-                .Stepper("res", "Reserve", () => $"{_reserve} %",
-                    () => _reserve = Mathf.Max(0, _reserve - ElectricalDefaults.ReserveStep),
-                    () => _reserve = Mathf.Min(ElectricalDefaults.MaxReservePercent,
-                        _reserve + ElectricalDefaults.ReserveStep));
-            return s;
+                .Slider("sh", "Height", ElectricalDefaults.MinSwitchHeight,
+                    ElectricalDefaults.MaxMountHeight, ElectricalDefaults.HeightStep,
+                    () => _switchHeight,
+                    v => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
+                    (_, v) => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
+                    () => $"{_switchHeight * 100f:0} cm", displayScale: 100f);
+            var wire = new SettingsSchema()
+                .Segmented("cable", "Cable",
+                    new[] { Cable.Label(CableType.C3x15), Cable.Label(CableType.C3x25) },
+                    () => (int)_cable, i => _cable = (CableType)i)
+                .Segmented("routing", "Route", new[] { "Ortho", "Free" },
+                    () => _ortho ? 0 : 1, i => _ortho = i == 0)
+                .Slider("coff", "Ceiling off", ElectricalDefaults.MinCeilingOffset,
+                    ElectricalDefaults.MaxCeilingOffset, ElectricalDefaults.CeilingOffsetStep,
+                    () => _ceilingOff,
+                    v => _ceilingOff = Mathf.Clamp(v, ElectricalDefaults.MinCeilingOffset,
+                        ElectricalDefaults.MaxCeilingOffset),
+                    (_, v) => _ceilingOff = Mathf.Clamp(v, ElectricalDefaults.MinCeilingOffset,
+                        ElectricalDefaults.MaxCeilingOffset),
+                    () => $"{_ceilingOff * 100f:0} cm", displayScale: 100f);
+            var panel = new SettingsSchema()
+                .Slider("res", "Reserve", 0f, ElectricalDefaults.MaxReservePercent,
+                    ElectricalDefaults.ReserveStep,
+                    () => _reserve,
+                    v => _reserve = Mathf.Clamp(Mathf.RoundToInt(v), 0, ElectricalDefaults.MaxReservePercent),
+                    (_, v) => _reserve = Mathf.Clamp(Mathf.RoundToInt(v), 0, ElectricalDefaults.MaxReservePercent),
+                    () => $"{_reserve} %");
+
+            return SettingsSchema.Tabbed(
+                new[] { "Outlet", "Switch", "Wire", "Panel" },
+                () => (int)_mode, SetMode, outlet, sw, wire, panel);
         }
 
-        private SettingsSchema WithModeRow() =>
-            new SettingsSchema().Cycle("mode", "Mode", () => _mode.ToString(), NextMode);
-
-        private void NextMode()
+        private void SetMode(int mode)
         {
             FinishOrCancelRoute();               // switching modes never eats a drawn run
-            _mode = (SubMode)(((int)_mode + 1) % 4);
-            // a different schema instance comes back from GetSettings() → the panel re-binds
+            _mode = (SubMode)Mathf.Clamp(mode, 0, 3);
         }
 
-        private static float AdjustHeight(float value, int dir, float min) =>
-            Mathf.Clamp(value + dir * ElectricalDefaults.HeightStep, min, ElectricalDefaults.MaxMountHeight);
+        private static float ClampHeight(float value, float min) =>
+            Mathf.Clamp(value, min, ElectricalDefaults.MaxMountHeight);
     }
 }

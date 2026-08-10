@@ -19,6 +19,16 @@
    (`.claude/skills/new-feature/SKILL.md`): сначала дизайн-док и декомпозиция в чек-листе,
    затем код по правилам, headless-проверка (`driver.mjs test All` + `setup` при смене
    состава рига), синхронизация доков, коммит только на зелёных тестах.
+8. **Любое меню/панель/виджет — строго по дизайн-коду UI**
+   [`docs/design/20-ui-design-system.md`](docs/design/20-ui-design-system.md):
+   настройки инструмента — только через `SettingsSchema` v2 (Stepper/Slider/Segmented/
+   Select/Toggle/Numeric/Swatch/Action/Readout/Progress/Header; суб-режимы — **Tabs**,
+   `Cycle` запрещён), цвета — только токены `Core/UiTokens` (hue = слоям данных,
+   состояния — яркостью, деструктив — Danger + hold 0.5 с), иконки — SVG-пути в
+   `Core/IconPaths.cs` (24×24, заливки, evenodd; каждая новая — с тестом),
+   переключение инструментов — радиал (слот-таблица в `ToolManager`; 12 позиций
+   зафиксированы навсегда, новые инструменты — в резервные слоты или табом).
+   Анти-паттерны из §7 дока — обязательные запреты.
 
 ## О проекте
 
