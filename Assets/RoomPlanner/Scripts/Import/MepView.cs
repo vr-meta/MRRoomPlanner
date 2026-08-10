@@ -9,10 +9,25 @@ namespace RoomPlanner.Import
     /// </summary>
     public class MepView : MonoBehaviour
     {
+        /// <summary>Interior objects cast sun shadows (Rendering-page toggle, feedback
+        /// 2026-08-11). TwoSided because imported Breps have arbitrary winding — a
+        /// single-sided caster drops half the triangles from the shadow map.</summary>
+        public static bool CastShadows = true;
+
         /// <summary>What the element is (drives material) — kept for project capture.</summary>
         public RoomPlanner.Core.Ifc.MepCategory Category;
         /// <summary>IFC surface transparency (0 opaque … 1 clear) — kept for capture.</summary>
         public float Transparency;
+
+        /// <summary>Apply the current global shadow-casting choice to this element.</summary>
+        public void ApplyShadowMode()
+        {
+            var r = GetComponent<MeshRenderer>();
+            if (r != null)
+                r.shadowCastingMode = CastShadows
+                    ? UnityEngine.Rendering.ShadowCastingMode.TwoSided
+                    : UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
 
         public void MoveBy(Vector3 delta) => transform.position += delta;
 

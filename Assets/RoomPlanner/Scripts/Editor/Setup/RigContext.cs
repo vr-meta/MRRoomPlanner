@@ -43,7 +43,7 @@ namespace RoomPlanner.EditorTools
         public RoomPlanner.Tools.RadialMenu Radial;
         public FinishLibrary Finishes;                 // texture catalog (design/04 «Текстуры v1»)
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
-        public Material FurnitureMat, ProxyMat, RailingMat;
+        public Material FurnitureMat, ProxyMat, RailingMat, ScreenMat;
         public Material WireMat, FixtureMat;
         public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
         public Light Sun;                 // the shadow-casting directional (Rendering page toggle)

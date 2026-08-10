@@ -679,8 +679,28 @@ namespace RoomPlanner.Tools
                     () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao())
                 .Toggle("sunsh", "Sun shadows",
                     () => sunLight != null && sunLight.shadows != LightShadows.None,
-                    _ => ToggleSunShadows());
+                    _ => ToggleSunShadows())
+                .Toggle("objsh", "Cast shadows (all)",
+                    () => RoomPlanner.Import.MepView.CastShadows, _ => ToggleCastShadows());
             return _renderSchema;
+        }
+
+        /// <summary>One switch for EVERY content caster — walls, floors, stairs,
+        /// furniture, fixtures (feedback 2026-08-11). Imports go two-sided (arbitrary
+        /// Brep winding); our procedural meshes cast normally. UI never casts.</summary>
+        private void ToggleCastShadows()
+        {
+            bool on = !RoomPlanner.Import.MepView.CastShadows;
+            RoomPlanner.Import.MepView.CastShadows = on;   // future imports follow
+            foreach (var sel in FindObjectsByType<Selectable>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                bool import = sel.GetComponent<RoomPlanner.Import.MepView>() != null;
+                foreach (var r in sel.GetComponentsInChildren<MeshRenderer>(true))
+                    r.shadowCastingMode = !on ? UnityEngine.Rendering.ShadowCastingMode.Off
+                        : import ? UnityEngine.Rendering.ShadowCastingMode.TwoSided
+                                 : UnityEngine.Rendering.ShadowCastingMode.On;
+            }
         }
 
         /// <summary>Sun patches through the windows (feedback 2026-08-11) — toggleable

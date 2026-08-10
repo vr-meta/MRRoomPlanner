@@ -45,3 +45,6 @@ ci-shots/
 # CC0 textures — restored via RoomPlanner > Download Textures
 Assets/RoomPlanner/Textures/**/*.jpg
 Assets/RoomPlanner/Textures/**/*.jpg.meta
+
+# temporary IFC samples (github.com/youshengCode/IfcSampleFiles)
+TestData/

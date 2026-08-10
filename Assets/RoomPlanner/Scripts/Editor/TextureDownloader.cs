@@ -44,6 +44,10 @@ namespace RoomPlanner.EditorTools
             ("Walls", "Bricks059", "bricks-059", 1.2f, 0.10f),
             ("Walls", "Bricks066", "bricks-066", 1.2f, 0.10f),
             ("Walls", "Concrete034", "concrete-034", 2.0f, 0.15f),
+            // «гипсокартон»: smooth skimmed plasterboard look (ambientCG has no
+            // seamed-drywall asset — Plaster002/003 are the finished-GKL surface)
+            ("Walls", "Plaster002", "drywall-002", 1.5f, 0.10f),
+            ("Walls", "Plaster003", "drywall-003", 1.5f, 0.10f),
             // ---- Floors: wood, planks, stone, carpet ----
             ("Floors", "WoodFloor051", "parquet-051", 2.0f, 0.35f),
             ("Floors", "WoodFloor040", "parquet-040", 2.0f, 0.35f),

@@ -67,6 +67,9 @@ namespace RoomPlanner.EditorTools
             ctx.FurnitureMat = CreatePlainLitMat("MEP_Furniture", new Color(0.62f, 0.50f, 0.38f)); // warm wood
             ctx.ProxyMat = CreatePlainLitMat("MEP_Generic", new Color(0.78f, 0.78f, 0.80f));       // trade plastic
             ctx.RailingMat = CreatePlainLitMat("MEP_Railing", new Color(0.35f, 0.36f, 0.38f));     // dark metal
+            // TVs/monitors (matched by IFC name): near-black glossy glass, not wood
+            ctx.ScreenMat = CreatePlainLitMat("MEP_Screen", new Color(0.05f, 0.05f, 0.06f));
+            if (ctx.ScreenMat.HasProperty("_Smoothness")) ctx.ScreenMat.SetFloat("_Smoothness", 0.85f);
 
             // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
             // hole on passthrough; fixtures near-white, so they read as trade plastic.

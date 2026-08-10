@@ -122,7 +122,9 @@ namespace RoomPlanner.EditorTools
             var light = go.AddComponent<Light>();
             light.type = LightType.Directional;
             light.color = new Color(1f, 0.97f, 0.92f);   // warm daylight
-            light.intensity = 1.15f;
+            // 1.5: the outdoor (scan-off) world reads bright daylight, not overcast
+            // (feedback 2026-08-11) — interiors still balance against the trilight ambient
+            light.intensity = 1.5f;
             light.shadows = LightShadows.Soft;
             // 0.75: sun patches through the windows actually read on the floor
             // (feedback 2026-08-11) while shadows stay lifted by the ambient, not noir

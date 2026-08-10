@@ -32,6 +32,7 @@ namespace RoomPlanner.Import
         [SerializeField] private Material proxyMat;
         [SerializeField] private Material railingMat;
         [SerializeField] private Material mepGlassMat;   // transparency ≥ GlassThreshold
+        [SerializeField] private Material screenMat;     // TVs/monitors: dark glossy glass
 
         private const int SelectableLayer = 6;   // picked by Select, ignored by the surface raycaster
 
@@ -260,6 +261,7 @@ namespace RoomPlanner.Import
                 var view = go.AddComponent<MepView>();
                 view.Category = mep.Category;
                 view.Transparency = mep.Transparency;
+                view.ApplyShadowMode();   // interior objects cast sun shadows (toggleable)
                 // Selectable only for the hide/show machinery (undo, storey filter) — no
                 // collider, so it is invisible to picking and never registered for it.
                 var sel = go.AddComponent<Selectable>();
@@ -290,6 +292,7 @@ namespace RoomPlanner.Import
         {
             const float glassThreshold = 0.3f;
             if (mep.Transparency >= glassThreshold && mepGlassMat != null) return mepGlassMat;
+            if (screenMat != null && LooksLikeScreen(mep.Name)) return screenMat;
             return mep.Category switch
             {
                 MepCategory.Furniture => furnitureMat != null ? furnitureMat : plumbingMat,
@@ -297,6 +300,16 @@ namespace RoomPlanner.Import
                 MepCategory.Railing => railingMat != null ? railingMat : plumbingMat,
                 _ => plumbingMat,
             };
+        }
+
+        /// <summary>TVs and monitors read as wood/plastic under the category material
+        /// (headset feedback 2026-08-11) — the IFC name is the only hint we have.</summary>
+        private static bool LooksLikeScreen(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string n = name.ToLowerInvariant();
+            return n.Contains("tv") || n.Contains("televi") || n.Contains("телевизор")
+                || n.Contains("monitor") || n.Contains("screen") || n.Contains("display");
         }
 
         /// <summary>
