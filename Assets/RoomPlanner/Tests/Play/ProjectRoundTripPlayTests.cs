@@ -123,6 +123,8 @@ namespace RoomPlanner.Tests.Play
             import.BuildScene(SampleBuilding());
             var seg0 = walls.Graph.Segments[0];
             seg0.Join = WallJoin.Round;                      // a user edit that must survive
+            var paint = new Color(0.77f, 0.39f, 0.23f);
+            walls.ViewOf(seg0).GetComponent<Selectable>().SetPaint(paint);
             string json = ProjectStore.Capture(walls, null).ToJson();
 
             import.ClearScene();
@@ -140,6 +142,11 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, seg.Openings.Count);
             Assert.AreEqual(0.9f, seg.Openings[0].Width, 1e-4);
             Assert.IsNotNull(walls.Graph.FindNode(new Vector3(7f, 0f, 0f)), "geometry back in place");
+
+            var restoredSel = walls.ViewOf(seg).GetComponent<Selectable>();
+            Assert.IsTrue(restoredSel.IsPainted, "paint survives the round-trip");
+            Assert.AreEqual(paint.r, restoredSel.Paint.r, 1e-3);
+            Assert.AreEqual(paint.b, restoredSel.Paint.b, 1e-3);
 
             Floor slab = null;
             foreach (var f in Object.FindObjectsByType<Floor>(FindObjectsSortMode.None))

@@ -33,6 +33,8 @@ namespace RoomPlanner.Import
                 foreach (var s in graph.Segments)
                 {
                     if (!walls.IsVisible(s)) continue;      // deleted walls stay deleted
+                    var view = walls.ViewOf(s);
+                    var sel = view != null ? view.GetComponent<Editing.Selectable>() : null;
                     var w = new ProjectWall
                     {
                         NodeA = nodeIndex[s.A],
@@ -43,6 +45,8 @@ namespace RoomPlanner.Import
                         SideSign = s.SideSign,
                         Offset = (int)s.Offset,
                         Join = (int)s.Join,
+                        Painted = sel != null && sel.IsPainted,
+                        Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
                     };
                     foreach (var op in s.Openings)
                         w.Openings.Add(new ProjectOpening
@@ -57,11 +61,14 @@ namespace RoomPlanner.Import
             foreach (var f in TeleportCommand.CollectFloors())
             {
                 if (f == null || !f.gameObject.activeSelf) continue;
+                var fsel = f.GetComponent<Editing.Selectable>();
                 var pf = new ProjectFloor
                 {
                     Level = f.Level,
                     Thickness = f.Thickness,
                     Outline = new List<Vector3>(f.Outline),
+                    Painted = fsel != null && fsel.IsPainted,
+                    Paint = fsel != null && fsel.IsPainted ? fsel.Paint : Color.clear,
                 };
                 foreach (var hole in f.Holes)
                     pf.Holes.Add(new ProjectRing { Points = new List<Vector3>(hole) });
@@ -71,11 +78,14 @@ namespace RoomPlanner.Import
             foreach (var s in TeleportCommand.CollectStairs())
             {
                 if (s == null || !s.gameObject.activeSelf) continue;
+                var ssel = s.GetComponent<Editing.Selectable>();
                 data.Stairs.Add(new ProjectStair
                 {
                     Base = s.Base, Yaw = s.YawDeg, Width = s.Width,
                     Risers = s.Risers, RiserHeight = s.RiserHeight, TreadDepth = s.TreadDepth,
                     Open = s.Kind == StairKind.Open,
+                    Painted = ssel != null && ssel.IsPainted,
+                    Paint = ssel != null && ssel.IsPainted ? ssel.Paint : Color.clear,
                 });
             }
 
@@ -128,6 +138,8 @@ namespace RoomPlanner.Import
                     OffsetOverride = w.Offset,
                     JoinOverride = w.Join,
                     SideSignOverride = w.SideSign,
+                    HasPaint = w.Painted,
+                    PaintColor = w.Paint,
                 };
                 iw.Path.Add(data.Nodes[w.NodeA].Position);
                 iw.Path.Add(data.Nodes[w.NodeB].Position);
@@ -148,6 +160,8 @@ namespace RoomPlanner.Import
                     Outline = new List<Vector3>(f.Outline),
                     Level = f.Level,
                     Thickness = f.Thickness,
+                    HasPaint = f.Painted,
+                    PaintColor = f.Paint,
                 };
                 foreach (var ring in f.Holes)
                     slab.Holes.Add(new List<Vector3>(ring.Points));
@@ -159,6 +173,8 @@ namespace RoomPlanner.Import
                     Base = s.Base, YawDeg = s.Yaw, Width = s.Width,
                     Risers = s.Risers, RiserHeight = s.RiserHeight, TreadDepth = s.TreadDepth,
                     Open = s.Open,
+                    HasPaint = s.Painted,
+                    PaintColor = s.Paint,
                 });
             foreach (var m in data.Plumbing)
                 b.Plumbing.Add(new ImportedMep

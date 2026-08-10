@@ -141,10 +141,11 @@ namespace RoomPlanner.Import
             _storeyFilter = -1;
 
             var touched = new HashSet<WallNode>();
-            var segments = new List<(WallSegment seg, int storey)>();
+            var segments = new List<(WallSegment seg, int storey, int wallIndex)>();
             var wallSegments = new List<List<WallSegment>>();   // per imported wall, for openings
-            foreach (var iw in building.Walls)
+            for (int wi = 0; wi < building.Walls.Count; wi++)
             {
+                var iw = building.Walls[wi];
                 var ownSegments = new List<WallSegment>();
                 wallSegments.Add(ownSegments);
                 for (int i = 0; i + 1 < iw.Path.Count; i++)
@@ -163,18 +164,21 @@ namespace RoomPlanner.Import
                     seg.BaseHeight = iw.BaseHeight;
                     touched.Add(a);
                     touched.Add(b);
-                    segments.Add((seg, iw.StoreyIndex));
+                    segments.Add((seg, iw.StoreyIndex, wi));
                     ownSegments.Add(seg);
                 }
             }
             int openingCount = AttachOpenings(building, wallSegments);
             walls.Sync();                                      // one view per new segment
             foreach (var n in touched) walls.RebuildAround(n); // joints need all neighbours
-            foreach (var (seg, storey) in segments)
+            for (int i = 0; i < segments.Count; i++)
             {
-                var view = walls.ViewOf(seg);
-                if (view != null)
-                    _created.Add((view.GetComponent<Selectable>(), storey));
+                var view = walls.ViewOf(segments[i].seg);
+                if (view == null) continue;
+                var sel = view.GetComponent<Selectable>();
+                _created.Add((sel, segments[i].storey));
+                var src = building.Walls[segments[i].wallIndex];
+                if (src.HasPaint && sel != null) sel.SetPaint(src.PaintColor);
             }
             int wallCount = segments.Count;
 
@@ -185,7 +189,9 @@ namespace RoomPlanner.Import
                 if (f == null) continue;
                 foreach (var hole in slab.Holes)
                     if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
-                _created.Add((f.GetComponent<Selectable>(), slab.StoreyIndex));
+                var slabSel = f.GetComponent<Selectable>();
+                if (slab.HasPaint && slabSel != null) slabSel.SetPaint(slab.PaintColor);
+                _created.Add((slabSel, slab.StoreyIndex));
                 slabCount++;
             }
 
@@ -201,6 +207,7 @@ namespace RoomPlanner.Import
                 stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
                     st.Open ? RoomPlanner.Stairs.StairKind.Open : RoomPlanner.Stairs.StairKind.Solid);
                 var sel = go.AddComponent<Selectable>();
+                if (st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
                 stairCount++;

@@ -42,12 +42,12 @@ namespace RoomPlanner.EditorTools
             ctx.FloorMat = CreateFloorMat("Floor_Top", new Color(0.78f, 0.78f, 0.76f), concreteTex);
 
             // virtual ground for the scan-off mode (design/18 I10) — muted, not attention-grabbing
-            ctx.GroundMat = CreateMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
+            ctx.GroundMat = CreateSurfaceMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f), null);
 
             // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
-            // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone
-            ctx.JoineryMat = CreateMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f));
+            // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone, lit
+            ctx.JoineryMat = CreateSurfaceMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f), null);
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
             // plumbing fixtures wear their MEP layer color (design/07); double-sided —
@@ -161,20 +161,31 @@ namespace RoomPlanner.EditorTools
 
         private static Material CreateFloorMat(string name, Color color, Texture2D tex = null)
         {
-            var mat = new Material(UnlitShader());
+            var mat = new Material(LitShader());
             SetColor(mat, color);
             ApplyTexture(mat, tex);
             if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+            TameSpecular(mat);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
         /// <summary>Opaque textured surface (walls). UVs are metric, so tiling stays at 1.</summary>
         private static Material CreateSurfaceMat(string name, Color tint, Texture2D tex)
         {
-            var mat = new Material(UnlitShader());
+            var mat = new Material(LitShader());
             SetColor(mat, tint);
             ApplyTexture(mat, tex);
+            TameSpecular(mat);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>Matte building surfaces: no smooth plastic sheen on concrete/wood.</summary>
+        private static void TameSpecular(Material mat)
+        {
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
+            if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 0f);
+            if (mat.HasProperty("_EnvironmentReflections")) mat.SetFloat("_EnvironmentReflections", 0f);
         }
 
         private static void ApplyTexture(Material mat, Texture2D tex)
@@ -275,6 +286,15 @@ namespace RoomPlanner.EditorTools
             if (s == null) s = Shader.Find("Unlit/Color");
             if (s == null) s = Shader.Find("Sprites/Default");
             return s != null ? s : Shader.Find("Standard");
+        }
+
+        /// <summary>Lit shader for real SURFACES (walls/floors/stairs/ground/joinery) —
+        /// they take the directional light and shadows (design/04 realism pass). UI, lines
+        /// and markers stay unlit on purpose.</summary>
+        private static Shader LitShader()
+        {
+            Shader s = Shader.Find("Universal Render Pipeline/Lit");
+            return s != null ? s : UnlitShader();
         }
 
         // ---- UI factory ----

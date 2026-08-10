@@ -28,6 +28,8 @@ namespace RoomPlanner.Core.Ifc
         public int JoinOverride = -1;     // WallJoin
         public float SideSignOverride;    // 0 = leave default
         public float BaseHeight;
+        public bool HasPaint;
+        public Color PaintColor;
     }
 
     public sealed class ImportedSlab
@@ -40,6 +42,8 @@ namespace RoomPlanner.Core.Ifc
         /// <summary>Top level (Unity Y, metres).</summary>
         public float Level;
         public int StoreyIndex = -1;
+        public bool HasPaint;
+        public Color PaintColor;
     }
 
     /// <summary>
@@ -71,6 +75,8 @@ namespace RoomPlanner.Core.Ifc
         /// reliable signal, so imports default to solid; project files keep the choice.</summary>
         public bool Open;
         public int StoreyIndex = -1;
+        public bool HasPaint;
+        public Color PaintColor;
     }
 
     /// <summary>

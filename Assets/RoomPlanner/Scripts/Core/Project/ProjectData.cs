@@ -28,6 +28,8 @@ namespace RoomPlanner.Core.Project
         public int NodeA, NodeB;              // indices into ProjectData.Nodes
         public float Thickness, Height, BaseHeight, SideSign;
         public int Offset, Join;
+        public bool Painted;
+        public Color Paint;
         public List<ProjectOpening> Openings = new();
     }
 
@@ -43,6 +45,8 @@ namespace RoomPlanner.Core.Project
         public List<Vector3> Outline = new();
         public List<ProjectRing> Holes = new();
         public float Level, Thickness;
+        public bool Painted;
+        public Color Paint;
     }
 
     [Serializable]
@@ -52,6 +56,8 @@ namespace RoomPlanner.Core.Project
         public float Yaw, Width, RiserHeight, TreadDepth;
         public int Risers;
         public bool Open;
+        public bool Painted;
+        public Color Paint;
     }
 
     [Serializable]
