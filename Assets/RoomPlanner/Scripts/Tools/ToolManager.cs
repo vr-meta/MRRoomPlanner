@@ -249,10 +249,13 @@ namespace RoomPlanner.Tools
                 {
                     popups.CloseAll();
                     RefreshMenu();
-                    _uiDebounceUntil = Time.time + 0.15f;
                 }
-                // while (still) modal, scene tools stay blocked even off-panel
-                if (popups.IsOpen) overMenu = true;
+                // while (still) modal, scene tools stay blocked even off-panel; on ANY
+                // close path (B included) the closing frame stays blocked too + 150 ms
+                // debounce — otherwise the same B press reaches the tool and deletes
+                // the selection (review 2026-08-10, finding 1)
+                overMenu = true;
+                if (!popups.IsOpen) _uiDebounceUntil = Time.time + 0.15f;
             }
 
             // ---- slider drag (design/20 §2.2): trigger captured, grip = fine ×0.1 ----
@@ -348,7 +351,13 @@ namespace RoomPlanner.Tools
                     _hoverBtn = mb;
                     if (mb != null && mb.Interactable) input.Pulse(0.2f, 0.01f);
                 }
-                if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = hit.point; }
+                // popup-forced overMenu can come without a physics hit — a default hit.point
+                // would park the reticle at the world origin (review finding 4)
+                if (reticle != null)
+                {
+                    reticle.gameObject.SetActive(hit.collider != null);
+                    if (hit.collider != null) reticle.position = hit.point;
+                }
 
                 if (mb != null && mb.Interactable && !debounced && input.ConfirmPressed())
                 {

@@ -67,6 +67,10 @@ namespace RoomPlanner.Tools
             Refresh();
         }
 
+        /// <summary>The fill plate mesh is built this wide; localScale multiplies it,
+        /// so the target metric width must be divided by it (review finding 2).</summary>
+        public const float FillBaseWidth = 0.01f;
+
         public void Refresh()
         {
             if (_field == null) return;
@@ -74,7 +78,8 @@ namespace RoomPlanner.Tools
             if (_fill != null)
             {
                 var s = _fill.localScale;
-                _fill.localScale = new Vector3(Mathf.Max(1e-4f, t * _trackWidth), s.y, s.z);
+                _fill.localScale = new Vector3(
+                    Mathf.Max(1e-4f, t * _trackWidth) / FillBaseWidth, s.y, s.z);
                 var p = _fill.localPosition;
                 _fill.localPosition = new Vector3(t * _trackWidth * 0.5f, p.y, p.z);
             }

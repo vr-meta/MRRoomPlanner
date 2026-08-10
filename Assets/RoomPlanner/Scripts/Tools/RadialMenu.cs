@@ -315,8 +315,8 @@ namespace RoomPlanner.Tools
             _hubIcon = hubIconGo.AddComponent<IconRenderer>();
             _hubIcon.Init("select-cursor", iconMaterial, 0.020f);
 
-            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.010f, -0.003f), 0.011f);
-            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.024f, -0.003f), 0.007f);
+            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.010f, -0.003f), 0.016f);
+            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.026f, -0.003f), 0.010f);
             _hubHint.color = UiTokens.LabelDim;
 
             RefreshStatic();
@@ -365,7 +365,7 @@ namespace RoomPlanner.Tools
                     : UiTokens.ButtonBg;
                 SetTint(_sectorRenderers[i], bg);
 
-                if (_icons[i] != null)
+                if (_icons[i] != null && i < _slots.Length)
                     _icons[i].SetTint(hovered ? UiTokens.LabelLight
                         : active ? UiTokens.Selected
                         : _slots[i].Tint);

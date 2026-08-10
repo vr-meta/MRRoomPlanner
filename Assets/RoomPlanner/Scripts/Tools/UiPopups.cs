@@ -52,6 +52,7 @@ namespace RoomPlanner.Tools
             CloseAll();
             _field = field;
             _onChanged = onChanged;
+            _scrollAccum = 0f;   // leftover fractional scroll must not jump the new list
             _options = field.ResolveOptions() ?? new string[0];
             int cur = field.GetIndex?.Invoke() ?? 0;
             _firstVisible = PanelLayout.ScrollTo(cur, _options.Length);
@@ -173,6 +174,7 @@ namespace RoomPlanner.Tools
             _field = null;
             _listRoot = null;
             _entryLabel = null;
+            _scrollAccum = 0f;
             _listButtons.Clear();
             foreach (var c in _disabledColliders)
                 if (c != null) c.enabled = true;
@@ -344,8 +346,9 @@ namespace RoomPlanner.Tools
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = size;
             tmp.enableAutoSizing = true;
-            tmp.fontSizeMin = size.y * 0.55f;
-            tmp.fontSizeMax = size.y * 0.72f;
+            // same factors as InspectorPanel.MakeText — the device-validated regime
+            tmp.fontSizeMin = size.y * 0.80f;
+            tmp.fontSizeMax = size.y * 0.95f;
             return tmp;
         }
 

@@ -504,9 +504,11 @@ namespace RoomPlanner.Tools
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = new Vector2(size.x, size.y);
             tmp.enableAutoSizing = true;
-            // readability floor ≥ ~0.9° at 65 cm (UX v2 P1.5) — auto-sizing is only a clamp
-            tmp.fontSizeMin = size.y * 0.55f;
-            tmp.fontSizeMax = size.y * 0.72f;
+            // readability floor ≥ ~0.9° at 65 cm (UX v2 P1.5) — auto-sizing is only a clamp.
+            // 0.80–0.95 × cell height mirrors the DEVICE-VALIDATED v1 regime (headset
+            // feedback 2026-08-10); review finding 3 → verify on device again
+            tmp.fontSizeMin = size.y * 0.80f;
+            tmp.fontSizeMax = size.y * 0.95f;
             return tmp;
         }
 
@@ -581,7 +583,9 @@ namespace RoomPlanner.Tools
                 if (fill == null || f.GetProgress == null) continue;
                 float p = f.GetProgress();
                 float t = p < 0f ? Mathf.PingPong(Time.time * 0.8f, 1f) : Mathf.Clamp01(p);
-                fill.localScale = new Vector3(Mathf.Max(1e-4f, t * w), fill.localScale.y, 1f);
+                // scale multiplies the SliderWidget.FillBaseWidth-wide plate mesh
+                fill.localScale = new Vector3(
+                    Mathf.Max(1e-4f, t * w) / SliderWidget.FillBaseWidth, fill.localScale.y, 1f);
                 fill.localPosition = new Vector3(t * w * 0.5f, 0f, -0.001f);
             }
         }
