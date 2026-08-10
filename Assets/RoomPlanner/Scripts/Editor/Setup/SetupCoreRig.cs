@@ -217,9 +217,10 @@ namespace RoomPlanner.EditorTools
             }
 
             var fso = new SerializedObject(feature);
-            // active in the ASSET so the player keeps the shaders (build stripping —
-            // device log 2026-08-11); the runtime default is OFF via ToolManager.Start
-            fso.FindProperty("m_Active").boolValue = true;
+            // INACTIVE: SSAO is shelved — three device attempts smeared (Multiview
+            // frame-late depth); no runtime toggle references it anymore, so let the
+            // build strip the shaders and skip the DepthNormals prepass cost.
+            fso.FindProperty("m_Active").boolValue = false;
             var settings = fso.FindProperty("m_Settings");
             // DepthNormals + FULL resolution: the half-res (Downsample) AO drifted
             // visibly against the geometry in stereo ("тени двигаются отдельно",
