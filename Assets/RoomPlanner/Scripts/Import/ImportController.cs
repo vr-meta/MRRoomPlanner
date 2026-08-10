@@ -208,11 +208,13 @@ namespace RoomPlanner.Import
                 var sel = view.GetComponent<Selectable>();
                 _created.Add((sel, segments[i].storey));
                 var src = building.Walls[segments[i].wallIndex];
-                if (src.HasPaint && sel != null) sel.SetPaint(src.PaintColor);
+                if (!ApplyFinish(sel, src.Finish) && src.HasPaint && sel != null)
+                    sel.SetPaint(src.PaintColor);
             }
             int wallCount = segments.Count;
 
             int slabCount = 0, holeCount = 0;
+            var importedFloors = new List<RoomPlanner.Floors.Floor>();
             foreach (var slab in building.Slabs)
             {
                 var f = floors.CreateImported(slab.Outline, slab.Level, slab.Thickness);
@@ -220,12 +222,15 @@ namespace RoomPlanner.Import
                 foreach (var hole in slab.Holes)
                     if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
                 var slabSel = f.GetComponent<Selectable>();
-                if (slab.HasPaint && slabSel != null) slabSel.SetPaint(slab.PaintColor);
+                if (!ApplyFinish(slabSel, slab.Finish) && slab.HasPaint && slabSel != null)
+                    slabSel.SetPaint(slab.PaintColor);
                 _created.Add((slabSel, slab.StoreyIndex));
+                importedFloors.Add(f);
                 slabCount++;
             }
 
             int stairCount = 0;
+            var importedStairs = new List<RoomPlanner.Stairs.Stair>();
             foreach (var st in building.Stairs)
             {
                 var go = new GameObject("Stair (imported)") { layer = SelectableLayer };
@@ -236,12 +241,24 @@ namespace RoomPlanner.Import
                 var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
                 stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
                     st.Kind);
+                go.AddComponent<RoomPlanner.Stairs.StairParameters>();   // per-instance rows (F2)
                 var sel = go.AddComponent<Selectable>();
-                if (st.HasPaint) sel.SetPaint(st.PaintColor);
+                if (!ApplyFinish(sel, st.Finish) && st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
+                importedStairs.Add(stair);
                 stairCount++;
             }
+
+            // Stairs must never leave you head-butting the slab above (audit 05 §Б1):
+            // the file's own stairwell holes are checked against each flight and widened
+            // (or created) wherever the 2.0 m headroom rule is violated.
+            int headroomFixes = 0;
+            foreach (var st in importedStairs)
+                foreach (var f in importedFloors)
+                    if (st.CutHeadroomIn(f)) headroomFixes++;
+            if (headroomFixes > 0)
+                Debug.Log($"[Import] stair headroom: widened/created {headroomFixes} slab opening(s)");
 
             int mepCount = 0;
             foreach (var mep in building.Plumbing)
@@ -261,13 +278,14 @@ namespace RoomPlanner.Import
                 var view = go.AddComponent<MepView>();
                 view.Category = mep.Category;
                 view.Transparency = mep.Transparency;
+                view.StoreyIndex = mep.StoreyIndex;   // survives capture — storey filter after load (B6)
                 view.ApplyShadowMode();   // interior objects cast sun shadows (toggleable)
                 // Selectable only for the hide/show machinery (undo, storey filter) — no
                 // collider, so it is invisible to picking and never registered for it.
                 var sel = go.AddComponent<Selectable>();
                 // The file's own colour rides the paint machinery: one visual writer,
                 // undo-able, round-trips through the project format.
-                if (mep.HasColor)
+                if (!ApplyFinish(sel, mep.Finish) && mep.HasColor)
                     sel.SetPaint(new Color(mep.Color.r, mep.Color.g, mep.Color.b,
                         1f - Mathf.Clamp01(mep.Transparency)));
                 _created.Add((sel, mep.StoreyIndex));
@@ -281,9 +299,36 @@ namespace RoomPlanner.Import
             int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs
                 + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
             _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
+                + (headroomFixes > 0 ? $" {headroomFixes}hr" : "")
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
                 + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
+        }
+
+        private FinishLibrary _finishLibrary;
+
+        /// <summary>
+        /// Apply a full v2 surface finish (audit B2); false = nothing recorded, the
+        /// caller falls back to the flat v1 colour. A texture whose files are not on
+        /// this device degrades VISUALLY to the tint but keeps its id — the next save
+        /// still carries the texture instead of flattening it to white.
+        /// </summary>
+        private bool ApplyFinish(Selectable sel, Core.SurfaceFinish finish)
+        {
+            if (sel == null || finish.IsNone) return false;
+            Texture2D tex = null;
+            Texture2D normal = null;
+            if (finish.Kind == Core.FinishKind.Texture)
+            {
+                if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+                if (_finishLibrary != null)
+                {
+                    _finishLibrary.TryGet(finish.TextureId, out tex, out _);
+                    normal = _finishLibrary.NormalOf(finish.TextureId);   // laminate relief (design/22)
+                }
+            }
+            sel.SetFinish(finish, tex, normal);
+            return true;
         }
 
         /// <summary>Material by category; strongly transparent surfaces (glass shower
@@ -345,7 +390,10 @@ namespace RoomPlanner.Import
                     Width = op.Width,
                     Height = op.Height,
                     SillHeight = op.Sill,
-                    IsDoor = op.IsDoor,
+                    // Explicit kind when the source carries one (v2 files, hand-placed
+                    // garage doors); the IFC path still speaks bool IsDoor.
+                    Kind = op.Kind >= 0 ? (OpeningKind)op.Kind
+                        : (op.IsDoor ? OpeningKind.Door : OpeningKind.Window),
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
                 });

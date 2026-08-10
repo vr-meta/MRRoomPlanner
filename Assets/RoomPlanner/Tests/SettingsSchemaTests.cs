@@ -7,6 +7,34 @@ namespace RoomPlanner.Tests
 {
     public class SettingsSchemaTests
     {
+        // ---- numpad entry editing (audit 10 §Б1: no decimal point, zero tests) ----
+
+        [Test]
+        public void NumpadPress_DigitsAppend_UpToMaxLen()
+        {
+            Assert.AreEqual("12", PanelLayout.NumpadPress("1", "2"));
+            Assert.AreEqual("1234567", PanelLayout.NumpadPress("1234567", "8"), "capped at 7");
+        }
+
+        [Test]
+        public void NumpadPress_DecimalPoint_OncePerEntry_StartsWithZero()
+        {
+            Assert.AreEqual("0.", PanelLayout.NumpadPress("", "."), "leading dot becomes 0.");
+            Assert.AreEqual("-0.", PanelLayout.NumpadPress("-", "."), "after the sign too");
+            Assert.AreEqual("1.", PanelLayout.NumpadPress("1", "."));
+            Assert.AreEqual("1.5", PanelLayout.NumpadPress("1.", "5"));
+            Assert.AreEqual("1.5", PanelLayout.NumpadPress("1.5", "."), "second dot refused");
+        }
+
+        [Test]
+        public void NumpadPress_SignToggles_BackspaceEats()
+        {
+            Assert.AreEqual("-27", PanelLayout.NumpadPress("27", "±"));
+            Assert.AreEqual("27", PanelLayout.NumpadPress("-27", "±"));
+            Assert.AreEqual("2", PanelLayout.NumpadPress("27", "⌫"));
+            Assert.AreEqual("", PanelLayout.NumpadPress("", "⌫"), "empty stays empty");
+        }
+
         [Test]
         public void Builder_AddsFieldsInOrder_WithKinds()
         {

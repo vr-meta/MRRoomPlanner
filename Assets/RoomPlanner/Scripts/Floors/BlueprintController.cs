@@ -30,6 +30,14 @@ namespace RoomPlanner.Floors
 
         private const string PlanFile = "plan.png";
 
+        // One source of truth for the scale range: the slider, SetPlacement (project load)
+        // and the calibration solver must agree, or the UI ends up lying (audit 07 §Б1).
+        private const float MinPlanScale = 0.5f;
+        private const float MaxPlanScale = 50f;
+
+        /// <summary>Transient calibration verdict shown in the Status row (null = none).</summary>
+        private string _calibNote;
+
         private Texture2D _planTex;
         private string _planStatus = "no file";
         private SettingsSchema _settings;
@@ -57,7 +65,7 @@ namespace RoomPlanner.Floors
         /// <summary>Restore the whole placement at once (project load) and rebuild floors.</summary>
         public void SetPlacement(float scale, float rotationDeg, float offsetX, float offsetZ)
         {
-            planScale = Mathf.Clamp(scale, 0.5f, 50f);
+            planScale = Mathf.Clamp(scale, MinPlanScale, MaxPlanScale);
             planRotationDeg = Mathf.Repeat(rotationDeg, 360f);
             planOffsetX = offsetX;
             planOffsetZ = offsetZ;
@@ -69,10 +77,10 @@ namespace RoomPlanner.Floors
             // Plan parameters are THIS tool's state — no ToolManager store involved.
             // v2 (design/20 §2): file picking is a real Select list, actions are buttons.
             _settings ??= new SettingsSchema()
-                .Slider("scale", "Plan scale", 0.5f, 50f, 0.25f,
+                .Slider("scale", "Plan scale", MinPlanScale, MaxPlanScale, 0.25f,
                     () => planScale,
-                    v => { planScale = Mathf.Clamp(v, 0.5f, 50f); Refresh(); },
-                    (_, v) => { planScale = Mathf.Clamp(v, 0.5f, 50f); Refresh(); },
+                    v => { planScale = Mathf.Clamp(v, MinPlanScale, MaxPlanScale); Refresh(); },
+                    (_, v) => { planScale = Mathf.Clamp(v, MinPlanScale, MaxPlanScale); Refresh(); },
                     () => $"{planScale:0.0} m")
                 .Stepper("rot", "Rotation",
                     () => $"{planRotationDeg:0}°",
@@ -83,7 +91,7 @@ namespace RoomPlanner.Floors
                 .Action("calib", "Calibrate (2 points)", "calibrate",
                     () => { if (_calibStep < 0) BeginCalibration(); else CancelCalibration(); })
                 .Readout("status", "Status",
-                    () => _calibStep >= 0 ? CalibrationLabel() : _planStatus);
+                    () => _calibStep >= 0 ? CalibrationLabel() : (_calibNote ?? _planStatus));
             return _settings;
         }
 
@@ -160,7 +168,7 @@ namespace RoomPlanner.Floors
 
         public int CalibrationStep => _calibStep;
 
-        public void BeginCalibration() => _calibStep = 0;
+        public void BeginCalibration() { _calibStep = 0; _calibNote = null; }
 
         public void CancelCalibration() => _calibStep = -1;
 
@@ -189,11 +197,22 @@ namespace RoomPlanner.Floors
                         OriginX = planOffsetX, OriginZ = planOffsetZ,
                     };
                     var solved = BlueprintMath.FromPointPairs(_calibFromA, _calibToA, _calibFromB, p, current);
+                    _calibStep = -1;
+                    // A short base (or degenerate pairs) solves to a scale far outside the
+                    // slider's world. Clamping would keep a WRONG similarity, so refuse the
+                    // whole calibration and say why (audit 07 §Б1).
+                    if (solved.Scale < MinPlanScale || solved.Scale > MaxPlanScale)
+                    {
+                        _calibNote = $"Calibration rejected: scale {solved.Scale:0.0} m "
+                            + $"(allowed {MinPlanScale:0.0}-{MaxPlanScale:0}) — use a longer base";
+                        if (input != null) input.Pulse(0.2f, 0.01f);
+                        break;
+                    }
+                    _calibNote = null;
                     planScale = solved.Scale;
                     planRotationDeg = Mathf.Repeat(solved.RotationDeg, 360f);
                     planOffsetX = solved.OriginX;
                     planOffsetZ = solved.OriginZ;
-                    _calibStep = -1;
                     Refresh();
                     break;
             }

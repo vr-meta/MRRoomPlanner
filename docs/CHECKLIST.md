@@ -8,7 +8,7 @@
 
 > 🔍 **Аудит всех подсистем 2026-08-10** — баги, спеки нового функционала и
 > приоритеты: [`audit-2026-08-10/00-master-checklist.md`](audit-2026-08-10/00-master-checklist.md)
-> (по файлу на подсистему).
+> (по файлу на подсистему; ведётся в ветке `worktree-audit-fixes`, раздел = коммит).
 
 ---
 
@@ -626,6 +626,26 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 - [ ] S5. Прогон анализатора после фиксов, тесты, APK, шлем; IfcSpace → комнаты
   (док 09) — отдельной фичей
 
+## 2s. Инструмент Openings + лестницы в UI (аудит F1/F2, дизайн: `design/03-openings.md`, ветка `worktree-audit-fixes`)
+
+Двери/окна/**гаражные ворота** руками (панелизация давно готова — не хватало только
+инструмента) + первые параметры лестниц в инспекторе.
+
+- [x] **O1** — Core: `OpeningKind` (Door/Window/Garage) на `WallOpening` (легаси
+  `IsDoor` живёт как производное), панелизация Garage — секционное полотно 4 панели
+  в срединной плоскости, submesh столярки; +тесты (рейкасты в полотно/перемычку)
+- [x] **O2** — Core: `OpeningMath` — `CanPlace` (простенок ≥5 см, перемычка ≥5 см,
+  ширина ≥30 см, без пересечений), `NearestOpening` (для удаления по прицелу); +тесты
+- [x] **O3** — `OpeningsController : ITool` («Open», слот 4 радиала, иконка
+  `door-window`): табы Door/Window/Garage (Numeric-размеры), ghost-рамка с цветом
+  валидности, триггер = `CreateOpeningCommand` (undo), B у проёма = `DeleteOpening`,
+  B по пустоте = Esc; `SetupOpeningsTool` + реестр + слот; +Play-тесты
+- [x] **S1** — `StairParameters : ISettingsProvider` (Steps/Riser/Tread/Width/Kind
+  за экземпляр, before/after-команды) + навешивание при создании лестниц (импорт и
+  restore); Readout Total; +Play-тесты
+- [ ] **S2** — SetupRig + полный прогон + синхронизация доков (10-controls при смене
+  слота, 03-openings по факту)
+
 ## 2t. Генератор ламината (дизайн: `design/22-laminate-generator.md`, ветка `worktree-laminate-generator`)
 
 Источник — D:\Maps (18 досок дуба 4096×684, diffuse+normal; лицензия не CC0 —
@@ -646,6 +666,8 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   `LaminateCatalog`, tile из периода, gloss 0.35); EditMode 370/370, PlayMode 110/110
 - [~] L5. APK собран и установлен (2026-08-12); ждём фидбек шлема: рельеф, стыки,
   цвета, ориентация зелёного канала нормалей (если рельеф «вдавлен» — флип G)
+- [~] L6. Merge main (Openings, персист v2): при restore отделки резолвить и normal
+  map через `FinishLibrary.NormalOf` — проверить точку загрузки проекта
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 

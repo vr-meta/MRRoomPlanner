@@ -40,7 +40,7 @@ namespace RoomPlanner.Tools
         private int _boundSelRows = -1;
         private readonly List<System.Action> _refreshers = new();
         private readonly List<SliderWidget> _sliders = new();
-        private readonly List<(SettingField field, Transform fill, float width)> _progressBars = new();
+        private readonly List<(SettingField field, Transform fill, float width, Mesh mesh)> _progressBars = new();
         private readonly Dictionary<(float w, float h, float r), Mesh> _plateCache = new();
 
         private Transform _cam;
@@ -521,7 +521,11 @@ namespace RoomPlanner.Tools
             var fill = MakePlate(root.transform, "Fill", new Vector3(0f, 0f, -0.001f),
                 0.01f, 0.006f, 0.003f, buttonMaterial);
             Tint(fill.GetComponent<Renderer>(), UiTokens.TrackFillActive);
-            _progressBars.Add((f, fill.transform, w));
+            // Own mesh: the cached plate is SHARED and must not be resized; scaling it
+            // turned the rounded caps into ovals (same fix as the slider fill).
+            var fillMesh = new Mesh { name = "ProgressFill", hideFlags = HideFlags.DontSave };
+            fill.GetComponent<MeshFilter>().sharedMesh = fillMesh;
+            _progressBars.Add((f, fill.transform, w, fillMesh));
         }
 
         private void BuildHeader(SettingField f, float y)
@@ -744,14 +748,12 @@ namespace RoomPlanner.Tools
                 panelRoot.transform.rotation = Quaternion.LookRotation(dir);
 
             // progress bars animate every frame while visible
-            foreach (var (f, fill, w) in _progressBars)
+            foreach (var (f, fill, w, mesh) in _progressBars)
             {
-                if (fill == null || f.GetProgress == null) continue;
+                if (fill == null || mesh == null || f.GetProgress == null) continue;
                 float p = f.GetProgress();
                 float t = p < 0f ? Mathf.PingPong(Time.time * 0.8f, 1f) : Mathf.Clamp01(p);
-                // scale multiplies the SliderWidget.FillBaseWidth-wide plate mesh
-                fill.localScale = new Vector3(
-                    Mathf.Max(1e-4f, t * w) / SliderWidget.FillBaseWidth, fill.localScale.y, 1f);
+                SliderWidget.RebuildPill(mesh, Mathf.Max(0.002f, t * w), 0.006f, 0.003f);
                 fill.localPosition = new Vector3(t * w * 0.5f, 0f, -0.001f);
             }
         }

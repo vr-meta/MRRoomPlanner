@@ -18,6 +18,9 @@ namespace RoomPlanner.Import
         public RoomPlanner.Core.Ifc.MepCategory Category;
         /// <summary>IFC surface transparency (0 opaque … 1 clear) — kept for capture.</summary>
         public float Transparency;
+        /// <summary>Storey the element belongs to (−1 = unknown). ProjectMep.Storey existed
+        /// but Capture never filled it — the storey filter died after save/load (audit B6).</summary>
+        public int StoreyIndex = -1;
 
         /// <summary>Apply the current global shadow-casting choice to this element.</summary>
         public void ApplyShadowMode()

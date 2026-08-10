@@ -39,22 +39,31 @@ namespace RoomPlanner.EditorTools
 
             Directory.CreateDirectory(Dir);
 
-            // 1. Renderer Data
-            var rendererData = ScriptableObject.CreateInstance(rendererDataType);
-            AssetDatabase.CreateAsset(rendererData, RendererPath);
-
-            // 2. URP Asset через статический Create(rendererData)
-            var create = urpAssetType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .FirstOrDefault(m => m.Name == "Create" && m.GetParameters().Length == 1);
-            if (create == null)
+            // Идемпотентность (audit 06 §Б3, B10): повторный запуск НЕ пересоздаёт ассеты —
+            // CreateAsset по тому же пути затирал URP-Renderer вместе с SSAO-фичей,
+            // добавленной Setup'ом, и тумблер SSAO молча умирал.
+            var rendererData = AssetDatabase.LoadAssetAtPath<ScriptableObject>(RendererPath);
+            if (rendererData == null || !rendererDataType.IsInstanceOfType(rendererData))
             {
-                EditorUtility.DisplayDialog("Switch To URP",
-                    "Не нашёл метод UniversalRenderPipelineAsset.Create — версия URP отличается. Сообщи мне.", "OK");
-                return;
+                rendererData = ScriptableObject.CreateInstance(rendererDataType);
+                AssetDatabase.CreateAsset(rendererData, RendererPath);
             }
 
-            var urp = (RenderPipelineAsset)create.Invoke(null, new object[] { rendererData });
-            AssetDatabase.CreateAsset(urp, AssetPath);
+            var urp = AssetDatabase.LoadAssetAtPath<RenderPipelineAsset>(AssetPath);
+            if (urp == null || !urpAssetType.IsInstanceOfType(urp))
+            {
+                // URP Asset через статический Create(rendererData)
+                var create = urpAssetType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .FirstOrDefault(m => m.Name == "Create" && m.GetParameters().Length == 1);
+                if (create == null)
+                {
+                    EditorUtility.DisplayDialog("Switch To URP",
+                        "Не нашёл метод UniversalRenderPipelineAsset.Create — версия URP отличается. Сообщи мне.", "OK");
+                    return;
+                }
+                urp = (RenderPipelineAsset)create.Invoke(null, new object[] { rendererData });
+                AssetDatabase.CreateAsset(urp, AssetPath);
+            }
             AssetDatabase.SaveAssets();
 
             // 3. Назначить как пайплайн проекта (Graphics + все уровни Quality)

@@ -10,6 +10,25 @@ namespace RoomPlanner.Core
     /// </summary>
     public static class PanelLayout
     {
+        /// <summary>
+        /// One numpad keypress applied to the entry string — pure, so the editing rules
+        /// are testable (audit 10 §Б1: the pad had no decimal point and zero tests).
+        /// "." starts "0." on an empty/sign-only entry and is refused once present.
+        /// </summary>
+        public static string NumpadPress(string entry, string key, int maxLen = 7)
+        {
+            entry ??= "";
+            switch (key)
+            {
+                case "⌫": return entry.Length > 0 ? entry.Substring(0, entry.Length - 1) : entry;
+                case "±": return entry.StartsWith("-") ? entry.Substring(1) : "-" + entry;
+                case ".":
+                    if (entry.Contains(".") || entry.Length >= maxLen) return entry;
+                    return entry.Length == 0 || entry == "-" ? entry + "0." : entry + ".";
+                default: return entry.Length < maxLen ? entry + key : entry;
+            }
+        }
+
         public const float Width = UiTokens.PanelWidth;                 // 0.288
         public const float ContentWidth = Width - 2f * UiTokens.PanelPadding;
         public const float CaptionX = -Width * 0.5f + UiTokens.PanelPadding;   // left edge of captions

@@ -64,6 +64,23 @@ namespace RoomPlanner.Core
             return a + ab * t;
         }
 
+        /// <summary>
+        /// One snap-priority policy for the measure tool (audit 2026-08-10, 01 §Б3):
+        /// endpoint magnet → surface magnet → axis modifier → grid; first match wins.
+        /// The three call sites (ray placement, hands placement, hands drag) used to
+        /// each order these differently, so the same gesture snapped differently per
+        /// mode. Callers PROBE the magnets and pass what they found; this resolves
+        /// only the precedence.
+        /// </summary>
+        public static Vector3 ApplySnapPolicy(Vector3 raw, Vector3? endpoint, Vector3? surface,
+            Vector3? axisAnchor, bool axisHeld, bool gridOn, float gridSize)
+        {
+            if (endpoint.HasValue) return endpoint.Value;   // an existing point is exact — never re-round it
+            if (surface.HasValue) return surface.Value;
+            if (axisHeld && axisAnchor.HasValue) return SnapToAxis(axisAnchor.Value, raw);
+            return gridOn ? SnapToGridXZ(raw, gridSize) : raw;
+        }
+
         /// <summary>Format a distance (meters) as centimeters, e.g. "123 cm". Always cm.</summary>
         public static string FormatDistanceCm(float meters)
         {

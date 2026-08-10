@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Core.Ifc;
 using RoomPlanner.Core.Project;
 using RoomPlanner.Floors;
@@ -47,6 +48,7 @@ namespace RoomPlanner.Import
                         Join = (int)s.Join,
                         Painted = sel != null && sel.IsPainted,
                         Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
+                        Finish = CaptureFinish(sel),
                     };
                     foreach (var op in s.Openings)
                         w.Openings.Add(new ProjectOpening
@@ -54,6 +56,7 @@ namespace RoomPlanner.Import
                             Along = op.AlongFraction, Width = op.Width,
                             Height = op.Height, Sill = op.SillHeight,
                             IsDoor = op.IsDoor,
+                            Kind = (int)op.Kind,
                             Swing = op.SwingDir, Hinge = op.HingeDir,
                         });
                     data.Walls.Add(w);
@@ -71,6 +74,7 @@ namespace RoomPlanner.Import
                     Outline = new List<Vector3>(f.Outline),
                     Painted = fsel != null && fsel.IsPainted,
                     Paint = fsel != null && fsel.IsPainted ? fsel.Paint : Color.clear,
+                    Finish = CaptureFinish(fsel),
                 };
                 foreach (var hole in f.Holes)
                     pf.Holes.Add(new ProjectRing { Points = new List<Vector3>(hole) });
@@ -89,6 +93,7 @@ namespace RoomPlanner.Import
                     Kind = (int)s.Kind,
                     Painted = ssel != null && ssel.IsPainted,
                     Paint = ssel != null && ssel.IsPainted ? ssel.Paint : Color.clear,
+                    Finish = CaptureFinish(ssel),
                 });
             }
 
@@ -103,12 +108,61 @@ namespace RoomPlanner.Import
                     Name = m.name, Origin = m.transform.position,
                     Category = (int)m.Category,
                     Transparency = m.Transparency,
+                    Storey = m.StoreyIndex,
                     Painted = msel != null && msel.IsPainted,
                     Paint = msel != null && msel.IsPainted ? msel.Paint : Color.clear,
+                    Finish = CaptureFinish(msel),
                 };
                 pm.Vertices.AddRange(mf.sharedMesh.vertices);
                 pm.Triangles.AddRange(mf.sharedMesh.triangles);
                 data.Plumbing.Add(pm);
+            }
+
+            // v2: the electrical layer (audit B1) — REGISTERED objects only: the tool's
+            // ghost preview and the parked prefab template are not in the model. Hidden
+            // (deleted, undo-able) ones stay out, same as every other layer.
+            var model = Editing.SceneModel.Instance;
+            if (model != null)
+            {
+                foreach (var item in model.Items)
+                {
+                    if (item is not Editing.Selectable s || !s.IsAlive || s.IsHidden) continue;
+                    if (s.Fixture != null)
+                    {
+                        data.Fixtures.Add(new ProjectFixture
+                        {
+                            Id = s.Id,
+                            Kind = (int)s.Fixture.Kind,
+                            Posts = s.Fixture.Posts,
+                            Keys = s.Fixture.Keys,
+                            Reserve = s.Fixture.ReservePercent,
+                            Position = s.Fixture.transform.position,
+                            Rotation = s.Fixture.transform.rotation,
+                            BaseLevel = s.Fixture.BaseLevel,
+                        });
+                    }
+                    else if (s.Kind == Editing.SelectableKind.Wire)
+                    {
+                        var route = s.GetComponent<Electrical.WireRoute>();
+                        if (route == null) continue;
+                        var pw = new ProjectWire
+                        {
+                            Cable = (int)route.Cable,
+                            StartId = route.StartFixtureId,
+                            EndId = route.EndFixtureId,
+                        };
+                        pw.Points.AddRange(route.Points);
+                        data.Wires.Add(pw);
+                    }
+                    else if (s.Kind == Editing.SelectableKind.Measurement)
+                    {
+                        // Kind falls back to Measurement for unknown components (MEP views
+                        // among them) — the component check keeps them out of this section.
+                        var meas = s.GetComponent<Measure.Measurement>();
+                        if (meas != null)
+                            data.Measures.Add(new ProjectMeasure { A = meas.PointA, B = meas.PointB });
+                    }
+                }
             }
 
             if (blueprint != null)
@@ -127,9 +181,73 @@ namespace RoomPlanner.Import
             if (data == null || import == null) return;
             import.ClearScene();
             import.BuildScene(ToBuilding(data));
+            RestoreElectrical(data);
+            RestoreMeasurements(data);
             if (blueprint != null)
                 blueprint.SetPlacement(data.PlanScale, data.PlanRotationDeg,
                     data.PlanOffsetX, data.PlanOffsetZ);
+        }
+
+        /// <summary>
+        /// Recreate the electrical layer (format v2, audit B1). The controller is found
+        /// at load time instead of being rig-wired — one call per load, and restore must
+        /// work even on rigs saved before the field existed. Public for round-trip tests.
+        /// </summary>
+        public static void RestoreElectrical(ProjectData data)
+        {
+            if (data.Fixtures.Count == 0 && data.Wires.Count == 0) return;
+            var electric = Object.FindFirstObjectByType<Electrical.ElectricController>();
+            if (electric == null)
+            {
+                Debug.LogWarning("[Project] file carries electrical data but the rig has no ElectricController");
+                return;
+            }
+            foreach (var f in data.Fixtures) electric.RestoreFixture(f);
+            foreach (var w in data.Wires) electric.RestoreWire(w);
+        }
+
+        /// <summary>The full surface finish of an object, v2 (audit B2) — v1 kept only a
+        /// flat colour and textured floors came back white after every load.</summary>
+        private static ProjectFinish CaptureFinish(Editing.Selectable sel)
+        {
+            if (sel == null) return new ProjectFinish();
+            var f = sel.Finish;
+            return new ProjectFinish
+            {
+                Kind = (int)f.Kind,
+                Color = f.Color,
+                TextureId = f.TextureId,
+                TileW = f.TileMeters,
+                TileH = f.TileMetersY,
+                Gloss = f.Smoothness,
+            };
+        }
+
+        /// <summary>Project finish → runtime finish; Kind 0 (v1 file) = none recorded.</summary>
+        internal static SurfaceFinish ToFinish(ProjectFinish p) =>
+            p == null || p.Kind == 0
+                ? SurfaceFinish.None
+                : new SurfaceFinish
+                {
+                    Kind = (FinishKind)p.Kind,
+                    Color = p.Color,
+                    TextureId = p.TextureId,
+                    TileMeters = p.TileW,
+                    TileMetersY = p.TileH,
+                    Smoothness = p.Gloss,
+                };
+
+        /// <summary>Recreate saved measurements (format v2, audit B3). Public for tests.</summary>
+        public static void RestoreMeasurements(ProjectData data)
+        {
+            if (data.Measures.Count == 0) return;
+            var measure = Object.FindFirstObjectByType<Measure.MeasureController>();
+            if (measure == null)
+            {
+                Debug.LogWarning("[Project] file carries measurements but the rig has no MeasureController");
+                return;
+            }
+            foreach (var m in data.Measures) measure.RestoreMeasurement(m.A, m.B);
         }
 
         /// <summary>Project → the import pipeline's input model.</summary>
@@ -151,6 +269,7 @@ namespace RoomPlanner.Import
                     SideSignOverride = w.SideSign,
                     HasPaint = w.Painted,
                     PaintColor = w.Paint,
+                    Finish = ToFinish(w.Finish),
                 };
                 iw.Path.Add(data.Nodes[w.NodeA].Position);
                 iw.Path.Add(data.Nodes[w.NodeB].Position);
@@ -162,6 +281,7 @@ namespace RoomPlanner.Import
                         AlongFraction = op.Along, Width = op.Width,
                         Height = op.Height, Sill = op.Sill,
                         IsDoor = op.IsDoor,
+                        Kind = op.Kind,
                         SwingDir = op.Swing, HingeDir = op.Hinge,
                     });
             }
@@ -174,6 +294,7 @@ namespace RoomPlanner.Import
                     Thickness = f.Thickness,
                     HasPaint = f.Painted,
                     PaintColor = f.Paint,
+                    Finish = ToFinish(f.Finish),
                 };
                 foreach (var ring in f.Holes)
                     slab.Holes.Add(new List<Vector3>(ring.Points));
@@ -187,6 +308,7 @@ namespace RoomPlanner.Import
                     Kind = s.Kind >= 0 ? (StairKind)s.Kind : (s.Open ? StairKind.Open : StairKind.Solid),
                     HasPaint = s.Painted,
                     PaintColor = s.Paint,
+                    Finish = ToFinish(s.Finish),
                 });
             foreach (var m in data.Plumbing)
                 b.Plumbing.Add(new ImportedMep
@@ -199,6 +321,7 @@ namespace RoomPlanner.Import
                     Transparency = m.Transparency,
                     HasColor = m.Painted,
                     Color = m.Paint,
+                    Finish = ToFinish(m.Finish),
                 });
             return b;
         }

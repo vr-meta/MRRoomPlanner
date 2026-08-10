@@ -414,6 +414,27 @@ namespace RoomPlanner.Walls
                 {
                     Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.ys + frameY, fd0, fd1); // sill board
                 }
+                else if (op.src != null && op.src.Kind == OpeningKind.Garage)
+                {
+                    // Sectional garage leaf (audit F1): four stacked panels of alternating
+                    // thickness — the steps read as the section seams without through-gaps.
+                    // Always closed, no swing; opening animation is v2 (design/03).
+                    float thick = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
+                    float thin = thick * 0.55f;
+                    float ys0 = op.ys, yh0 = op.yh - frameY;
+                    const int Panels = 4;
+                    float panelH = (yh0 - ys0) / Panels;
+                    if (panelH > 0.02f)
+                        for (int p = 0; p < Panels; p++)
+                        {
+                            float half = (p & 1) == 0 ? thick : thin;
+                            Box(op.t0 + frameT, op.t1 - frameT,
+                                ys0 + p * panelH, ys0 + (p + 1) * panelH,
+                                0.5f - half, 0.5f + half);
+                        }
+                    else
+                        Box(op.t0 + frameT, op.t1 - frameT, ys0, yh0, 0.5f - thick, 0.5f + thick);
+                }
                 else if (!OpenLeaf(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY, op.src))
                 {
                     // door leaf: fills the frame, thinner than the wall; closed when the

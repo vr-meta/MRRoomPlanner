@@ -147,6 +147,9 @@ namespace RoomPlanner.Walls
             foreach (var other in n.Segments)
             {
                 if (other == s) continue;
+                // A deleted (hidden, undo-able) wall must not shape this joint — without
+                // the filter its miter survived its own disappearance (audit 02 §Б3).
+                if (other.Suppressed) continue;
                 float delta = Mathf.Repeat(Azimuth(other.DirectionFrom(n)) - a0, 360f);
                 if (delta < Eps) delta = 360f;      // sitting exactly on us — treat as a full turn
                 if (delta < bestCcw) { bestCcw = delta; ccw = other; }

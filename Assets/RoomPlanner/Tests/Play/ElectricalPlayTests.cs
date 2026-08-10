@@ -196,6 +196,33 @@ namespace RoomPlanner.Tests.Play
             StringAssert.Contains("Total — 0.0 m", s, "hidden is not alive for the BOM (rule 2.4)");
         }
 
+        [Test]
+        public void PanelDescribe_DropsTheAllowanceOfEndsOnDeletedFixtures()
+        {
+            // Audit 08 §Б3: WireRoute.Connections trusts string non-emptiness, so an end
+            // attached to a DELETED outlet kept billing its 0.15 m allowance forever.
+            var panel = MakeFixture(FixtureKind.Panel);
+            var outlet = MakeFixture(FixtureKind.Outlet);
+            var route = MakeRoute(CableType.C3x25, new Vector3(0f, 0.3f, 0f), new Vector3(2f, 0.3f, 0f));
+            route.StartFixtureId = IdOf(outlet);
+            route.EndFixtureId = IdOf(panel);
+
+            string Expected(int liveEnds) => ElectricalBom.Describe(
+                new List<RouteBomEntry> { new RouteBomEntry(CableType.C3x25, route.Length, liveEnds) },
+                panel.ReservePercent, unrouted: 0);
+
+            Assert.AreEqual(Expected(2), panel.GetComponent<Selectable>().Describe(),
+                "both ends live — two allowances");
+
+            outlet.GetComponent<Selectable>().SetHidden(true);          // delete the outlet
+            Assert.AreEqual(Expected(1), panel.GetComponent<Selectable>().Describe(),
+                "the deleted outlet's allowance drops out of the estimate");
+
+            outlet.GetComponent<Selectable>().SetHidden(false);         // undo restores the link
+            Assert.AreEqual(Expected(2), panel.GetComponent<Selectable>().Describe(),
+                "undo of the delete restores the connection for free");
+        }
+
         // ---- undoable commands ----
 
         [Test]

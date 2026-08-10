@@ -21,7 +21,25 @@ namespace RoomPlanner.Core.Project
     {
         public float Along, Width, Height, Sill;
         public bool IsDoor;
+        /// <summary>OpeningKind as int; -1 = pre-Garage file, fall back to IsDoor.</summary>
+        public int Kind = -1;
         public Vector3 Swing, Hinge;   // door swing directions; zero = closed leaf
+    }
+
+    /// <summary>
+    /// v2: the FULL surface finish (audit B2). v1 stored only Painted+Color, so a
+    /// textured floor silently degraded to flat white after every save/load.
+    /// Kind 0 = no finish recorded (v1 files) — readers fall back to Painted/Paint.
+    /// JsonUtility never round-trips null class fields, hence the marker-by-Kind.
+    /// </summary>
+    [Serializable]
+    public class ProjectFinish
+    {
+        public int Kind;                  // FinishKind as int
+        public Color Color = Color.white;
+        public string TextureId;
+        public float TileW, TileH;        // metric tile, metres; TileH 0 = square
+        public float Gloss;               // shader smoothness
     }
 
     [Serializable]
@@ -32,6 +50,7 @@ namespace RoomPlanner.Core.Project
         public int Offset, Join;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
         public List<ProjectOpening> Openings = new();
     }
 
@@ -49,6 +68,7 @@ namespace RoomPlanner.Core.Project
         public float Level, Thickness;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
     }
 
     [Serializable]
@@ -63,6 +83,7 @@ namespace RoomPlanner.Core.Project
         public int Kind = -1;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
     }
 
     [Serializable]
@@ -77,17 +98,57 @@ namespace RoomPlanner.Core.Project
         public float Transparency;
         public bool Painted;               // IFC colour or user paint
         public Color Paint;
+        public ProjectFinish Finish = new();
+    }
+
+    // ---- v2: the electrical layer (audit 2026-08-10, 12 §Р1 / B1). Before this the
+    // autosave silently dropped every outlet and wire while load DESTROYED them. ----
+
+    [Serializable]
+    public class ProjectFixture
+    {
+        /// <summary>SceneModel id, kept verbatim — wire ends re-attach by this id.</summary>
+        public string Id;
+        public int Kind;                  // FixtureKind as int
+        public int Posts = 1, Keys = 1;
+        public int Reserve = -1;          // panel BOM reserve %; -1 = default
+        public Vector3 Position;
+        public Quaternion Rotation = Quaternion.identity;
+        public float BaseLevel;
+    }
+
+    [Serializable]
+    public class ProjectWire
+    {
+        public List<Vector3> Points = new();
+        public int Cable;                 // CableType as int
+        public string StartId, EndId;     // attached fixture ids; null/empty = free end
+    }
+
+    /// <summary>v2: a tape measurement — two world points is its whole state (audit B3;
+    /// they used to be neither saved nor cleared, haunting the next loaded project).</summary>
+    [Serializable]
+    public class ProjectMeasure
+    {
+        public Vector3 A, B;
     }
 
     [Serializable]
     public class ProjectData
     {
-        public int Version = 1;
+        /// <summary>Current format version. 1 = walls/floors/stairs/MEP only;
+        /// 2 = + electrical layer. Readers accept anything up to this and refuse newer.</summary>
+        public const int CurrentVersion = 2;
+
+        public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();
         public List<ProjectWall> Walls = new();
         public List<ProjectFloor> Floors = new();
         public List<ProjectStair> Stairs = new();
         public List<ProjectMep> Plumbing = new();
+        public List<ProjectFixture> Fixtures = new();
+        public List<ProjectWire> Wires = new();
+        public List<ProjectMeasure> Measures = new();
 
         // blueprint placement travels with the project — the plan image is a file next to it
         public float PlanScale = 5f;
@@ -96,6 +157,14 @@ namespace RoomPlanner.Core.Project
         public float PlanOffsetZ;
 
         public string ToJson() => JsonUtility.ToJson(this);
-        public static ProjectData FromJson(string json) => JsonUtility.FromJson<ProjectData>(json);
+
+        /// <summary>Null for unparsable json OR a file from a NEWER format version —
+        /// reading it partially would silently drop whatever the newer build saved
+        /// (audit 12 §Б2). v1 files load fine: the new sections default to empty.</summary>
+        public static ProjectData FromJson(string json)
+        {
+            var d = JsonUtility.FromJson<ProjectData>(json);
+            return d != null && d.Version <= CurrentVersion ? d : null;
+        }
     }
 }

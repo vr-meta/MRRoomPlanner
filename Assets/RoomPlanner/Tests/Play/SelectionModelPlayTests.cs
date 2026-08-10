@@ -189,6 +189,27 @@ namespace RoomPlanner.Tests.Play
         }
 
         [Test]
+        public void CreateCommand_UndoHides_RedoShows_PurgeOnDestroy()
+        {
+            // Audit S1: creation used to be born outside the history — X could not take
+            // back a misplaced object. CreateCommand mirrors DeleteCommand.
+            var model = MakeModel();
+            var obj = MakePickable("C", Vector3.zero);
+            model.Register(obj);
+            model.History.Record(new CreateCommand(obj));
+
+            Assert.IsFalse(obj.IsHidden, "recording changes nothing — the object is already live");
+            model.History.Undo();
+            Assert.IsTrue(obj.IsHidden, "undo of creation hides the object");
+            model.History.Redo();
+            Assert.IsFalse(obj.IsHidden, "redo shows it again");
+
+            model.History.Undo();
+            model.Unregister(obj);
+            Assert.AreEqual(0, model.History.RedoCount, "purge takes the create command too");
+        }
+
+        [Test]
         public void Unregister_PurgesTargetCommandsFromHistory()
         {
             var model = MakeModel();

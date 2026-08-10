@@ -63,6 +63,8 @@ namespace RoomPlanner.Tests
                 wall.BuildSegment(s);
 
                 var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                // Texture unwrap (2026-08-11): sides, caps, top and bottom carry dedicated
+                // vertices for their own metric UVs.
                 Assert.AreEqual(24, mesh.vertexCount,
                     "2 cross-sections * (4 ring + 4 top/bottom) + 8 cap verts");
                 Assert.AreSame(s, wall.Segment);

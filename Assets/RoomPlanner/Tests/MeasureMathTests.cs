@@ -6,6 +6,49 @@ namespace RoomPlanner.Tests
 {
     public class MeasureMathTests
     {
+        // ---- ApplySnapPolicy: endpoint → surface → axis → grid, first match wins ----
+
+        private static readonly Vector3 Raw = new Vector3(1.02f, 0f, 1.98f);
+
+        [Test]
+        public void SnapPolicy_EndpointBeatsEverything()
+        {
+            var end = new Vector3(1f, 0f, 2f);
+            var got = MeasureMath.ApplySnapPolicy(Raw, end, new Vector3(9f, 9f, 9f),
+                Vector3.zero, axisHeld: true, gridOn: true, gridSize: 0.5f);
+            Assert.AreEqual(end, got, "an existing point is exact — never re-rounded by axis/grid");
+        }
+
+        [Test]
+        public void SnapPolicy_SurfaceBeatsAxisAndGrid()
+        {
+            var sfc = new Vector3(1.05f, 0f, 2.0f);
+            var got = MeasureMath.ApplySnapPolicy(Raw, null, sfc,
+                Vector3.zero, axisHeld: true, gridOn: true, gridSize: 0.5f);
+            Assert.AreEqual(sfc, got);
+        }
+
+        [Test]
+        public void SnapPolicy_AxisProjects_WhenNoMagnet()
+        {
+            var anchor = new Vector3(1f, 0f, 0f);
+            var got = MeasureMath.ApplySnapPolicy(Raw, null, null,
+                anchor, axisHeld: true, gridOn: true, gridSize: 0.5f);
+            Assert.AreEqual(MeasureMath.SnapToAxis(anchor, Raw), got,
+                "axis wins over grid; grid does not re-round the projection");
+        }
+
+        [Test]
+        public void SnapPolicy_GridIsTheLastResort()
+        {
+            var got = MeasureMath.ApplySnapPolicy(Raw, null, null,
+                new Vector3(1f, 0f, 0f), axisHeld: false, gridOn: true, gridSize: 0.5f);
+            Assert.AreEqual(new Vector3(1f, 0f, 2f), got, "grid applies only without magnets/axis");
+
+            var raw2 = MeasureMath.ApplySnapPolicy(Raw, null, null, null, false, false, 0.5f);
+            Assert.AreEqual(Raw, raw2, "nothing on — raw point unchanged");
+        }
+
         [Test]
         public void SnapToAxis_PicksVertical_WhenYDominant()
         {

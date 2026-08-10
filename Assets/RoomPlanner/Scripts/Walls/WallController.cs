@@ -58,8 +58,8 @@ namespace RoomPlanner.Walls
                     () => manager.AdjustAngleStep(-5f), () => manager.AdjustAngleStep(5f))
                 .Segmented("off", "Offset", new[] { "Outer", "Center", "Inner" },
                     () => manager.OffsetModeIndex, i => manager.OffsetModeIndex = i)
-                .Segmented("join", "Corner", new[] { "Miter", "Bevel", "Round" },
-                    () => manager.JoinModeIndex, i => manager.JoinModeIndex = i)
+                // NOTE: no "Corner" row — graph joints always miter; the old row changed
+                // nothing (audit B8). Segment.Join stays in the model/format untouched.
                 .Segmented("place", "Place", new[] { "Surface", "Free", "Floor" },
                     () => manager.PlaceModeIndex, i => manager.PlaceModeIndex = i);
             return _settings;

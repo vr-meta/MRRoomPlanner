@@ -314,6 +314,30 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void SplitSegmentAt_RedistributesOpenings_KeepingWorldPositions()
+        {
+            // Audit 02 §Б1: a T-junction through a walled window used to leave every
+            // opening on the A half at a stale fraction — the window jumped.
+            var g = new WallGraph();
+            var wall = g.AddSegment(g.SnapOrCreateNode(P(0, 0)), g.SnapOrCreateNode(P(4, 0)));
+            var door = new WallOpening { AlongFraction = 0.25f, Width = 0.9f };   // world x = 1.0
+            var window = new WallOpening { AlongFraction = 0.7f, Width = 1.2f };  // world x = 2.8
+            wall.Openings.Add(door);
+            wall.Openings.Add(window);
+
+            var mid = g.SplitSegmentAt(wall, P(2, 0));                            // t = 0.5
+            var tail = mid.Segments[0] == wall ? mid.Segments[1] : mid.Segments[0];
+
+            Assert.AreEqual(1, wall.Openings.Count, "the door stays on the A half");
+            Assert.AreSame(door, wall.Openings[0]);
+            Assert.AreEqual(0.5f, door.AlongFraction, 1e-4f, "0.25 of 4 m = 0.5 of 2 m — still x = 1.0");
+
+            Assert.AreEqual(1, tail.Openings.Count, "the window moves to the far half");
+            Assert.AreSame(window, tail.Openings[0]);
+            Assert.AreEqual(0.4f, window.AlongFraction, 1e-4f, "0.7 of 4 m = 0.4 of the 2..4 m half — still x = 2.8");
+        }
+
+        [Test]
         public void FindClosedLoops_FindsARectangularRoom()
         {
             var g = new WallGraph();

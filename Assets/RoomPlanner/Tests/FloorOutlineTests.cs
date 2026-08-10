@@ -274,6 +274,78 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void AddHole_OverlappingAnotherHole_IsRefused_AndSlabSurvives()
+        {
+            // Audit 2026-08-10 (04 §Б1): a refused hole used to clear the mesh, drop the
+            // collider and still report success — the slab silently vanished.
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 4f), 0f, Thick, 5f, 0f, 0f);
+                Assert.IsTrue(floor.AddHole(new List<Vector3> { P(1, 1), P(3, 1), P(3, 3), P(1, 3) }));
+                int vertsAfterFirst = go.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+
+                var crossing = new List<Vector3> { P(2, 2), P(4, 2), P(4, 3.5f), P(2, 3.5f) };
+                Assert.IsFalse(floor.AddHole(crossing), "a hole crossing a hole is refused");
+                Assert.AreEqual(1, floor.Holes.Count, "the refused ring must not linger in the model");
+                Assert.AreEqual(vertsAfterFirst, go.GetComponent<MeshFilter>().sharedMesh.vertexCount,
+                    "refusal must leave the mesh untouched");
+                Assert.IsNotNull(go.GetComponent<MeshCollider>().sharedMesh, "collider survives too");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void AddHole_HoleCornerOnTheSlabDiagonal_Works()
+        {
+            // Regression (audit 04 §Б1 diagnosis): the bridge seam from hole corner (3,3)
+            // to outline corner (0,0) passed exactly through hole corner (2,2) — the
+            // spliced ring pinched itself and ear clipping deadlocked. SeamIsClear now
+            // rejects seams through a vertex and bridges elsewhere.
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 6f), 0f, Thick, 5f, 0f, 0f);
+                Assert.IsTrue(floor.AddHole(new List<Vector3> { P(2, 2), P(3, 2), P(3, 3), P(2, 3) }));
+                Assert.AreEqual(35f, floor.Area, 1e-2f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void AddHole_SwallowingAnExistingHole_IsRefused()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(6f, 0f, 6f), 0f, Thick, 5f, 0f, 0f);
+                Assert.IsTrue(floor.AddHole(new List<Vector3> { P(2, 2), P(3, 2), P(3, 3), P(2, 3) }));
+
+                // No edges cross, but the new ring contains the old hole entirely.
+                var swallowing = new List<Vector3> { P(1, 1), P(4, 1), P(4, 4), P(1, 4) };
+                Assert.IsFalse(floor.AddHole(swallowing));
+                Assert.AreEqual(1, floor.Holes.Count);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void AddHole_DisjointSecondHole_StillWorks()
+        {
+            var floor = MakeFloor(out var go);
+            try
+            {
+                floor.Build(P(0, 0), new Vector3(8f, 0f, 4f), 0f, Thick, 5f, 0f, 0f);
+                Assert.IsTrue(floor.AddHole(new List<Vector3> { P(1, 1), P(3, 1), P(3, 3), P(1, 3) }));
+                Assert.IsTrue(floor.AddHole(new List<Vector3> { P(5, 1), P(7, 1), P(7, 3), P(5, 3) }),
+                    "the overlap guard must not block honest disjoint holes");
+                Assert.AreEqual(2, floor.Holes.Count);
+                Assert.AreEqual(32f - 8f, floor.Area, 1e-2f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
         public void AddHole_RefusesARingThatPokesOutside()
         {
             var floor = MakeFloor(out var go);

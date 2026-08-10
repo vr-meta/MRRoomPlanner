@@ -14,6 +14,22 @@ namespace RoomPlanner.Tests
     {
         private static Vector3 P(float x, float z) => new Vector3(x, 0f, z);
 
+        [Test]
+        public void RingsOverlap_DisjointRects_False() =>
+            Assert.IsFalse(Polygon.RingsOverlap(Rect(0, 0, 1, 1), Rect(2, 0, 3, 1)));
+
+        [Test]
+        public void RingsOverlap_CrossingRects_True() =>
+            Assert.IsTrue(Polygon.RingsOverlap(Rect(0, 0, 2, 2), Rect(1, 1, 3, 3)));
+
+        [Test]
+        public void RingsOverlap_ContainedRect_True()
+        {
+            // No edge crossings at all — containment must still count as overlap.
+            Assert.IsTrue(Polygon.RingsOverlap(Rect(0, 0, 4, 4), Rect(1, 1, 2, 2)));
+            Assert.IsTrue(Polygon.RingsOverlap(Rect(1, 1, 2, 2), Rect(0, 0, 4, 4)), "order-independent");
+        }
+
         private static List<Vector3> Rect(float x0, float z0, float x1, float z1) => new()
         {
             P(x0, z0), P(x1, z0), P(x1, z1), P(x0, z1)

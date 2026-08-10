@@ -12,6 +12,25 @@ namespace RoomPlanner.Tests
         private static readonly Vector3 B = new Vector3(1f, 0f, 0f);
         private static readonly Vector3 Interior = new Vector3(0.5f, 0f, -1f);
 
+        /// <summary>
+        /// Vertex count of a freshly built clean two-point wall. Tests that assert
+        /// "same geometry as the clean wall" compare against this instead of a magic
+        /// number — the count changes with every UV-unwrap decision (8 shared → 24
+        /// dedicated after the texture unwrap) and the invariant is equality, not 8.
+        /// </summary>
+        private static int CleanTwoPointVertexCount()
+        {
+            var go = new GameObject("WallRef");
+            try
+            {
+                var wall = go.AddComponent<Wall>();
+                wall.Build(new List<Vector3> { A, B },
+                    0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                return go.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
         [Test]
         public void SegmentVertices_ReturnsEightVerts()
         {
@@ -272,7 +291,8 @@ namespace RoomPlanner.Tests
                     0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
 
                 Assert.AreEqual(2, wall.Points.Count, "duplicates collapse");
-                Assert.AreEqual(24, go.GetComponent<MeshFilter>().sharedMesh.vertexCount,
+                Assert.AreEqual(CleanTwoPointVertexCount(),
+                    go.GetComponent<MeshFilter>().sharedMesh.vertexCount,
                     "geometry equals the clean two-point wall");
             }
             finally { Object.DestroyImmediate(go); }
@@ -326,9 +346,15 @@ namespace RoomPlanner.Tests
                 var wall = go.AddComponent<Wall>();
                 wall.Build(new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) },
                     0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Bevel, Interior);
-                // miter corner = 3 sections; bevel replaces the corner section with 2 →
-                // 4 sections × (4 ring + 4 top/bottom) + 8 cap verts
-                Assert.AreEqual(40, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
+                int bevelVerts = go.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+
+                // Bevel replaces the mitred corner with an extra flat section, so it must
+                // carry MORE geometry than the same polyline mitred. (Counting exact verts
+                // broke on every unwrap change — compare the two joins instead.)
+                wall.Build(new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) },
+                    0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
+                int miterVerts = go.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+                Assert.Greater(bevelVerts, miterVerts, "bevel adds a corner section over miter");
             }
             finally { Object.DestroyImmediate(go); }
         }
@@ -362,7 +388,8 @@ namespace RoomPlanner.Tests
                 wall.Build((List<Vector3>)wall.Points, 0.3f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
 
                 Assert.AreEqual(2, wall.Points.Count, "input aliasing must not clear the centerline");
-                Assert.AreEqual(24, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
+                Assert.AreEqual(CleanTwoPointVertexCount(),
+                    go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
             }
             finally { Object.DestroyImmediate(go); }
         }

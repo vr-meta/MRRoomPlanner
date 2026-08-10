@@ -4,8 +4,11 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using RoomPlanner.Core;
 using RoomPlanner.Core.Ifc;
+using RoomPlanner.Core.Project;
 using RoomPlanner.Editing;
+using RoomPlanner.Electrical;
 using RoomPlanner.Floors;
 using RoomPlanner.Import;
 using RoomPlanner.Walls;
@@ -110,7 +113,7 @@ namespace RoomPlanner.Tests.Play
                 Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f,
                 Kind = RoomPlanner.Stairs.StairKind.Open,
             });
-            var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f) };
+            var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f), StoreyIndex = 2 };
             basin.Vertices.AddRange(new[]
             {
                 new Vector3(-0.2f, 0f, -0.2f), new Vector3(0.2f, 0f, -0.2f), new Vector3(0f, 0f, 0.2f),
@@ -118,6 +121,140 @@ namespace RoomPlanner.Tests.Play
             basin.Triangles.AddRange(new[] { 0, 1, 2 });
             b.Plumbing.Add(basin);
             return b;
+        }
+
+        [UnityTest]
+        public IEnumerator ElectricalLayer_SurvivesTheRoundTrip()
+        {
+            // Format v2 (audit B1): the autosave used to drop every outlet and wire
+            // while ClearScene actively destroyed them — building + wiring + restart
+            // returned the building without its electrics.
+            var (import, walls, model) = MakeRig();
+            var electric = Track(new GameObject("Electric")).AddComponent<ElectricController>();
+            SetField(electric, "sceneModel", model);
+
+            import.BuildScene(SampleBuilding());
+
+            var fxGo = Track(new GameObject("Outlet"));
+            fxGo.AddComponent<MeshFilter>();
+            fxGo.AddComponent<MeshRenderer>();
+            var fx = fxGo.AddComponent<ElectricFixture>();
+            fx.Build(FixtureKind.Outlet, posts: 2, keys: 1);
+            fx.transform.position = new Vector3(1f, 0.3f, 0f);
+            var fxSel = fxGo.AddComponent<Selectable>();
+            model.Register(fxSel);
+            string savedId = fxSel.Id;
+
+            var wGo = Track(new GameObject("Run"));
+            wGo.AddComponent<MeshFilter>();
+            wGo.AddComponent<MeshRenderer>();
+            var route = wGo.AddComponent<WireRoute>();
+            Assert.IsTrue(route.Build(new List<Vector3>
+                { fx.TerminalWorld, new Vector3(1f, 2.3f, 0f) }, CableType.C3x15));
+            route.StartFixtureId = savedId;
+            model.Register(wGo.AddComponent<Selectable>());
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Fixtures.Count, "the outlet is captured");
+            Assert.AreEqual(1, data.Wires.Count, "the run is captured");
+            Assert.AreEqual(savedId, data.Wires[0].StartId);
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            Assert.AreEqual(0,
+                Object.FindObjectsByType<ElectricFixture>(FindObjectsSortMode.None).Length,
+                "clear really destroys the electrics");
+
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var rFx = Object.FindObjectsByType<ElectricFixture>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, rFx.Length);
+            Assert.AreEqual(FixtureKind.Outlet, rFx[0].Kind);
+            Assert.AreEqual(2, rFx[0].Posts);
+            Assert.AreEqual(new Vector3(1f, 0.3f, 0f), rFx[0].transform.position);
+            var rSel = rFx[0].GetComponent<Selectable>();
+            Assert.AreEqual(savedId, rSel.Id, "the saved id is kept verbatim");
+
+            var rRoute = Object.FindObjectsByType<WireRoute>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, rRoute.Length);
+            Assert.AreEqual(CableType.C3x15, rRoute[0].Cable);
+            Assert.AreEqual(savedId, rRoute[0].StartFixtureId);
+
+            // the id link must be LIVE, not just a string: moving the restored outlet
+            // drags the attached wire end, exactly like before the restart
+            Vector3 endBefore = rRoute[0].GetPoint(0);
+            rSel.MoveBy(new Vector3(0.3f, 0f, 0f));
+            Assert.AreEqual(endBefore + new Vector3(0.3f, 0f, 0f), rRoute[0].GetPoint(0),
+                "wire ends re-attach through the preserved id");
+        }
+
+        [UnityTest]
+        public IEnumerator TextureFinish_SurvivesTheRoundTrip_EvenWithoutTextureFiles()
+        {
+            // Format v2 (audit B2): v1 stored only Painted+Color — a textured floor came
+            // back flat white after every save/load. The texture id must survive even on
+            // a device where the texture files are not downloaded (visual degrades to the
+            // tint, the DATA stays intact for the next save).
+            var (import, walls, model) = MakeRig();
+            import.BuildScene(SampleBuilding());
+
+            var slab = Object.FindObjectsByType<Floor>(FindObjectsSortMode.None)[0];
+            var fin = SurfaceFinish.OfTexture("oak-01", 2f, 0f);
+            fin.Smoothness = 0.35f;
+            slab.GetComponent<Selectable>().SetFinish(fin, null);
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.IsTrue(data.Floors.Exists(f => f.Finish.TextureId == "oak-01"),
+                "the finish is captured with its texture id");
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var restored = System.Array.Find(
+                Object.FindObjectsByType<Floor>(FindObjectsSortMode.None),
+                f => f.GetComponent<Selectable>().Finish.TextureId == "oak-01");
+            Assert.IsNotNull(restored, "the texture finish must not flatten to white");
+            var rf = restored.GetComponent<Selectable>().Finish;
+            Assert.AreEqual(FinishKind.Texture, rf.Kind);
+            Assert.AreEqual(2f, rf.TileMeters, 1e-4f);
+            Assert.AreEqual(0.35f, rf.Smoothness, 1e-4f, "per-finish gloss survives too");
+        }
+
+        [UnityTest]
+        public IEnumerator Measurements_SurviveTheRoundTrip_AndClearScene()
+        {
+            // Format v2 (audit B3): measurements were neither saved nor cleared — after a
+            // load, yesterday's tapes haunted the freshly restored scene in wrong places.
+            var (import, walls, model) = MakeRig();
+            var mc = Track(new GameObject("Measure")).AddComponent<RoomPlanner.Measure.MeasureController>();
+            SetField(mc, "sceneModel", model);
+
+            import.BuildScene(SampleBuilding());
+            mc.RestoreMeasurement(new Vector3(0f, 1f, 0f), new Vector3(2f, 1f, 0f));
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Measures.Count, "the tape is captured");
+            Assert.AreEqual(new Vector3(2f, 1f, 0f), data.Measures[0].B);
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            Assert.AreEqual(0,
+                Object.FindObjectsByType<RoomPlanner.Measure.Measurement>(FindObjectsSortMode.None).Length,
+                "clear destroys measurements too — no more haunting");
+
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var restored = Object.FindObjectsByType<RoomPlanner.Measure.Measurement>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, restored.Length);
+            Assert.AreEqual(new Vector3(0f, 1f, 0f), restored[0].PointA);
+            Assert.AreEqual(new Vector3(2f, 1f, 0f), restored[0].PointB);
         }
 
         [UnityTest]
@@ -175,6 +312,9 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, mep.Length);
             Assert.AreEqual(new Vector3(4f, 0.8f, 4f), mep[0].transform.position);
             Assert.AreEqual(3, mep[0].GetComponent<MeshFilter>().sharedMesh.vertexCount);
+            // B6: ProjectMep.Storey existed but Capture never filled it — the storey
+            // filter silently died after every save/load round-trip.
+            Assert.AreEqual(2, mep[0].StoreyIndex, "storey survives the round-trip");
         }
     }
 }

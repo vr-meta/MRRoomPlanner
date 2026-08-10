@@ -8,6 +8,11 @@ namespace RoomPlanner.Walls
     /// Parametric, never a boolean cut — the wall mesh is panelised around it (Phase D,
     /// docs/design/03-openings.md). Defined here so segments can carry them from the start.
     /// </summary>
+    /// <summary>What fills the opening (audit F1): windows get glass + sill board,
+    /// doors a swing leaf, garage doors a sectional closed leaf full-width from the
+    /// floor. Window = 0 so default-constructed openings keep the old behaviour.</summary>
+    public enum OpeningKind { Window = 0, Door = 1, Garage = 2 }
+
     public class WallOpening
     {
         public int Id;
@@ -15,9 +20,21 @@ namespace RoomPlanner.Walls
         public float Width = 0.9f;
         public float Height = 2.1f;
         public float SillHeight;             // 0 for doors AND floor-to-ceiling windows
-        /// <summary>Doors get a leaf, windows get glass. Comes from the IFC type — a sill
-        /// heuristic fails on panoramic windows, which also start at the floor.</summary>
-        public bool IsDoor;
+        public OpeningKind Kind = OpeningKind.Window;
+
+        /// <summary>Legacy alias over <see cref="Kind"/>: every pre-Garage writer (IFC
+        /// importer, v1 project files) speaks bool. Garage counts as a door — it is a
+        /// pass-through opening, not glass. A sill heuristic would not work instead:
+        /// panoramic windows also start at the floor.</summary>
+        public bool IsDoor
+        {
+            get => Kind != OpeningKind.Window;
+            set
+            {
+                if (value) { if (Kind == OpeningKind.Window) Kind = OpeningKind.Door; }
+                else Kind = OpeningKind.Window;
+            }
+        }
         /// <summary>World-horizontal direction the door leaf opens toward. Zero = closed
         /// leaf (hand-drawn doors, unknown swing).</summary>
         public Vector3 SwingDir;
@@ -72,6 +89,14 @@ namespace RoomPlanner.Walls
         public float BaseHeight = 0f;
         public WallOffsetMode Offset = WallOffsetMode.Outer;
         public WallJoin Join = WallJoin.Miter;
+
+        /// <summary>
+        /// A deleted-but-undoable wall: it stays in the graph (undo restores it with its
+        /// identity) but must not shape its neighbours' joints, snap, or count toward a
+        /// node's live degree (audit 02 §Б3 — hidden walls kept mitring their corners).
+        /// Set by the view layer on hide/show, never persisted (hidden walls are not saved).
+        /// </summary>
+        public bool Suppressed;
 
         /// <summary>
         /// Which side of the centerline the thickness grows on: +1 = along the A→B right
@@ -252,6 +277,9 @@ namespace RoomPlanner.Walls
             _nodes.Add(mid);
 
             var far = s.B;
+            float t = Mathf.Clamp01((onSeg - s.A.Position).magnitude
+                / Mathf.Max(1e-6f, (far.Position - s.A.Position).magnitude));
+
             // s becomes A--mid
             far.segments.Remove(s);
             s.B = mid;
@@ -263,6 +291,29 @@ namespace RoomPlanner.Walls
             _segments.Add(tail);
             mid.segments.Add(tail);
             far.segments.Add(tail);
+
+            // Openings ride the split with their WORLD position preserved: fractions were
+            // relative to the old A→far span, so both halves rescale them (audit 02 §Б1 —
+            // a T-junction through a walled window used to leave every opening on the A
+            // half at a stale fraction). One straddling the cut keeps its centre's side;
+            // the mesh sanitiser clamps it clear of the new joint.
+            if (s.Openings.Count > 0 && t > 1e-4f && t < 1f - 1e-4f)
+            {
+                for (int i = s.Openings.Count - 1; i >= 0; i--)
+                {
+                    var o = s.Openings[i];
+                    if (o.AlongFraction <= t)
+                    {
+                        o.AlongFraction /= t;
+                    }
+                    else
+                    {
+                        s.Openings.RemoveAt(i);
+                        o.AlongFraction = (o.AlongFraction - t) / (1f - t);
+                        tail.Openings.Add(o);
+                    }
+                }
+            }
 
             return mid;
         }

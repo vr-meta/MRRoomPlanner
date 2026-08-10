@@ -1,5 +1,6 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Core.Ifc
 {
@@ -15,7 +16,7 @@ namespace RoomPlanner.Core.Ifc
 
     public sealed class ImportedWall
     {
-        /// <summary>Axis polyline in world space (≥2 points), at the wall's base level.</summary>
+        /// <summary>Axis polyline in world space (â‰¥2 points), at the wall's base level.</summary>
         public List<Vector3> Path = new();
         public float Thickness;
         public float Height;
@@ -30,13 +31,15 @@ namespace RoomPlanner.Core.Ifc
         public float BaseHeight;
         public bool HasPaint;
         public Color PaintColor;
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        public SurfaceFinish Finish;
     }
 
     public sealed class ImportedSlab
     {
         /// <summary>Closed outline on the TOP plane of the slab (no duplicate last point).</summary>
         public List<Vector3> Outline = new();
-        /// <summary>Holes cut through the slab (stairwells, shafts) — rings on the top plane.</summary>
+        /// <summary>Holes cut through the slab (stairwells, shafts) â€” rings on the top plane.</summary>
         public List<List<Vector3>> Holes = new();
         public float Thickness;
         /// <summary>Top level (Unity Y, metres).</summary>
@@ -44,10 +47,12 @@ namespace RoomPlanner.Core.Ifc
         public int StoreyIndex = -1;
         public bool HasPaint;
         public Color PaintColor;
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        public SurfaceFinish Finish;
     }
 
     /// <summary>
-    /// A door or window hosted by a wall — pure parameters, matching WallOpening in the
+    /// A door or window hosted by a wall â€” pure parameters, matching WallOpening in the
     /// wall graph. The wall mesh renders them once Phase D panelisation lands; importing
     /// them now means they appear the moment it does.
     /// </summary>
@@ -58,6 +63,8 @@ namespace RoomPlanner.Core.Ifc
         public float Width, Height;    // metres
         public float Sill;             // bottom above the wall base, 0 for doors
         public bool IsDoor;
+        /// <summary>OpeningKind as int; -1 = derive from IsDoor (IFC path, v1 files).</summary>
+        public int Kind = -1;
         /// <summary>World-horizontal direction the door leaf swings toward (IFC door style
         /// + placement axes); zero = unknown, rendered closed.</summary>
         public Vector3 SwingDir;
@@ -66,7 +73,7 @@ namespace RoomPlanner.Core.Ifc
         public Vector3 HingeDir;
     }
 
-    /// <summary>A stair flight as PARAMETERS (design/18 I9) — meshed by our Stair module.</summary>
+    /// <summary>A stair flight as PARAMETERS (design/18 I9) â€” meshed by our Stair module.</summary>
     public sealed class ImportedStair
     {
         /// <summary>Bottom of the first riser, run centerline (Unity metres).</summary>
@@ -78,15 +85,17 @@ namespace RoomPlanner.Core.Ifc
         public float RiserHeight;   // metres
         public float TreadDepth;    // metres
         /// <summary>Construction kind (Solid / Open / Waist). IFC gives no reliable
-        /// signal; imports default to WAIST — the apartment-stairwell slab flight
-        /// (headset feedback 2026-08-10) — and project files keep the choice.</summary>
+        /// signal; imports default to WAIST â€” the apartment-stairwell slab flight
+        /// (headset feedback 2026-08-10) â€” and project files keep the choice.</summary>
         public RoomPlanner.Stairs.StairKind Kind;
         public int StoreyIndex = -1;
         public bool HasPaint;
         public Color PaintColor;
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        public SurfaceFinish Finish;
     }
 
-    /// <summary>What a baked-mesh element IS — drives its material in the scene.</summary>
+    /// <summary>What a baked-mesh element IS â€” drives its material in the scene.</summary>
     public enum MepCategory { Plumbing = 0, Furniture = 1, Proxy = 2, Railing = 3 }
 
     /// <summary>
@@ -106,6 +115,8 @@ namespace RoomPlanner.Core.Ifc
         public Color Color;
         /// <summary>0 = opaque, 1 = fully transparent (IfcSurfaceStyleRendering).</summary>
         public float Transparency;
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        public SurfaceFinish Finish;
     }
 
     public sealed class ImportedBuilding

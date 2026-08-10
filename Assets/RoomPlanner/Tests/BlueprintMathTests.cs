@@ -10,6 +10,20 @@ namespace RoomPlanner.Tests
             new BlueprintPlacement { Scale = scale, RotationDeg = rot, OriginX = ox, OriginZ = oz };
 
         [Test]
+        public void FromPointPairs_RoomBaseShorterThan10cm_ReturnsCurrent()
+        {
+            // Audit 07 §Б1: a 5 cm room base used to be accepted (1 mm threshold) and
+            // amplified controller-shake into a wild scale.
+            var current = P(5f, 0f, 0f, 0f);
+            var solved = BlueprintMath.FromPointPairs(
+                new Vector3(1f, 0f, 1f), new Vector3(2f, 0f, 2f),
+                new Vector3(3f, 0f, 1f), new Vector3(2.05f, 0f, 2f),   // room pair 5 cm apart
+                current);
+            Assert.AreEqual(current.Scale, solved.Scale, 1e-6f);
+            Assert.AreEqual(current.OriginX, solved.OriginX, 1e-6f, "placement untouched");
+        }
+
+        [Test]
         public void WorldToPlanUV_ZeroRotation_MatchesLegacyFormula()
         {
             var p = P(2f, 0f, 1f, 3f);

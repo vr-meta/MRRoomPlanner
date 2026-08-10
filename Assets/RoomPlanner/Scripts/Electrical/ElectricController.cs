@@ -233,10 +233,24 @@ namespace RoomPlanner.Electrical
         {
             if (fixturePrefab == null || sceneModel == null) return;
 
-            if (_mode == SubMode.Panel && FindPanel() != null)
+            if (_mode == SubMode.Panel)
             {
-                input.Pulse(0.2f, 0.01f);   // one panel per scene in v1
-                return;
+                if (FindPanel() != null)
+                {
+                    input.Pulse(0.2f, 0.01f);   // one panel per scene in v1
+                    return;
+                }
+                // A DELETED panel is only hidden (undo-able). Placing a replacement used
+                // to leave it resurrectable — undo after the new placement produced TWO
+                // panels (audit 08 §Б2). The replacement makes the deletion permanent:
+                // Unregister purges the old panel's commands, so undo stays consistent.
+                var hiddenPanel = FindHiddenPanel();
+                if (hiddenPanel != null)
+                {
+                    var hiddenSel = hiddenPanel.GetComponent<Selectable>();
+                    if (hiddenSel != null && sceneModel != null) sceneModel.Unregister(hiddenSel);
+                    Destroy(hiddenPanel.gameObject);
+                }
             }
             if (OverlapsExistingFixture(place)) { input.Pulse(0.2f, 0.01f); return; }
 
@@ -282,6 +296,96 @@ namespace RoomPlanner.Electrical
             {
                 var item = items[i];
                 if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is Selectable s && s.Fixture != null && s.Fixture.Kind == FixtureKind.Panel)
+                    return s.Fixture;
+            }
+            return null;
+        }
+
+        // ---- project restore (format v2, audit B1) ----
+
+        /// <summary>The model to register restored objects in: the rig-wired one, or the
+        /// scene instance — restore must work on rigs saved before the field existed.</summary>
+        private SceneModel RestoreModel => sceneModel != null ? sceneModel : SceneModel.Instance;
+
+        /// <summary>
+        /// Recreate a saved fixture. The saved id is kept verbatim (Register respects
+        /// pre-set ids), so wire ends re-attach by id for free. Falls back to assembling
+        /// the components bare when the prefab is not wired.
+        /// </summary>
+        public ElectricFixture RestoreFixture(RoomPlanner.Core.Project.ProjectFixture f)
+        {
+            var model = RestoreModel;
+            if (f == null || model == null) return null;
+
+            ElectricFixture fx;
+            if (fixturePrefab != null)
+            {
+                fx = Instantiate(fixturePrefab, transform);
+                if (!fx.gameObject.activeSelf) fx.gameObject.SetActive(true);
+            }
+            else
+            {
+                var go = new GameObject("Fixture (restored)") { layer = gameObject.layer };
+                go.transform.SetParent(transform, false);
+                go.AddComponent<MeshFilter>();
+                go.AddComponent<MeshRenderer>();
+                fx = go.AddComponent<ElectricFixture>();
+                go.AddComponent<ElectricFixtureParameters>();
+                go.AddComponent<Selectable>();
+            }
+            fx.Build((FixtureKind)f.Kind, f.Posts, f.Keys);
+            fx.transform.SetPositionAndRotation(f.Position, f.Rotation);
+            fx.BaseLevel = f.BaseLevel;
+            if (f.Reserve >= 0) fx.ReservePercent = f.Reserve;
+            var sel = fx.GetComponent<Selectable>();
+            if (sel != null && !string.IsNullOrEmpty(f.Id)) sel.Id = f.Id;
+            model.Register(sel);
+            return fx;
+        }
+
+        /// <summary>Recreate a saved wire run with its cable type and attachments.</summary>
+        public WireRoute RestoreWire(RoomPlanner.Core.Project.ProjectWire w)
+        {
+            var model = RestoreModel;
+            if (w == null || model == null || w.Points == null || w.Points.Count < 2) return null;
+
+            WireRoute route;
+            if (wirePrefab != null)
+            {
+                route = Instantiate(wirePrefab, transform);
+                if (!route.gameObject.activeSelf) route.gameObject.SetActive(true);
+            }
+            else
+            {
+                var go = new GameObject("Wire (restored)") { layer = gameObject.layer };
+                go.transform.SetParent(transform, false);
+                go.AddComponent<MeshFilter>();
+                go.AddComponent<MeshRenderer>();
+                route = go.AddComponent<WireRoute>();
+                go.AddComponent<WireRouteParameters>();
+                go.AddComponent<Selectable>();
+            }
+            if (!route.Build(w.Points, (CableType)w.Cable))
+            {
+                Destroy(route.gameObject);
+                return null;
+            }
+            route.StartFixtureId = w.StartId;
+            route.EndFixtureId = w.EndId;
+            model.Register(route.GetComponent<Selectable>());
+            return route;
+        }
+
+        /// <summary>A deleted-but-undoable panel (hidden in the model), if any.</summary>
+        private ElectricFixture FindHiddenPanel()
+        {
+            if (sceneModel == null) return null;
+            var items = sceneModel.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || !item.IsHidden) continue;
                 if (item is Selectable s && s.Fixture != null && s.Fixture.Kind == FixtureKind.Panel)
                     return s.Fixture;
             }

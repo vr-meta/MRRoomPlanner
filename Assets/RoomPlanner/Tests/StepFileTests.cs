@@ -52,6 +52,23 @@ END-ISO-10303-21;
         }
 
         [Test]
+        public void DetectsImperialFeetViaConversionBasedUnit()
+        {
+            // Audit 09 §Б3: imperial exports have no SI length unit — the factor lives in
+            // IFCCONVERSIONBASEDUNIT → IFCMEASUREWITHUNIT. Assuming metres made the
+            // model 3.28× too large, silently.
+            var f = StepFile.Parse(@"DATA;
+#10=IFCDIMENSIONALEXPONENTS(1,0,0,0,0,0,0);
+#11=IFCMEASUREWITHUNIT(IFCRATIOMEASURE(0.3048),#12);
+#12=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#13=IFCCONVERSIONBASEDUNIT(#10,.LENGTHUNIT.,'FOOT',#11);
+ENDSEC;");
+            // #12 (the SI metre) is only the conversion's BASE unit — the conversion
+            // must win, which is why DetectUnits probes it before IFCSIUNIT.
+            Assert.AreEqual(0.3048, f.LengthToMeters, 1e-9);
+        }
+
+        [Test]
         public void OfTypeAndDeref()
         {
             var f = StepFile.Parse(Doc);
