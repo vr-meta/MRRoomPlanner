@@ -49,5 +49,23 @@ namespace RoomPlanner.Tests
             var f = SurfaceFinish.OfTexture("x", 0f);
             Assert.Greater(f.TileMeters, 0f, "zero tile would divide by zero in the ST");
         }
+
+        [Test]
+        public void UvScale_PerAxis_WhenTileYSet()
+        {
+            var f = SurfaceFinish.OfTexture("wallpaper-001a", 2.0f, 0.5f);
+            var st = f.UvScaleOffset();
+            Assert.AreEqual(0.5f, st.x, 1e-5f, "U scale from TileMeters");
+            Assert.AreEqual(2f, st.y, 1e-5f, "V scale from TileMetersY");
+        }
+
+        [Test]
+        public void UvScale_TileYZero_FallsBackToSquare()
+        {
+            var f = SurfaceFinish.OfTexture("wood", 2.0f);
+            Assert.AreEqual(0f, f.TileMetersY, "unset stays 0 (square marker)");
+            Assert.AreEqual(2f, f.EffectiveTileY, 1e-5f);
+            Assert.AreEqual(f.UvScaleOffset().x, f.UvScaleOffset().y, 1e-5f);
+        }
     }
 }

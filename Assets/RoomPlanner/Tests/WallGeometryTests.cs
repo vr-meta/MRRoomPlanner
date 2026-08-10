@@ -59,7 +59,9 @@ namespace RoomPlanner.Tests
 
                 var mf = go.GetComponent<MeshFilter>();
                 Assert.IsNotNull(mf.sharedMesh);
-                Assert.AreEqual(8, mf.sharedMesh.vertexCount); // 2 cross-sections * 4 verts
+                // 2 cross-sections × 4 ring verts + 2 × 4 dedicated top/bottom verts + 8 cap
+                // verts (caps/tops got their own metric unwrap — feedback 2026-08-11)
+                Assert.AreEqual(24, mf.sharedMesh.vertexCount);
                 Assert.AreEqual(2, wall.Points.Count);
             }
             finally { Object.DestroyImmediate(go); }
@@ -77,7 +79,8 @@ namespace RoomPlanner.Tests
 
                 var mf = go.GetComponent<MeshFilter>();
                 Assert.IsNotNull(mf.sharedMesh);
-                Assert.AreEqual(12, mf.sharedMesh.vertexCount); // 3 cross-sections * 4 (miter = 1 per corner)
+                // 3 cross-sections × (4 ring + 4 top/bottom) + 8 cap verts (miter = 1 per corner)
+                Assert.AreEqual(32, mf.sharedMesh.vertexCount);
             }
             finally { Object.DestroyImmediate(go); }
         }

@@ -23,6 +23,7 @@ namespace RoomPlanner.Editing
         private static readonly int MainTexId = Shader.PropertyToID("_MainTex");     // legacy
         private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -209,6 +210,9 @@ namespace RoomPlanner.Editing
                         _mpb.SetTexture(MainTexId, _finishTexture);
                         _mpb.SetVector(BaseMapStId, _finish.UvScaleOffset());
                         _mpb.SetVector(MainTexStId, _finish.UvScaleOffset());
+                        // floors keep the blueprint projection in uv0; finish textures
+                        // tile over the metric uv1 channel (design/04, T4)
+                        if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
                     }
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);

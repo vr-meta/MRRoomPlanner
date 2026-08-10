@@ -67,6 +67,10 @@ namespace RoomPlanner.Tools
         private int _tab;          // 0 Color · 1 Walls · 2 Floors
         private int _wallTex;      // index into the Walls texture ids
         private int _floorTex;     // index into the Floors texture ids
+        // tile-size overrides in metres, both axes; 0 = the texture's own catalog tile
+        // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
+        private float _wallTileW, _wallTileH;
+        private float _floorTileW, _floorTileH;
         private string[] _wallIds = System.Array.Empty<string>();
         private string[] _floorIds = System.Array.Empty<string>();
         private Selectable _hover;
@@ -108,7 +112,15 @@ namespace RoomPlanner.Tools
                     .Readout("howw", "How to", () => "aim a wall · Trigger = apply");
                 if (_wallIds.Length > 0)
                     wallsPage.TextureSwatch("wtex", "Wallpaper", _wallIds,
-                        () => _wallTex, i => _wallTex = Mathf.Clamp(i, 0, _wallIds.Length - 1));
+                            () => _wallTex, i => _wallTex = Mathf.Clamp(i, 0, _wallIds.Length - 1))
+                        .Stepper("wtw", "Tile width",
+                            () => TileLabel(_wallTileW, LibraryTile(1)),
+                            () => _wallTileW = StepTile(_wallTileW, LibraryTile(1), -1),
+                            () => _wallTileW = StepTile(_wallTileW, LibraryTile(1), +1))
+                        .Stepper("wth", "Tile height",
+                            () => _wallTileH > 0f ? $"{_wallTileH * 100f:0} cm" : "= width",
+                            () => _wallTileH = StepTile(_wallTileH, EffectiveTileW(1), -1),
+                            () => _wallTileH = StepTile(_wallTileH, EffectiveTileW(1), +1));
                 else
                     wallsPage.Readout("nonew", "Textures", () => "run Download Textures");
                 wallsPage.Action("clearw", "Original look (unpaint aimed)", "eraser", ClearHovered);
@@ -117,7 +129,15 @@ namespace RoomPlanner.Tools
                     .Readout("howf", "How to", () => "aim a floor · Trigger = apply");
                 if (_floorIds.Length > 0)
                     floorsPage.TextureSwatch("ftex", "Wood", _floorIds,
-                        () => _floorTex, i => _floorTex = Mathf.Clamp(i, 0, _floorIds.Length - 1));
+                            () => _floorTex, i => _floorTex = Mathf.Clamp(i, 0, _floorIds.Length - 1))
+                        .Stepper("ftw", "Tile X",
+                            () => TileLabel(_floorTileW, LibraryTile(2)),
+                            () => _floorTileW = StepTile(_floorTileW, LibraryTile(2), -1),
+                            () => _floorTileW = StepTile(_floorTileW, LibraryTile(2), +1))
+                        .Stepper("fth", "Tile Z",
+                            () => _floorTileH > 0f ? $"{_floorTileH * 100f:0} cm" : "= X",
+                            () => _floorTileH = StepTile(_floorTileH, EffectiveTileW(2), -1),
+                            () => _floorTileH = StepTile(_floorTileH, EffectiveTileW(2), +1));
                 else
                     floorsPage.Readout("nonef", "Textures", () => "run Download Textures");
                 floorsPage.Action("clearf", "Original look (unpaint aimed)", "eraser", ClearHovered);
@@ -145,9 +165,37 @@ namespace RoomPlanner.Tools
             if (ids == null || ids.Length == 0 || library == null) return false;
             int pick = Mathf.Clamp(_tab == 1 ? _wallTex : _floorTex, 0, ids.Length - 1);
             if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
-            finish = SurfaceFinish.OfTexture(ids[pick], tile);
+            // per-axis overrides: 0 = catalog tile; H unset follows W (square)
+            float w = _tab == 1 ? _wallTileW : _floorTileW;
+            float h = _tab == 1 ? _wallTileH : _floorTileH;
+            finish = SurfaceFinish.OfTexture(ids[pick], w > 0f ? w : tile, h);
             return true;
         }
+
+        /// <summary>The catalog tile of the texture currently picked on a tab (1 Walls, 2 Floors).</summary>
+        private float LibraryTile(int tab)
+        {
+            string[] ids = tab == 1 ? _wallIds : _floorIds;
+            if (ids.Length == 0 || library == null) return 1f;
+            int pick = Mathf.Clamp(tab == 1 ? _wallTex : _floorTex, 0, ids.Length - 1);
+            return library.TryGet(ids[pick], out _, out float tile) ? tile : 1f;
+        }
+
+        private float EffectiveTileW(int tab)
+        {
+            float over = tab == 1 ? _wallTileW : _floorTileW;
+            return over > 0f ? over : LibraryTile(tab);
+        }
+
+        /// <summary>±25 cm per step from the current (or fallback) size, 25–800 cm.</summary>
+        private static float StepTile(float current, float fallback, int dir)
+        {
+            float v = (current > 0f ? current : fallback) + dir * 0.25f;
+            return Mathf.Clamp(v, 0.25f, 8f);
+        }
+
+        private static string TileLabel(float over, float fallback) =>
+            over > 0f ? $"{over * 100f:0} cm" : $"auto ({fallback * 100f:0} cm)";
 
         public void OnActivate() { }
 

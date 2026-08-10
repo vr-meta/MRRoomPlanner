@@ -10,6 +10,10 @@ Shader "RoomPlanner/LitVertexAO"
         _BaseMap("Base Map", 2D) = "white" {}
         _BaseColor("Base Color", Color) = (1, 1, 1, 1)
         _Cull("Cull", Float) = 2
+        // Floors carry TWO UV sets: uv0 = blueprint-plan projection (the plan aligns
+        // across slabs), uv1 = metric world XZ (finish textures tile in metres).
+        // Selectable flips this per-renderer via MPB when a texture finish is applied.
+        _UseUV1("Sample UV1 (metric channel)", Float) = 0
     }
     SubShader
     {
@@ -24,6 +28,7 @@ Shader "RoomPlanner/LitVertexAO"
             float4 _BaseMap_ST;
             half4 _BaseColor;
             float _Cull;
+            float _UseUV1;
         CBUFFER_END
         ENDHLSL
 
@@ -54,6 +59,7 @@ Shader "RoomPlanner/LitVertexAO"
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
                 float2 uv         : TEXCOORD0;
+                float2 uv1        : TEXCOORD1;   // metric channel (floors); 0 when absent
                 half4  color      : COLOR;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -78,7 +84,7 @@ Shader "RoomPlanner/LitVertexAO"
                 o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
-                o.uv = TRANSFORM_TEX(v.uv, _BaseMap);
+                o.uv = TRANSFORM_TEX(lerp(v.uv, v.uv1, saturate(_UseUV1)), _BaseMap);
                 o.ao = v.color.r;
                 return o;
             }

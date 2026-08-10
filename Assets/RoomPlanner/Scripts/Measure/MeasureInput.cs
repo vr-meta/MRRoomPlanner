@@ -127,7 +127,10 @@ namespace RoomPlanner.Measure
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.Tab)) return true;
 #endif
-            return OVRInput.GetDown(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.LTouch);
+            // Button.Start = the left controller's Menu (≡) button — the natural "menu"
+            // key (user request 2026-08-11); short press is app-usable on Horizon OS.
+            return OVRInput.GetDown(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.LTouch)
+                || OVRInput.GetDown(OVRInput.Button.Start, OVRInput.Controller.LTouch);
         }
 
         /// <summary>RIGHT stick click — previous tool (16 P2.3). Editor: Q.</summary>

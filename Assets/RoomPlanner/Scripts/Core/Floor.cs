@@ -288,8 +288,16 @@ namespace RoomPlanner.Floors
             // face INTO the hole — which is outward from the solid, exactly as required.
             foreach (var hole in _holes) AddSideWalls(Polygon.ToClockwise(hole), v, uv, colors, t, top, bot);
 
+            // uv1 = metric world-XZ channel: same as uv0 everywhere except the TOP face,
+            // whose uv0 carries the blueprint projection. Finish textures sample uv1
+            // (shader _UseUV1) so wood tiles in metres regardless of the plan placement (T4).
+            var uvMetric = new List<Vector2>(uv);
+            for (int i = 0; i < n; i++)
+                uvMetric[i] = new Vector2(v[i].x / TileMeters, v[i].z / TileMeters);
+
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetUVs(1, uvMetric);
             _mesh.SetColors(colors);
             _mesh.SetTriangles(t, 0);
             _mesh.RecalculateNormals();

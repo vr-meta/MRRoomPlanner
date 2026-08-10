@@ -250,6 +250,9 @@ namespace RoomPlanner.Walls
 
             float U(float t) => t * centerlineLength / TileMeters;
             float VV(float y) => (baseY + y) / TileMeters;
+            // metric UV span ACROSS the thickness — caps/tops need a real second axis or
+            // the texture smears into stripes (headset feedback 2026-08-11)
+            float wu = thickness / TileMeters;
 
             // faces oriented as in Triangulate(): inner toward the room, outer away, etc.
             void FaceInner(float t0, float t1, float y0, float y1) =>
@@ -257,24 +260,25 @@ namespace RoomPlanner.Walls
             void FaceOuter(float t0, float t1, float y0, float y1) =>
                 Face(tris, O(t0, y1), O(t0, y0), O(t1, y0), O(t1, y1), U(t0), VV(y1), U(t1), VV(y0));
             void FaceUp(float t0, float t1, float y) =>
-                Face(tris, I(t0, y), O(t0, y), O(t1, y), I(t1, y), U(t0), VV(y), U(t1), VV(y));
+                Face(tris, I(t0, y), O(t0, y), O(t1, y), I(t1, y), U(t0), 0f, U(t1), wu);
             void FaceDown(float t0, float t1, float y) =>
-                Face(tris, O(t0, y), I(t0, y), I(t1, y), O(t1, y), U(t0), VV(y), U(t1), VV(y));
+                Face(tris, O(t0, y), I(t0, y), I(t1, y), O(t1, y), U(t0), 0f, U(t1), wu);
             void FaceCapBack(float t, float y0, float y1) =>   // faces -t (wall start / right jamb)
-                Face(tris, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t), VV(y1));
+                Face(tris, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
             void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
-                Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t), VV(y1));
+                Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
 
             // A free-standing joinery block (frame bar / door leaf): all six faces, each
             // reusing the orientation of the corresponding verified wall-face pattern.
             void Box(float t0, float t1, float y0, float y1, float d0, float d1)
             {
+                float dw = Mathf.Abs(d1 - d0) * wu;   // metric depth of the block
                 Face(joinery, P(t0, y0, d0), P(t0, y1, d0), P(t1, y1, d0), P(t1, y0, d0), U(t0), VV(y0), U(t1), VV(y1));
                 Face(joinery, P(t0, y1, d1), P(t0, y0, d1), P(t1, y0, d1), P(t1, y1, d1), U(t0), VV(y1), U(t1), VV(y0));
-                Face(joinery, P(t0, y1, d0), P(t0, y1, d1), P(t1, y1, d1), P(t1, y1, d0), U(t0), VV(y1), U(t1), VV(y1));
-                Face(joinery, P(t0, y0, d1), P(t0, y0, d0), P(t1, y0, d0), P(t1, y0, d1), U(t0), VV(y0), U(t1), VV(y0));
-                Face(joinery, P(t0, y0, d1), P(t0, y1, d1), P(t0, y1, d0), P(t0, y0, d0), U(t0), VV(y0), U(t0), VV(y1));
-                Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1), VV(y1));
+                Face(joinery, P(t0, y1, d0), P(t0, y1, d1), P(t1, y1, d1), P(t1, y1, d0), U(t0), 0f, U(t1), dw);
+                Face(joinery, P(t0, y0, d1), P(t0, y0, d0), P(t1, y0, d0), P(t1, y0, d1), U(t0), 0f, U(t1), dw);
+                Face(joinery, P(t0, y0, d1), P(t0, y1, d1), P(t0, y1, d0), P(t0, y0, d0), U(t0), VV(y0), U(t0) + dw, VV(y1));
+                Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1) + dw, VV(y1));
             }
 
             // Box() with WORLD axes: x along `ax`, y along `ay`, z along `az` (full-length
@@ -636,6 +640,7 @@ namespace RoomPlanner.Walls
 
             float run = 0f;                 // distance travelled along the wall, in metres
             Vector3 prevMid = Vector3.zero;
+            var us = new float[m];          // per-section U, reused by the dedicated faces below
 
             for (int j = 0; j < m; j++)
             {
@@ -645,6 +650,7 @@ namespace RoomPlanner.Walls
                 prevMid = mid;
 
                 float u = run / TileMeters;
+                us[j] = u;
                 float vBottom = s[j].Inner.y / TileMeters;
                 float vTop = (s[j].Inner.y + height) / TileMeters;
 
@@ -664,8 +670,6 @@ namespace RoomPlanner.Walls
             for (int j = 0; j < m - 1; j++)
             {
                 int a = j * 4, b = (j + 1) * 4;
-                AddQuad(a + 0, a + 1, b + 1, b + 0);   // bottom
-                AddQuad(a + 2, b + 2, b + 3, a + 3);   // top
                 AddQuad(a + 1, a + 3, b + 3, b + 1);   // outer wall
                 AddQuad(a + 0, b + 0, b + 2, a + 2);   // inner wall
 
@@ -676,10 +680,49 @@ namespace RoomPlanner.Walls
                 ei.Add(a + 2); ei.Add(b + 2); // inner top
             }
 
-            // end caps
-            AddQuad(0, 2, 3, 1);
+            // Top, bottom and caps get DEDICATED vertices: the ring vertices carry the
+            // along-the-wall UVs, and reusing them smeared the texture into stripes across
+            // the thickness (headset feedback 2026-08-11). U runs along, V spans the
+            // thickness in metres; positions are identical, so winding and collider hold.
+            int flatBase = v.Count;
+            for (int j = 0; j < m; j++)
+            {
+                float w = Vector3.Distance(s[j].Inner, s[j].Outer) / TileMeters;
+                v.Add(s[j].Inner + up); v.Add(s[j].Outer + up);   // +0 topInner, +1 topOuter
+                uv.Add(new Vector2(us[j], 0f)); uv.Add(new Vector2(us[j], w));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
+                v.Add(s[j].Inner); v.Add(s[j].Outer);             // +2 botInner, +3 botOuter
+                uv.Add(new Vector2(us[j], 0f)); uv.Add(new Vector2(us[j], w));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+            }
+            for (int j = 0; j < m - 1; j++)
+            {
+                int a = flatBase + j * 4, b = flatBase + (j + 1) * 4;
+                AddQuad(a + 2, a + 3, b + 3, b + 2);   // bottom (same corner order as before)
+                AddQuad(a + 0, b + 0, b + 1, a + 1);   // top
+            }
+
+            // end caps: U spans the thickness, V climbs the height
+            int capBase = v.Count;
+            void CapVert(Vector3 p, float capU, float ao)
+            {
+                v.Add(p);
+                uv.Add(new Vector2(capU, p.y / TileMeters));
+                colors.Add(new Color(ao, ao, ao, 1f));
+            }
+            float w0 = Vector3.Distance(s[0].Inner, s[0].Outer) / TileMeters;
+            CapVert(s[0].Inner, 0f, aoBottom); CapVert(s[0].Inner + up, 0f, aoTop);
+            CapVert(s[0].Outer + up, w0, aoTop); CapVert(s[0].Outer, w0, aoBottom);
+            AddQuad(capBase + 0, capBase + 1, capBase + 2, capBase + 3);
+            var sl = s[m - 1];
+            float wL = Vector3.Distance(sl.Inner, sl.Outer) / TileMeters;
+            CapVert(sl.Outer, 0f, aoBottom); CapVert(sl.Outer + up, 0f, aoTop);
+            CapVert(sl.Inner + up, wL, aoTop); CapVert(sl.Inner, wL, aoBottom);
+            AddQuad(capBase + 4, capBase + 5, capBase + 6, capBase + 7);
+
             int e = (m - 1) * 4;
-            AddQuad(e + 1, e + 3, e + 2, e + 0);
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
