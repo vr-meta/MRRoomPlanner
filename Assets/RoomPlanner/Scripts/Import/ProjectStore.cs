@@ -85,7 +85,8 @@ namespace RoomPlanner.Import
                 {
                     Base = s.Base, Yaw = s.YawDeg, Width = s.Width,
                     Risers = s.Risers, RiserHeight = s.RiserHeight, TreadDepth = s.TreadDepth,
-                    Open = s.Kind == StairKind.Open,
+                    Open = s.Kind == StairKind.Open,   // legacy readers
+                    Kind = (int)s.Kind,
                     Painted = ssel != null && ssel.IsPainted,
                     Paint = ssel != null && ssel.IsPainted ? ssel.Paint : Color.clear,
                 });
@@ -175,7 +176,7 @@ namespace RoomPlanner.Import
                 {
                     Base = s.Base, YawDeg = s.Yaw, Width = s.Width,
                     Risers = s.Risers, RiserHeight = s.RiserHeight, TreadDepth = s.TreadDepth,
-                    Open = s.Open,
+                    Kind = s.Kind >= 0 ? (StairKind)s.Kind : (s.Open ? StairKind.Open : StairKind.Solid),
                     HasPaint = s.Painted,
                     PaintColor = s.Paint,
                 });

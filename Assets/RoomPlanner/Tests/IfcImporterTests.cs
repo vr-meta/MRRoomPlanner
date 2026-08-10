@@ -161,7 +161,8 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(0.175f, s.RiserHeight, 1e-3, "0.5741 ft → 175 mm");
             Assert.AreEqual(0.275f, s.TreadDepth, 1e-3, "0.9022 ft → 275 mm");
             Assert.IsTrue(s.Width > 0.7f && s.Width < 2f, $"plausible flight width, got {s.Width}");
-            Assert.IsTrue(s.Open, "imports default to the open kind");
+            Assert.AreEqual(RoomPlanner.Stairs.StairKind.Waist, s.Kind,
+                "imports default to the waist-slab kind");
             Assert.AreEqual(0, s.StoreyIndex, "storey inherited from the stair via IfcRelAggregates");
         }
 

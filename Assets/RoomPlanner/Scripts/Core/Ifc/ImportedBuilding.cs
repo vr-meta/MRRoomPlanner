@@ -77,10 +77,10 @@ namespace RoomPlanner.Core.Ifc
         public int Risers;
         public float RiserHeight;   // metres
         public float TreadDepth;    // metres
-        /// <summary>Open flight (treads on stringers) vs solid monolith. IFC gives no
-        /// reliable signal; imports default to OPEN (headset feedback 2026-08-10) and
-        /// project files keep the choice.</summary>
-        public bool Open;
+        /// <summary>Construction kind (Solid / Open / Waist). IFC gives no reliable
+        /// signal; imports default to WAIST — the apartment-stairwell slab flight
+        /// (headset feedback 2026-08-10) — and project files keep the choice.</summary>
+        public RoomPlanner.Stairs.StairKind Kind;
         public int StoreyIndex = -1;
         public bool HasPaint;
         public Color PaintColor;

@@ -107,7 +107,8 @@ namespace RoomPlanner.Tests.Play
             b.Stairs.Add(new ImportedStair
             {
                 Base = new Vector3(1f, 0f, 1f), YawDeg = 30f, Width = 1.1f,
-                Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f, Open = true,
+                Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f,
+                Kind = RoomPlanner.Stairs.StairKind.Open,
             });
             var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f) };
             basin.Vertices.AddRange(new[]

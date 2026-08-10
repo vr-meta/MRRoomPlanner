@@ -187,9 +187,10 @@ namespace RoomPlanner.Core.Ifc
                     RiserHeight = riserH,
                     TreadDepth = treadD,
                     // Monolithic Revit stairs read as a wall of concrete in MR — imports
-                    // default to the open kind (headset feedback 2026-08-10); the choice
-                    // round-trips through project files either way.
-                    Open = true,
+                    // default to the waist-slab kind, the familiar stairwell flight
+                    // (headset feedback 2026-08-10); the choice round-trips through
+                    // project files either way.
+                    Kind = RoomPlanner.Stairs.StairKind.Waist,
                     StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
                 });
             }

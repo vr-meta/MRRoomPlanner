@@ -57,7 +57,10 @@ namespace RoomPlanner.Core.Project
         public Vector3 Base;
         public float Yaw, Width, RiserHeight, TreadDepth;
         public int Risers;
+        /// <summary>Legacy two-kind flag (files written before StairKind.Waist).</summary>
         public bool Open;
+        /// <summary>StairKind as int; -1 = absent in the file, fall back to Open.</summary>
+        public int Kind = -1;
         public bool Painted;
         public Color Paint;
     }
