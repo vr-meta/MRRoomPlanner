@@ -77,6 +77,34 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void Junction_IsASmallLiddedBox()
+        {
+            // the v2 distribution box: 8×8 cm face, lid proud of the body, back on the mount plane
+            _fixture.Build(FixtureKind.Junction, 1, 1);
+            var b = Mesh.bounds;
+            Assert.AreEqual(ElectricalDefaults.JunctionBoxSize, b.size.x, 1e-4);
+            Assert.AreEqual(ElectricalDefaults.JunctionBoxSize, b.size.y, 1e-4);
+            Assert.AreEqual(0f, b.min.z, 1e-4, "back sits on the wall/ceiling plane");
+            Assert.Greater(b.size.z, ElectricalDefaults.JunctionBoxDepth - 1e-4, "lid sits proud of the box");
+            Assert.AreEqual(ElectricalDefaults.JunctionBoxSize, _fixture.BlockWidth, 1e-4);
+            Assert.AreEqual(ElectricalDefaults.JunctionBoxSize, _fixture.BlockHeight, 1e-4);
+        }
+
+        [Test]
+        public void Junction_TerminalSitsOnTheLidCenter()
+        {
+            _fixture.Build(FixtureKind.Junction, 1, 1);
+            // mounted on a ceiling: +Z (the lid) looks straight down into the room
+            _go.transform.SetPositionAndRotation(new Vector3(1f, 3f, 2f),
+                Quaternion.LookRotation(Vector3.down, Vector3.forward));
+            var t = _fixture.TerminalWorld;
+            Assert.AreEqual(1f, t.x, 1e-4);
+            Assert.AreEqual(2f, t.z, 1e-4, "terminal is centered on the box face");
+            Assert.AreEqual(3f - ElectricalDefaults.JunctionBoxDepth, t.y, 1e-4,
+                "the cable entry hangs below the ceiling by the box depth");
+        }
+
+        [Test]
         public void Meshes_AreWoundOutward_PositiveVolume()
         {
             _fixture.Build(FixtureKind.Outlet, 2, 1);

@@ -407,6 +407,42 @@
 - [ ] **E9 — персистентность электрики**: автосейв main (I15, `ProjectStore`/`ProjectData`)
   сохраняет стены/полы/лестницы+краску, но **не знает про Fixture/WireRoute** — добавить
   их в формат проекта при следующем заходе
+- [~] **E10 — электрика v2: ручная трассировка + распредкоробки** (фидбек шлема
+  2026-08-10 вечер; дизайн: `19-electrical.md` → «v2»):
+  - [x] E10.1 `WireMath.OrthoElbow(prev, next)` — одно колено, горизонталь на высоте
+    верхней точки; `OrthoWaypoints(runY)` удалён; тесты `WireMathTests` переписаны
+  - [x] E10.2 `ElectricController`: Ortho через `OrthoElbow`, авто-потолок и
+    `CeilingY/RunY` удалены, ряд «Ceiling off» убран из схемы Wire (розетка↔розетка
+    теперь соединяются напрямую)
+  - [x] E10.3 `FixtureKind.Junction` + размеры; `ElectricFixture`: меш коробки
+    80×80×45 с крышкой, терминал = центр крышки, BlockWidth/Height + EditMode-тесты
+  - [x] E10.4 суб-режим **Box** (5-й таб, иконка `junction-box` в `IconPaths` +
+    `TabIconFor`): постановка на стену И потолок, свободная высота, overlap-зазор;
+    `Describe()` = «Junction box · N wires»; per-instance readout Wires; PlayMode-тест
+    привязки двух трасс к коробке
+  - [x] E10.5 прогон headless (EditMode 345/345, PlayMode 108/108) + доки
+  - [ ] E10.6 проверка на устройстве
+
+## 2n. Локомоция (дизайн: `design/21-locomotion.md`, фидбек шлема 2026-08-10 вечер)
+
+Телепорт-портал по удержанию ЛЕВОГО триггера из любого инструмента (арка + кольцо,
+отпустил — модель к ногам) и плавный ход левым стиком (двигается OVRCameraRig,
+только при Scan OFF). Confirm сужен до правого триггера.
+
+- [x] **L1 — Core `TeleportArc`**: сэмплирование параболы (origin, forward, 7 м/с,
+  g=9.81, шаг 0.05 с, ≤40 сэмплов) + юнит-тесты (апекс, спуск, физика в замкнутой форме)
+- [x] **L2 — `MeasureInput`**: Confirm/ConfirmHeld → только правый триггер (RawButton);
+  `TeleportAimHeld()` — левый триггер (Editor: G); `Thumbstick()` → только правый стик
+- [x] **L3 — `TeleportLocomotion`**: арка от левого анкера по сегментам, цель =
+  Selectable Floor/Stair, кольцо-портал, релиз → `ToolManager.TeleportModelTo(point)`
+  (выделен из A-tap; A-tap молчит при активном прицеле); плавный ход стиком
+  (2 м/с, горизонталь, Scan OFF, не при радиале)
+- [x] **L4 — Setup + доки + Scan OFF по умолчанию**: `SetupCoreRig` (компонент +
+  2 LineRenderer + wiring), `ToolManager.scanOn=false` (запрос пользователя 2026-08-10;
+  Start применяет состояние + повторы 1/3/6 с — MRUK спавнит скан асинхронно),
+  SetupRig headless прогнан, `10-controls.md`/`21-locomotion.md`/README синхронизированы
+- [ ] **L5 — проверка на устройстве** (арка/кольцо/комфорт хода, Scan OFF при старте,
+  повторное включение Scan тумблером — headless не видно)
 
 ## 2l. Покраска стен (разрешение дубля при merge, 2026-08-10)
 

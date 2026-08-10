@@ -54,6 +54,42 @@ namespace RoomPlanner.EditorTools
             var pso = new SerializedObject(ctx.Pointer);
             if (anchor != null) pso.FindProperty("controllerAnchor").objectReferenceValue = anchor;
             pso.ApplyModifiedProperties();
+
+            BuildLocomotion(ctx, rig);
+        }
+
+        /// <summary>Left-hand navigation (design/21-locomotion.md): the portal arc and
+        /// landing-ring renderers plus the TeleportLocomotion component wiring.</summary>
+        private static void BuildLocomotion(RigContext ctx, GameObject rig)
+        {
+            ctx.Locomotion = rig.AddComponent<TeleportLocomotion>();
+
+            var arcGo = new GameObject("TeleportArcLine");
+            arcGo.transform.SetParent(rig.transform, false);
+            var arc = arcGo.AddComponent<LineRenderer>();
+            arc.useWorldSpace = true;
+            arc.widthMultiplier = 0.012f;
+            arc.numCapVertices = 2;
+            arc.numCornerVertices = 2;
+            arc.sharedMaterial = ctx.LineMat;
+            arc.enabled = false;
+
+            var ringGo = new GameObject("TeleportRing");
+            ringGo.transform.SetParent(rig.transform, false);
+            var ring = ringGo.AddComponent<LineRenderer>();
+            ring.useWorldSpace = true;
+            ring.loop = true;
+            ring.widthMultiplier = 0.02f;
+            ring.sharedMaterial = ctx.LineMat;
+            ring.enabled = false;
+
+            var lso = new SerializedObject(ctx.Locomotion);
+            lso.FindProperty("input").objectReferenceValue = ctx.Input;
+            lso.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            lso.FindProperty("manager").objectReferenceValue = ctx.Manager;
+            lso.FindProperty("arcLine").objectReferenceValue = arc;
+            lso.FindProperty("portalRing").objectReferenceValue = ring;
+            lso.ApplyModifiedProperties();
         }
 
         // ---- helpers shared by modules ----

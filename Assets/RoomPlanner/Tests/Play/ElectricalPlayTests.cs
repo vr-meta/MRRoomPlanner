@@ -76,7 +76,7 @@ namespace RoomPlanner.Tests.Play
             var schema = tool.GetSettings();
             Assert.AreSame(schema, tool.GetSettings(), "one tabbed root instance, always");
             Assert.IsTrue(schema.HasTabs, "sub-modes are tabs, not swapped schemas");
-            CollectionAssert.AreEqual(new[] { "Outlet", "Switch", "Wire", "Panel" }, schema.Tabs);
+            CollectionAssert.AreEqual(new[] { "Outlet", "Switch", "Wire", "Box", "Panel" }, schema.Tabs);
 
             Assert.AreEqual(0, schema.ActiveTab());
             CollectionAssert.AreEqual(new[] { "posts", "oh" },
@@ -87,12 +87,19 @@ namespace RoomPlanner.Tests.Play
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
             schema.SelectTab(2);
-            CollectionAssert.AreEqual(new[] { "cable", "routing", "coff" },
+            // v2: no "Ceiling off" row — wires are routed by hand, never auto-lifted
+            CollectionAssert.AreEqual(new[] { "cable", "routing" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
             Assert.AreEqual(SettingKind.Segmented, schema.ActivePage().Fields[0].Kind,
                 "cable options are all visible (design/20 §2.3)");
 
             schema.SelectTab(3);
+            CollectionAssert.AreEqual(new[] { "jmount" },
+                schema.ActivePage().Fields.Select(f => f.Id).ToArray());
+            Assert.AreEqual(SettingKind.Readout, schema.ActivePage().Fields[0].Kind,
+                "the junction box has nothing to configure — just the mount hint");
+
+            schema.SelectTab(4);
             CollectionAssert.AreEqual(new[] { "res" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
         }
@@ -108,6 +115,26 @@ namespace RoomPlanner.Tests.Play
         }
 
         // ---- selection adapters ----
+
+        [Test]
+        public void JunctionBox_CountsAttachedRuns_InDescribeAndReadout()
+        {
+            // the v2 branching point: two runs land on one box, both are counted
+            var box = MakeFixture(FixtureKind.Junction);
+            var r1 = MakeRoute(CableType.C3x25, new Vector3(0f, 0.3f, 0f), new Vector3(0f, 2.7f, 0f));
+            var r2 = MakeRoute(CableType.C3x15, new Vector3(1f, 0.9f, 0f), new Vector3(0f, 2.7f, 0f));
+            MakeRoute(CableType.C3x25, new Vector3(3f, 0.3f, 0f), new Vector3(4f, 0.3f, 0f));
+
+            string boxId = IdOf(box);
+            r1.EndFixtureId = boxId;
+            r2.EndFixtureId = boxId;
+
+            Assert.AreEqual("Junction box · 2 wires", box.GetComponent<Selectable>().Describe());
+
+            var rows = box.GetComponent<ElectricFixtureParameters>().GetSettings();
+            var wiresRow = rows.Fields.Single(f => f.Id == "fjwires");
+            Assert.AreEqual("2", wiresRow.Value());
+        }
 
         [Test]
         public void Selectable_ResolvesElectricalKinds()

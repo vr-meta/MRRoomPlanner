@@ -24,49 +24,51 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(0f, WireMath.PolylineLength(new List<Vector3> { Vector3.one }), 1e-6);
         }
 
-        // ---- OrthoWaypoints ----
+        // ---- OrthoElbow (v2 manual routing: no automatic detour to the ceiling) ----
 
         [Test]
-        public void OrthoWaypoints_WallToWall_InsertsTwoElbowsAtRunHeight()
+        public void OrthoElbow_ClimbingPair_ElbowAboveTheStart()
         {
             var mid = new List<Vector3>();
-            WireMath.OrthoWaypoints(new Vector3(0f, 0.3f, 0f), new Vector3(2f, 0.9f, 0f), 2.3f, mid);
-            Assert.AreEqual(2, mid.Count);
-            Assert.AreEqual(new Vector3(0f, 2.3f, 0f), mid[0]);
-            Assert.AreEqual(new Vector3(2f, 2.3f, 0f), mid[1]);
+            // outlet up to a wall/ceiling junction click: rise first, travel on top
+            WireMath.OrthoElbow(new Vector3(0f, 0.3f, 0f), new Vector3(2f, 2.7f, 0f), mid);
+            Assert.AreEqual(1, mid.Count);
+            Assert.AreEqual(new Vector3(0f, 2.7f, 0f), mid[0]);
         }
 
         [Test]
-        public void OrthoWaypoints_BothAtRunHeight_NoElbows()
+        public void OrthoElbow_DroppingPair_ElbowAboveTheTarget()
         {
             var mid = new List<Vector3>();
-            WireMath.OrthoWaypoints(new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 1f), 2.3f, mid);
-            Assert.AreEqual(0, mid.Count, "already on the run height — straight segment");
+            // ceiling run down to a switch: travel on top, then a vertical drop
+            WireMath.OrthoElbow(new Vector3(0f, 2.7f, 0f), new Vector3(2f, 0.9f, 0f), mid);
+            Assert.AreEqual(1, mid.Count);
+            Assert.AreEqual(new Vector3(2f, 2.7f, 0f), mid[0]);
         }
 
         [Test]
-        public void OrthoWaypoints_VerticalPair_NoDetourToRunHeight()
+        public void OrthoElbow_OutletToOutlet_StraightRun_NeverViaCeiling()
         {
             var mid = new List<Vector3>();
-            WireMath.OrthoWaypoints(new Vector3(1f, 0.3f, 0f), new Vector3(1f, 2.0f, 0f), 2.3f, mid);
+            // the v2 headline: two outlets at the same height connect directly
+            WireMath.OrthoElbow(new Vector3(0f, 0.3f, 0f), new Vector3(3f, 0.3f, 0f), mid);
+            Assert.AreEqual(0, mid.Count);
+        }
+
+        [Test]
+        public void OrthoElbow_VerticalPair_NoElbow()
+        {
+            var mid = new List<Vector3>();
+            WireMath.OrthoElbow(new Vector3(1f, 0.3f, 0f), new Vector3(1f, 2.0f, 0f), mid);
             Assert.AreEqual(0, mid.Count, "no horizontal travel — plain vertical drop");
         }
 
         [Test]
-        public void OrthoWaypoints_StartAtRunHeight_SingleElbow()
+        public void OrthoElbow_NearLevelPair_NoNoiseElbow()
         {
             var mid = new List<Vector3>();
-            WireMath.OrthoWaypoints(new Vector3(0f, 2.3f, 0f), new Vector3(2f, 0.3f, 0f), 2.3f, mid);
-            Assert.AreEqual(1, mid.Count);
-            Assert.AreEqual(new Vector3(2f, 2.3f, 0f), mid[0]);
-        }
-
-        [Test]
-        public void OrthoWaypoints_NearDegenerateElbows_Collapse()
-        {
-            var mid = new List<Vector3>();
-            // prev is 5 mm below the run height: the first elbow is noise and must go
-            WireMath.OrthoWaypoints(new Vector3(0f, 2.295f, 0f), new Vector3(2f, 2.3f, 0f), 2.3f, mid);
+            // 5 mm of height difference is hand tremor, not an elbow
+            WireMath.OrthoElbow(new Vector3(0f, 2.295f, 0f), new Vector3(2f, 2.3f, 0f), mid);
             Assert.AreEqual(0, mid.Count);
         }
 

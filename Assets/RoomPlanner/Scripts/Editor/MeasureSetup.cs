@@ -77,6 +77,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("importTool").objectReferenceValue = ctx.Import;
             so.FindProperty("electric").objectReferenceValue = ctx.Electric;
             so.FindProperty("paint").objectReferenceValue = ctx.Paint;
+            so.FindProperty("locomotion").objectReferenceValue = ctx.Locomotion;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
             so.FindProperty("skyMat").objectReferenceValue = ctx.SkyMat;
             so.ApplyModifiedProperties();
