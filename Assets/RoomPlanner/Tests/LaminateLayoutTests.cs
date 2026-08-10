@@ -199,6 +199,64 @@ namespace RoomPlanner.Tests
                     Assert.That(q.SourceIndex, Is.InRange(0, 4));
         }
 
+        // ---- ceramic configurations (design/23) ----
+
+        [Test]
+        public void SubwayDeck_HalfOffset_CoversExactlyOnce()
+        {
+            // кабанчик: 0.2×0.1 ratio 2, rows offset by ½ — the classic subway bond
+            var quads = LaminateLayout.Generate(LaminatePattern.Deck, 0.2f, 0.1f, 32, Seed, 0.5f);
+            Assert.AreEqual(2, quads.Count, "two rows close the 0.2 m period");
+            AssertCoversOnce(quads, samples: 48);
+            Assert.AreEqual(0.5f, Mathf.Abs(quads[0].Center.x - quads[1].Center.x), 1e-4f,
+                "rows shifted by half a tile");
+        }
+
+        [Test]
+        public void Grid_FourSquares_CoversExactlyOnce()
+        {
+            var quads = LaminateLayout.Generate(LaminatePattern.Grid, 0.2f, 0.2f, 32, Seed);
+            Assert.AreEqual(4, quads.Count);
+            AssertCoversOnce(quads, samples: 48);
+            foreach (var q in quads)
+            {
+                Assert.AreEqual(0.5f, q.Size.x, 1e-5f);
+                Assert.AreEqual(0.5f, q.Size.y, 1e-5f);
+                Assert.AreEqual(0f, q.RotationDeg);
+            }
+            Assert.AreEqual(0.4f, LaminateLayout.TileMeters(LaminatePattern.Grid, 0.2f, 0.2f),
+                1e-5f, "2×2 block of 0.2 m tiles");
+        }
+
+        [Test]
+        public void HerringboneRatioTwo_CoversExactlyOnce()
+        {
+            // tile herringbone (0.2×0.1, n=2) — the same lattice at a smaller ratio
+            var quads = LaminateLayout.Generate(LaminatePattern.Herringbone, 0.2f, 0.1f, 32, Seed);
+            Assert.AreEqual(8, quads.Count, "4 H + 4 V in the 2n=4 cell grid");
+            AssertCoversOnce(quads, samples: 48);
+        }
+
+        [Test]
+        public void DefaultDeckOffset_IsUnchangedThirds()
+        {
+            // the deckOffset parameter must not silently change the laminate look
+            var a = LaminateLayout.Generate(LaminatePattern.Deck, L, W, Sources, Seed);
+            var b = LaminateLayout.Generate(LaminatePattern.Deck, L, W, Sources, Seed, 1f / 3f);
+            for (int i = 0; i < a.Count; i++)
+                Assert.AreEqual(a[i].Center, b[i].Center);
+        }
+
+        private static void AssertCoversOnce(List<PlankQuad> quads, int samples)
+        {
+            for (int a = 0; a < samples; a++)
+                for (int b = 0; b < samples; b++)
+                {
+                    var pnt = new Vector2((a + 0.5f) / samples, (b + 0.5f) / samples);
+                    Assert.AreEqual(1, CountCovering(quads, pnt), $"point {pnt}");
+                }
+        }
+
         private static float Frac(float v) => v - Mathf.Floor(v);
     }
 }

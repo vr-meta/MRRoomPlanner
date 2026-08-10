@@ -675,14 +675,16 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 
 ## 2u. Генератор плитки — кабанчик и др. (дизайн: `design/23-tile-generator.md`, фидбек 2026-08-12)
 
-- [ ] K1. Core: `LaminatePattern.Grid` + параметр `deckOffset` (½ для кабанчика,
+- [x] K1. Core: `LaminatePattern.Grid` + параметр `deckOffset` (½ для кабанчика,
   ⅓-дефолт ламинату) в `LaminateLayout.Generate`; `TileCatalog` (3 паттерна ×
-  6 цветов, id `tile-<pattern>-<color>`) + тесты (покрытие Grid, пин каталога)
-- [ ] K2. `TileBaker` (Editor, menu + headless): процедурное лицо (глазурь + шум +
+  6 цветов, id `tile-<pattern>-<color>`) + тесты (покрытие Grid/subway/ёлочка-n2,
+  неизменность дефолтной палубы, пин каталога)
+- [x] K2. `TileBaker` (Editor, menu + headless): процедурное лицо (глазурь + шум +
   пер-плиточная вариация), затирка ~1.2 мм, фаска (кабанчик 15 мм, остальные 3 мм)
-  в нормали; 18 diffuse + 3 нормали 1024² в `Textures/TilesBaked/`
-- [ ] K3. Wiring: записи в Tiles через `SetupPaintTool` (gloss 0.75, нормали);
-  SetupRig → тесты → APK → шлем
+  в нормали; 18 diffuse + 3 нормали 1024² в `Textures/TilesBaked/`; тайлы
+  проверены глазами (кабанчик — широкая фаска с митровыми углами)
+- [~] K3. Wiring: записи в Tiles через `SetupPaintTool` (gloss 0.75, нормали) [x];
+  EditMode 422/422, PlayMode 124/124; APK → шлем — ждёт команды
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 

@@ -267,8 +267,8 @@ namespace RoomPlanner.EditorTools
         }
 
         /// <summary>Same seamless-tiling import as the CC0 set; normals typed properly
-        /// so Unity packs/unpacks them for mobile.</summary>
-        private static void ConfigureImporter(string assetPath, bool normalMap)
+        /// so Unity packs/unpacks them for mobile. Shared with TileBaker (design/23).</summary>
+        internal static void ConfigureImporter(string assetPath, bool normalMap)
         {
             if (AssetImporter.GetAtPath(assetPath) is not TextureImporter imp) return;
             var wantType = normalMap ? TextureImporterType.NormalMap : TextureImporterType.Default;

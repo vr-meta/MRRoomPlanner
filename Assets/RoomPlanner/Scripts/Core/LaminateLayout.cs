@@ -4,13 +4,14 @@ using UnityEngine;
 
 namespace RoomPlanner.Core
 {
-    /// <summary>Laminate laying pattern (design/22). Chevron (45°) is deferred —
-    /// its period is not square without mitre cuts.</summary>
+    /// <summary>Laminate/tile laying pattern (design/22, 23). Chevron (45°) is
+    /// deferred — its period is not square without mitre cuts.</summary>
     public enum LaminatePattern
     {
-        Deck,          // running bond, rows offset by L/3
+        Deck,          // running bond, rows offset by deckOffset (laminate ⅓, subway ½)
         Herringbone,   // 0°/90° staircase
         Basket,        // 0.6 m squares of 3 half-planks, alternating direction
+        Grid,          // square tiles 2×2 (ceramic, design/23)
     }
 
     /// <summary>
@@ -43,16 +44,19 @@ namespace RoomPlanner.Core
         public static float TileMeters(LaminatePattern pattern, float plankL, float plankW)
         {
             // Herringbone's cell lattice repeats every 2n cells of size W = 2L metres;
-            // Deck rows and Basket squares both close after exactly one plank length.
-            return pattern == LaminatePattern.Herringbone ? 2f * plankL : plankL;
+            // Grid bakes a 2×2 block for variety; Deck rows and Basket squares both
+            // close after exactly one plank length.
+            return pattern is LaminatePattern.Herringbone or LaminatePattern.Grid
+                ? 2f * plankL : plankL;
         }
 
         public static List<PlankQuad> Generate(LaminatePattern pattern,
-            float plankL, float plankW, int sources, int seed)
+            float plankL, float plankW, int sources, int seed, float deckOffset = 1f / 3f)
         {
             if (plankL <= 0f || plankW <= 0f) throw new ArgumentOutOfRangeException(nameof(plankL));
             int n = Mathf.RoundToInt(plankL / plankW);
-            if (Mathf.Abs(plankL / plankW - n) > 1e-3f || n < 2)
+            int minRatio = pattern == LaminatePattern.Grid ? 1 : 2;   // square ceramic tiles
+            if (Mathf.Abs(plankL / plankW - n) > 1e-3f || n < minRatio)
                 throw new ArgumentException($"plank ratio must be an integer, got {plankL / plankW}");
             if (sources < 1) throw new ArgumentOutOfRangeException(nameof(sources));
 
@@ -60,27 +64,41 @@ namespace RoomPlanner.Core
             var quads = new List<PlankQuad>();
             switch (pattern)
             {
-                case LaminatePattern.Deck: GenerateDeck(n, sources, rng, quads); break;
+                case LaminatePattern.Deck: GenerateDeck(n, deckOffset, sources, rng, quads); break;
                 case LaminatePattern.Herringbone: GenerateHerringbone(n, sources, rng, quads); break;
                 case LaminatePattern.Basket: GenerateBasket(n, sources, rng, quads); break;
+                case LaminatePattern.Grid: GenerateGrid(sources, rng, quads); break;
                 default: throw new ArgumentOutOfRangeException(nameof(pattern));
             }
             return quads;
         }
 
-        /// <summary>n rows of full-length planks; row r shifted by (r mod 3)·L/3, so the
-        /// seam pattern cycles every 3 rows and never stacks.</summary>
-        private static void GenerateDeck(int n, int sources, System.Random rng, List<PlankQuad> quads)
+        /// <summary>n rows of full-length planks; row r shifted by r·offset·L (mod L) —
+        /// laminate cycles by thirds, subway tile (design/23) by halves.</summary>
+        private static void GenerateDeck(int n, float offset, int sources,
+            System.Random rng, List<PlankQuad> quads)
         {
             float w = 1f / n;
             for (int r = 0; r < n; r++)
             {
-                float x0 = (r % 3) / 3f;
+                float x0 = Frac(r * offset);
                 quads.Add(NewQuad(rng, sources,
                     center: new Vector2(Frac(x0 + 0.5f), (r + 0.5f) * w),
                     size: new Vector2(1f, w),
                     rotationDeg: 0f, crop0: 0f, crop1: 1f));
             }
+        }
+
+        /// <summary>2×2 block of square tiles (ceramic grid, design/23) — four sources
+        /// per bake tile keep the glaze variation from repeating too obviously.</summary>
+        private static void GenerateGrid(int sources, System.Random rng, List<PlankQuad> quads)
+        {
+            for (int j = 0; j < 2; j++)
+                for (int i = 0; i < 2; i++)
+                    quads.Add(NewQuad(rng, sources,
+                        center: new Vector2((i + 0.5f) * 0.5f, (j + 0.5f) * 0.5f),
+                        size: new Vector2(0.5f, 0.5f),
+                        rotationDeg: 0f, crop0: 0f, crop1: 1f));
         }
 
         /// <summary>
