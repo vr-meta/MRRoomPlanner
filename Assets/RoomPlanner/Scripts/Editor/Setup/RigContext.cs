@@ -31,6 +31,7 @@ namespace RoomPlanner.EditorTools
         public FloorController FloorTool;
         public BlueprintController Blueprint;
         public RoomPlanner.Import.ImportController Import;
+        public RoomPlanner.Electrical.ElectricController Electric;
         public PaintController Paint;
 
         // shared assets
@@ -38,6 +39,7 @@ namespace RoomPlanner.EditorTools
         public Material WallMat, WallEdgeMat, FloorMat;
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
+        public Material WireMat, FixtureMat;
         public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
     }
 }

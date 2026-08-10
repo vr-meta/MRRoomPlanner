@@ -30,6 +30,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private FloorController floor;
         [SerializeField] private BlueprintController blueprint;
         [SerializeField] private RoomPlanner.Import.ImportController importTool;
+        [SerializeField] private RoomPlanner.Electrical.ElectricController electric;
         [SerializeField] private PaintController paint;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
@@ -90,7 +91,7 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (palette buttons are generated from the same order by SetupPalette).
-            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, paint };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint };
 
             Debug.Log($"[Tools] v11 registry: {_tools.Length} tools, scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)

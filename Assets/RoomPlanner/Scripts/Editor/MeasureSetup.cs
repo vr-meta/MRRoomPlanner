@@ -31,6 +31,7 @@ namespace RoomPlanner.EditorTools
             SetupFloorTool.Build(ctx);
             SetupBlueprintTool.Build(ctx);
             SetupImportTool.Build(ctx);
+            SetupElectricTool.Build(ctx);
             SetupPaintTool.Build(ctx);
 
             ToolMenuAndInspector(ctx);
@@ -70,6 +71,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("floor").objectReferenceValue = ctx.FloorTool;
             so.FindProperty("blueprint").objectReferenceValue = ctx.Blueprint;
             so.FindProperty("importTool").objectReferenceValue = ctx.Import;
+            so.FindProperty("electric").objectReferenceValue = ctx.Electric;
             so.FindProperty("paint").objectReferenceValue = ctx.Paint;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
             so.FindProperty("skyMat").objectReferenceValue = ctx.SkyMat;

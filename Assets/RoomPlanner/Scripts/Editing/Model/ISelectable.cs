@@ -13,7 +13,7 @@ namespace RoomPlanner.Editing
     }
 
     /// <summary>Object families that can be selected/edited in the scene.</summary>
-    public enum SelectableKind { Measurement, Wall, Floor, Stair }
+    public enum SelectableKind { Measurement, Wall, Floor, Stair, Fixture, Wire }
 
     /// <summary>Visual state driven by the Select tool.</summary>
     public enum HighlightState { None, Hover, Selected }
