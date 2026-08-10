@@ -582,20 +582,24 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 
 ## 2r. Текстуры v1.2 — качество, плитка, глянец (фидбек со шлема 2026-08-11)
 
-- [~] R1. **2K-качество**: загрузка `_2K-JPG.zip`, импорт maxTextureSize 2048;
+- [x] R1. **2K-качество**: загрузка `_2K-JPG.zip`, импорт maxTextureSize 2048;
   маркер `.quality` в `Textures/` — при смене качества набор перекачивается
-- [~] R2. **«Много материалов»**: ~37 текстур, 4 категории (Walls: обои/штукатурки/
+- [x] R2. **«Много материалов»**: 37 текстур, 4 категории (Walls: обои/штукатурки/
   кирпич/бетон; Floors: дерево/доски/мрамор/ковролин; **Tiles** — на стены и пол;
   **Ceiling** — низ плиты); табы Paint: Color/Walls/Floors/Tiles/Ceiling, страницы
   генерируются из таблицы `TexTabs`
-- [~] R3. **Глянец**: `SurfaceFinish.Smoothness`, `_Smoothness` + Blinn-Phong в
+- [x] R3. **Глянец**: `SurfaceFinish.Smoothness`, `_Smoothness` + Blinn-Phong в
   `LitVertexAO`, каталожный gloss в `FinishLibrary`, степпер Gloss (auto/0–100 %)
   на всех табах Paint; тесты модели
-- [~] R5. **Тени солнца в доме**: URP asset 2048/soft/25 м (Setup), sun
+- [x] R5. **Тени солнца в доме**: URP asset 2048/soft/25 м (Setup), sun
   shadowStrength 0.75, стекло не кастует тень (`ShadowCaster` off у Wall_Glass);
   тумблер **Sun shadows** на Rendering-странице; тонировка через стекло по альфе —
   отложена (dithered-caster)
-- [ ] R4. Download Textures (2K) + SetupRig + тесты + APK + шлем
+- [x] R4. Download Textures (2K, 37/37 ок, 128 МБ) + SetupRig + тесты
+  (356/110 зелёные) + APK 117 МБ + шлем (2026-08-11)
+- [ ] R6. Проверка в шлеме: материалы/глянец/тени; следующий этап реализма — план
+  в артефакте (тонемап-кривая в шейдере, NormalGL/Roughness из ambientCG-архивов,
+  баланс солнце/ambient, пресеты времени дня, френель неба)
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
