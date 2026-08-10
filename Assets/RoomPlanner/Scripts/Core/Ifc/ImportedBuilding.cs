@@ -31,8 +31,11 @@ namespace RoomPlanner.Core.Ifc
         public float BaseHeight;
         public bool HasPaint;
         public Color PaintColor;
-        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.
+        /// v3 per-side walls (issue #34): this is the INNER side.</summary>
         public SurfaceFinish Finish;
+        /// <summary>The OUTER side (v3); loaders mirror Finish here for older files.</summary>
+        public SurfaceFinish FinishB;
     }
 
     public sealed class ImportedSlab
@@ -71,6 +74,9 @@ namespace RoomPlanner.Core.Ifc
         /// <summary>World-horizontal direction along the wall from the hinge jamb toward
         /// the free edge of the leaf; zero = unknown.</summary>
         public Vector3 HingeDir;
+        /// <summary>Leaf openness 0..1 (issue #50). IFC doors with known swing arrive
+        /// at 0.75 — the historical "imported doors stand open" look.</summary>
+        public float OpenFraction;
     }
 
     /// <summary>A stair flight as PARAMETERS (design/18 I9) â€” meshed by our Stair module.</summary>

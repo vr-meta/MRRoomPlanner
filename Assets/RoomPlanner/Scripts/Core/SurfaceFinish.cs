@@ -11,6 +11,14 @@ namespace RoomPlanner.Core
         Texture   // wallpaper / plaster / wood floor, optionally tinted by Color
     }
 
+    /// <summary>Physical side of a wall for per-side finishes (issue #34):
+    /// Inner faces the room the wall was drawn from, Outer looks away.</summary>
+    public enum WallSide
+    {
+        Inner = 0,
+        Outer = 1
+    }
+
     /// <summary>
     /// One surface's finish — pure data, the unit both the paint command and the project
     /// file store. Texture lookup (id → Texture2D) happens at the edges (FinishLibrary);

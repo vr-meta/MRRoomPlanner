@@ -42,6 +42,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Stairs.Stair _stair;
         private RoomPlanner.Electrical.ElectricFixture _fixture;
         private RoomPlanner.Electrical.WireRoute _route;
+        private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -78,7 +79,9 @@ namespace RoomPlanner.Editing
             _stair = GetComponent<RoomPlanner.Stairs.Stair>();
             _fixture = GetComponent<RoomPlanner.Electrical.ElectricFixture>();
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
+            _leafView = GetComponent<OpeningLeafView>();
             if (_wall != null) _kind = SelectableKind.Wall;
+            else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
             else if (_stair != null) _kind = SelectableKind.Stair;
             else if (_fixture != null) _kind = SelectableKind.Fixture;
@@ -121,12 +124,18 @@ namespace RoomPlanner.Editing
         }
 
         // ---- finish (design/04 «Текстуры v1»): color OR texture on the BODY ----
+        // Walls carry a PAIR of finishes (issue #34): _finish = inner side (and the
+        // whole object for every other kind), _finishOuter = outer side; the mesh
+        // splits the body into submeshes 0 (inner) / 3 (outer) / 4 (rims → outer).
 
         private SurfaceFinish _finish = SurfaceFinish.None;
         private Texture2D _finishTexture;   // resolved by the caller (FinishLibrary)
         private Texture2D _finishNormal;    // optional relief — null for most finishes (design/22)
+        private SurfaceFinish _finishOuter = SurfaceFinish.None;
+        private Texture2D _finishTextureOuter;
+        private Texture2D _finishNormalOuter;
 
-        public bool IsPainted { get { Resolve(); return !_finish.IsNone; } }
+        public bool IsPainted { get { Resolve(); return !_finish.IsNone || !_finishOuter.IsNone; } }
 
         /// <summary>Legacy color view of the finish (persisted colors, tint of a texture).</summary>
         public Color Paint { get { Resolve(); return _finish.Color; } }
@@ -134,6 +143,25 @@ namespace RoomPlanner.Editing
         public SurfaceFinish Finish { get { Resolve(); return _finish; } }
         public Texture2D FinishTexture { get { Resolve(); return _finishTexture; } }
         public Texture2D FinishNormal { get { Resolve(); return _finishNormal; } }
+
+        /// <summary>Per-side view: non-walls answer with their single finish.</summary>
+        public SurfaceFinish FinishOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishOuter : _finish;
+        }
+
+        public Texture2D FinishTextureOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishTextureOuter : _finishTexture;
+        }
+
+        public Texture2D FinishNormalOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishNormalOuter : _finishNormal;
+        }
 
         /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
         public Color BaseBodyColor
@@ -149,15 +177,38 @@ namespace RoomPlanner.Editing
         /// renderer — glass and joinery keep their look). Undo via PaintCommand.</summary>
         public void SetPaint(Color color) => SetFinish(SurfaceFinish.OfColor(color), null);
 
-        /// <summary>Apply a finish; for Texture kind the caller resolves the Texture2D
-        /// (and the optional normal map) through FinishLibrary — the model itself never
-        /// touches assets.</summary>
+        /// <summary>Apply a finish to the WHOLE object (both wall sides); for Texture
+        /// kind the caller resolves the Texture2D (and the optional normal map) through
+        /// FinishLibrary — the model itself never touches assets.</summary>
         public void SetFinish(SurfaceFinish finish, Texture2D texture, Texture2D normal = null)
         {
             Resolve();
             _finish = finish;
             _finishTexture = finish.Kind == FinishKind.Texture ? texture : null;
             _finishNormal = finish.Kind == FinishKind.Texture ? normal : null;
+            _finishOuter = _wall != null ? finish : SurfaceFinish.None;
+            _finishTextureOuter = _wall != null ? _finishTexture : null;
+            _finishNormalOuter = _wall != null ? _finishNormal : null;
+            ApplyVisual();
+        }
+
+        /// <summary>Apply a finish to ONE wall side (issue #34); anything that is not
+        /// a wall degrades to the whole-object path.</summary>
+        public void SetFinishSide(WallSide side, SurfaceFinish finish, Texture2D texture,
+            Texture2D normal = null)
+        {
+            Resolve();
+            if (_wall == null) { SetFinish(finish, texture, normal); return; }
+            var tex = finish.Kind == FinishKind.Texture ? texture : null;
+            var nrm = finish.Kind == FinishKind.Texture ? normal : null;
+            if (side == WallSide.Outer)
+            {
+                _finishOuter = finish; _finishTextureOuter = tex; _finishNormalOuter = nrm;
+            }
+            else
+            {
+                _finish = finish; _finishTexture = tex; _finishNormal = nrm;
+            }
             ApplyVisual();
         }
 
@@ -168,6 +219,9 @@ namespace RoomPlanner.Editing
             _finish = SurfaceFinish.None;
             _finishTexture = null;
             _finishNormal = null;
+            _finishOuter = SurfaceFinish.None;
+            _finishTextureOuter = null;
+            _finishNormalOuter = null;
             ApplyVisual();
         }
 
@@ -193,48 +247,36 @@ namespace RoomPlanner.Editing
                                                                  : RoomPlanner.Tools.UiColors.Hover;
             float t = _state == HighlightState.Selected ? SelectTint : HoverTint;
             bool hasFinish = !_finish.IsNone;
-            bool textured = _finish.Kind == FinishKind.Texture && _finishTexture != null;
 
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var r = _renderers[i];
                 if (r == null) continue;
-                // body color: solid paint, texture tint (usually white), or the material's own
-                Color own = i == 0 && hasFinish ? _finish.Color : _ownColors[i];
-                bool needBlock = tint || (i == 0 && hasFinish);
+
+                // Wall body with per-side submeshes (issue #34): inner (0) takes its
+                // own finish, outer (3) and rims (4) take the outer one — rims follow
+                // the outer look, as real decorating leaves reveals unpapered.
+                if (i == 0 && _wall != null && r.sharedMaterials.Length >= 5)
+                {
+                    BodyBlock(r, 0, _finish, _finishTexture, _finishNormal,
+                        tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 3, _finishOuter, _finishTextureOuter, _finishNormalOuter,
+                        tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 4, _finishOuter, _finishTextureOuter, _finishNormalOuter,
+                        tint, stateColor, t, _ownColors[i]);
+                    continue;
+                }
+
+                // a leaf view's "body" is every panel renderer, not just the first
+                bool body = i == 0 || _leafView != null;
+                bool needBlock = tint || (body && hasFinish);
                 bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
                 {
-                    Color c = tint ? Color.Lerp(own, stateColor, t) : own;
-                    _mpb.Clear();
-                    _mpb.SetColor(BaseColorId, c);
-                    _mpb.SetColor(ColorId, c);
-                    _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
-                    // finish gloss applies to color paint AND textures (design/04 v1.2)
-                    if (i == 0 && hasFinish) _mpb.SetFloat(SmoothnessId, _finish.Smoothness);
-                    if (i == 0 && textured)
-                    {
-                        // wallpaper/wood over the metric UVs: swap the texture and set the
-                        // metric tiling (design/04) — the material itself is never touched
-                        _mpb.SetTexture(BaseMapId, _finishTexture);
-                        _mpb.SetTexture(MainTexId, _finishTexture);
-                        _mpb.SetVector(BaseMapStId, _finish.UvScaleOffset());
-                        _mpb.SetVector(MainTexStId, _finish.UvScaleOffset());
-                        // turn the texture in the metric plane (rotate laminate etc.);
-                        // (cos,sin), default (1,0) = no rotation
-                        _mpb.SetVector(UvRotId, _finish.UvRotation());
-                        // floors keep the blueprint projection in uv0; finish textures
-                        // tile over the metric uv1 channel (design/04, T4)
-                        if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
-                        // optional relief (design/22): the shader derives the TBN from
-                        // derivatives, so no mesh tangents are needed
-                        if (_finishNormal != null)
-                        {
-                            _mpb.SetTexture(BumpMapId, _finishNormal);
-                            _mpb.SetFloat(HasBumpId, 1f);
-                        }
-                    }
+                    var finish = body ? _finish : SurfaceFinish.None;
+                    FillBlock(finish, body ? _finishTexture : null, body ? _finishNormal : null,
+                        tint, stateColor, t, _ownColors[i]);
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
@@ -242,6 +284,56 @@ namespace RoomPlanner.Editing
                 {
                     if (bodyOnly) r.SetPropertyBlock(null, 0);
                     else r.SetPropertyBlock(null);   // restore the material's own color
+                }
+            }
+        }
+
+        /// <summary>One body submesh of a per-side wall: block when painted or
+        /// highlighted, cleared otherwise.</summary>
+        private void BodyBlock(Renderer r, int index, SurfaceFinish finish, Texture2D tex,
+            Texture2D normal, bool tint, Color stateColor, float t, Color ownColor)
+        {
+            if (!tint && finish.IsNone) { r.SetPropertyBlock(null, index); return; }
+            FillBlock(finish, tex, normal, tint, stateColor, t, ownColor);
+            r.SetPropertyBlock(_mpb, index);
+        }
+
+        /// <summary>Fill _mpb for one surface: paint/texture/tint — the single place
+        /// deciding what a finish looks like.</summary>
+        private void FillBlock(SurfaceFinish finish, Texture2D tex, Texture2D normal,
+            bool tint, Color stateColor, float t, Color ownColor)
+        {
+            bool hasFinish = !finish.IsNone;
+            bool textured = finish.Kind == FinishKind.Texture && tex != null;
+            // body color: solid paint, texture tint (usually white), or the material's own
+            Color own = hasFinish ? finish.Color : ownColor;
+            Color c = tint ? Color.Lerp(own, stateColor, t) : own;
+            _mpb.Clear();
+            _mpb.SetColor(BaseColorId, c);
+            _mpb.SetColor(ColorId, c);
+            _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
+            // finish gloss applies to color paint AND textures (design/04 v1.2)
+            if (hasFinish) _mpb.SetFloat(SmoothnessId, finish.Smoothness);
+            if (textured)
+            {
+                // wallpaper/wood over the metric UVs: swap the texture and set the
+                // metric tiling (design/04) — the material itself is never touched
+                _mpb.SetTexture(BaseMapId, tex);
+                _mpb.SetTexture(MainTexId, tex);
+                _mpb.SetVector(BaseMapStId, finish.UvScaleOffset());
+                _mpb.SetVector(MainTexStId, finish.UvScaleOffset());
+                // turn the texture in the metric plane (rotate laminate etc.);
+                // (cos,sin), default (1,0) = no rotation
+                _mpb.SetVector(UvRotId, finish.UvRotation());
+                // floors keep the blueprint projection in uv0; finish textures
+                // tile over the metric uv1 channel (design/04, T4)
+                if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
+                // optional relief (design/22): the shader derives the TBN from
+                // derivatives, so no mesh tangents are needed
+                if (normal != null)
+                {
+                    _mpb.SetTexture(BumpMapId, normal);
+                    _mpb.SetFloat(HasBumpId, 1f);
                 }
             }
         }
@@ -260,6 +352,7 @@ namespace RoomPlanner.Editing
         public void MoveBy(Vector3 delta)
         {
             Resolve();
+            if (_leafView != null) return;   // doors move with the Openings tool, not Select
             if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
@@ -291,6 +384,9 @@ namespace RoomPlanner.Editing
         internal RoomPlanner.Electrical.ElectricFixture Fixture { get { Resolve(); return _fixture; } }
         internal RoomPlanner.Electrical.WireRoute Route { get { Resolve(); return _route; } }
 
+        /// <summary>The door/garage leaf this Selectable wraps (trigger toggle, issue #50).</summary>
+        internal OpeningLeafView LeafView { get { Resolve(); return _leafView; } }
+
         /// <summary>Per-instance rows come from a provider component, if one is present.</summary>
         public RoomPlanner.Core.SettingsSchema GetSettings()
         {
@@ -305,6 +401,13 @@ namespace RoomPlanner.Editing
             {
                 case SelectableKind.Wall:
                     return $"Length {WallLength() * 100f:0} cm";
+                case SelectableKind.Door:
+                {
+                    var op = _leafView != null ? _leafView.Opening : null;
+                    if (op == null) return "Door";
+                    string kind = op.Kind == RoomPlanner.Walls.OpeningKind.Garage ? "Garage door" : "Door";
+                    return $"{kind} {op.Width * 100f:0}×{op.Height * 100f:0} cm · open {op.OpenFraction * 100f:0}%";
+                }
                 case SelectableKind.Stair:
                     return _stair != null
                         ? $"{_stair.Risers} steps, {_stair.TotalHeight * 100f:0} cm up"

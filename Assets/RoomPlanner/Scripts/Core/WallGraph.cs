@@ -41,6 +41,11 @@ namespace RoomPlanner.Walls
         /// <summary>World-horizontal direction from the hinge jamb toward the leaf's free
         /// edge. Zero = closed leaf.</summary>
         public Vector3 HingeDir;
+
+        /// <summary>0 = closed … 1 = fully open (door swing / garage lift, issue #50).
+        /// A VIEW state, not a scene edit: persisted (format v3) but never in the undo
+        /// history. The leaf child view applies it via transforms.</summary>
+        public float OpenFraction;
     }
 
     /// <summary>

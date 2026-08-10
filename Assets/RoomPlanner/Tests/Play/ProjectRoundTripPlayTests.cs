@@ -228,6 +228,90 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator DoorOpenFraction_SurvivesTheRoundTrip_AndV2DerivesFromSwing()
+        {
+            // Issue #50: how far a door stands open is part of the scene; v2 files
+            // (no Open field) keep the old "swing-known doors stand at 75°" look.
+            var (import, walls, _) = MakeRig();
+            import.BuildScene(SampleBuilding());
+            yield return null;
+
+            var seg = walls.Graph.Segments[0];
+            var door = seg.Openings.Find(o => o.IsDoor);
+            Assert.IsNotNull(door);
+            door.OpenFraction = 0.4f;
+
+            var data = ProjectStore.Capture(walls, null);
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var rDoor = walls.Graph.Segments[0].Openings.Find(o => o.IsDoor);
+            Assert.AreEqual(0.4f, rDoor.OpenFraction, 1e-4f, "Open % survives the round-trip");
+
+            // v2 file: strip Open → swing-known doors derive 0.75, swingless stay closed
+            data.Version = 2;
+            foreach (var w in data.Walls)
+                foreach (var o in w.Openings) o.Open = 0f;
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(data.ToJson()), import, null);
+            yield return null;
+
+            rDoor = walls.Graph.Segments[0].Openings.Find(o => o.IsDoor && o.SwingDir.sqrMagnitude > 1e-6f);
+            Assert.IsNotNull(rDoor, "the sample door carries swing data");
+            Assert.AreEqual(0.75f, rDoor.OpenFraction, 1e-4f, "v2 look preserved");
+        }
+
+        [UnityTest]
+        public IEnumerator PerSideWallFinish_SurvivesTheRoundTrip_AndV2ReadsAsWhole()
+        {
+            // Format v3 (issue #34): walls carry a finish PAIR — wallpaper inside,
+            // paint outside must both come back; a v2 file's single finish still
+            // covers the whole wall.
+            var (import, walls, model) = MakeRig();
+            import.BuildScene(SampleBuilding());
+            yield return null;
+
+            var sel = walls.ViewOf(walls.Graph.Segments[0]).GetComponent<Selectable>();
+            sel.SetFinishSide(WallSide.Inner, SurfaceFinish.OfTexture("wallpaper-001a", 1f), null);
+            var outerPaint = new Color(0.9f, 0.9f, 0.85f);
+            sel.SetFinishSide(WallSide.Outer, SurfaceFinish.OfColor(outerPaint), null);
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual((int)FinishKind.Texture, data.Walls[0].Finish.Kind, "inner captured");
+            Assert.AreEqual((int)FinishKind.Color, data.Walls[0].FinishB.Kind, "outer captured separately");
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var rSel = walls.ViewOf(walls.Graph.Segments[0]).GetComponent<Selectable>();
+            Assert.AreEqual("wallpaper-001a", rSel.FinishOf(WallSide.Inner).TextureId,
+                "the inner wallpaper survives");
+            Assert.AreEqual(FinishKind.Color, rSel.FinishOf(WallSide.Outer).Kind,
+                "the outer paint survives");
+            Assert.AreEqual(outerPaint.r, rSel.FinishOf(WallSide.Outer).Color.r, 1e-3);
+
+            // v2 file: single Finish, no FinishB → the whole wall wears it
+            data.Version = 2;
+            foreach (var w in data.Walls) w.FinishB = new ProjectFinish();
+            string v2Json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(v2Json), import, null);
+            yield return null;
+
+            rSel = walls.ViewOf(walls.Graph.Segments[0]).GetComponent<Selectable>();
+            Assert.AreEqual("wallpaper-001a", rSel.FinishOf(WallSide.Outer).TextureId,
+                "a v2 single finish reads as whole-wall — both sides carry it");
+        }
+
+        [UnityTest]
         public IEnumerator Measurements_SurviveTheRoundTrip_AndClearScene()
         {
             // Format v2 (audit B3): measurements were neither saved nor cleared — after a

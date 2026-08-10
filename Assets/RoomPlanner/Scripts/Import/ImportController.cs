@@ -208,7 +208,7 @@ namespace RoomPlanner.Import
                 var sel = view.GetComponent<Selectable>();
                 _created.Add((sel, segments[i].storey));
                 var src = building.Walls[segments[i].wallIndex];
-                if (!ApplyFinish(sel, src.Finish) && src.HasPaint && sel != null)
+                if (!ApplyWallFinish(sel, src.Finish, src.FinishB) && src.HasPaint && sel != null)
                     sel.SetPaint(src.PaintColor);
             }
             int wallCount = segments.Count;
@@ -316,19 +316,40 @@ namespace RoomPlanner.Import
         private bool ApplyFinish(Selectable sel, Core.SurfaceFinish finish)
         {
             if (sel == null || finish.IsNone) return false;
-            Texture2D tex = null;
-            Texture2D normal = null;
-            if (finish.Kind == Core.FinishKind.Texture)
-            {
-                if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
-                if (_finishLibrary != null)
-                {
-                    _finishLibrary.TryGet(finish.TextureId, out tex, out _);
-                    normal = _finishLibrary.NormalOf(finish.TextureId);   // laminate relief (design/22)
-                }
-            }
-            sel.SetFinish(finish, tex, normal);
+            sel.SetFinish(finish, ResolveFinishTexture(finish), ResolveFinishNormal(finish));
             return true;
+        }
+
+        /// <summary>Wall finishes are a PAIR since format v3 (issue #34). Equal sides
+        /// (old files, whole-wall paint) go through the whole-object path; mixed
+        /// sides restore each face, a None side staying the material's own look.</summary>
+        private bool ApplyWallFinish(Selectable sel, Core.SurfaceFinish inner, Core.SurfaceFinish outer)
+        {
+            if (sel == null) return false;
+            if (inner.IsNone && outer.IsNone) return false;
+            if (inner.Equals(outer)) return ApplyFinish(sel, inner);
+            sel.SetFinishSide(Core.WallSide.Inner, inner,
+                ResolveFinishTexture(inner), ResolveFinishNormal(inner));
+            sel.SetFinishSide(Core.WallSide.Outer, outer,
+                ResolveFinishTexture(outer), ResolveFinishNormal(outer));
+            return true;
+        }
+
+        private Texture2D ResolveFinishTexture(Core.SurfaceFinish finish)
+        {
+            if (finish.Kind != Core.FinishKind.Texture) return null;
+            if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+            Texture2D tex = null;
+            if (_finishLibrary != null) _finishLibrary.TryGet(finish.TextureId, out tex, out _);
+            return tex;
+        }
+
+        /// <summary>Optional relief of the finish (laminate — design/22); null otherwise.</summary>
+        private Texture2D ResolveFinishNormal(Core.SurfaceFinish finish)
+        {
+            if (finish.Kind != Core.FinishKind.Texture) return null;
+            if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+            return _finishLibrary != null ? _finishLibrary.NormalOf(finish.TextureId) : null;
         }
 
         /// <summary>Material by category; strongly transparent surfaces (glass shower
@@ -396,6 +417,7 @@ namespace RoomPlanner.Import
                         : (op.IsDoor ? OpeningKind.Door : OpeningKind.Window),
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
+                    OpenFraction = Mathf.Clamp01(op.OpenFraction),
                 });
                 count++;
             }

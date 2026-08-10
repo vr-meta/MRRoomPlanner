@@ -47,8 +47,11 @@ namespace RoomPlanner.EditorTools
         {
             var root = new GameObject("Wall");
             root.AddComponent<MeshFilter>();
-            // submesh 0 = wall, 1 = window glass, 2 = frames/door leaves (empty without openings)
-            root.AddComponent<MeshRenderer>().sharedMaterials = new[] { mat, glassMat, joineryMat };
+            // submesh 0 = inner side, 1 = window glass, 2 = frames/door leaves,
+            // 3 = outer side, 4 = rims/jambs (per-side paint, issue #34) — 3/4 share
+            // the wall material, so an unpainted wall looks exactly as before
+            root.AddComponent<MeshRenderer>().sharedMaterials =
+                new[] { mat, glassMat, joineryMat, mat, mat };
             var wall = root.AddComponent<Wall>();
             root.AddComponent<WallParameters>();   // per-instance rows in the inspector (B4)
             root.AddComponent<WallHandles>();      // draggable node handles (B5)

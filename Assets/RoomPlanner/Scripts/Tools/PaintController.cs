@@ -2,35 +2,56 @@ using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Editing;
 using RoomPlanner.Measure;
+using RoomPlanner.Walls;
 
 namespace RoomPlanner.Tools
 {
-    /// <summary>Apply a finish (solid color OR texture) to the object's body — undo
-    /// restores the previous finish, or the material's own look if it never had one.
-    /// Before/after snapshots, not deltas (coding rule: no clamp drift).</summary>
+    /// <summary>Apply a finish (solid color OR texture) to the object's body — the
+    /// whole object, or ONE side of a wall (issue #34). Undo restores BOTH sides'
+    /// previous finishes, so mixed states survive the round-trip. Before/after
+    /// snapshots, not deltas (coding rule: no clamp drift).</summary>
     public class PaintCommand : ICommand, ISelectableCommand
     {
         private readonly Selectable _target;
         private readonly SurfaceFinish _after;
         private readonly Texture2D _afterTex;
         private readonly Texture2D _afterNormal;
-        private readonly SurfaceFinish _before;
-        private readonly Texture2D _beforeTex;
-        private readonly Texture2D _beforeNormal;
+        private readonly bool _sideOnly;
+        private readonly WallSide _side;
+        private readonly SurfaceFinish _beforeInner, _beforeOuter;
+        private readonly Texture2D _beforeInnerTex, _beforeOuterTex;
+        private readonly Texture2D _beforeInnerNormal, _beforeOuterNormal;
 
         public PaintCommand(Selectable target, Color color)
             : this(target, SurfaceFinish.OfColor(color), null) { }
 
         public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
             Texture2D afterNormal = null)
+            : this(target, after, afterTex, sideOnly: false, WallSide.Inner, afterNormal) { }
+
+        /// <summary>Paint one wall side (Apply: Side, the default).</summary>
+        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
+            WallSide side, Texture2D afterNormal = null)
+            : this(target, after, afterTex, sideOnly: true, side, afterNormal) { }
+
+        private PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
+            bool sideOnly, WallSide side, Texture2D afterNormal)
         {
             _target = target;
             _after = after;
             _afterTex = afterTex;
             _afterNormal = afterNormal;
-            _before = target != null ? target.Finish : SurfaceFinish.None;
-            _beforeTex = target != null ? target.FinishTexture : null;
-            _beforeNormal = target != null ? target.FinishNormal : null;
+            _sideOnly = sideOnly;
+            _side = side;
+            if (target != null)
+            {
+                _beforeInner = target.FinishOf(WallSide.Inner);
+                _beforeInnerTex = target.FinishTextureOf(WallSide.Inner);
+                _beforeInnerNormal = target.FinishNormalOf(WallSide.Inner);
+                _beforeOuter = target.FinishOf(WallSide.Outer);
+                _beforeOuterTex = target.FinishTextureOf(WallSide.Outer);
+                _beforeOuterNormal = target.FinishNormalOf(WallSide.Outer);
+            }
         }
 
         public ISelectable Target => _target;
@@ -38,8 +59,20 @@ namespace RoomPlanner.Tools
         private bool Alive => _target != null && _target.IsAlive;
 
         public string Name => "Paint";
-        public void Do() { if (Alive) _target.SetFinish(_after, _afterTex, _afterNormal); }
-        public void Undo() { if (Alive) _target.SetFinish(_before, _beforeTex, _beforeNormal); }
+
+        public void Do()
+        {
+            if (!Alive) return;
+            if (_sideOnly) _target.SetFinishSide(_side, _after, _afterTex, _afterNormal);
+            else _target.SetFinish(_after, _afterTex, _afterNormal);
+        }
+
+        public void Undo()
+        {
+            if (!Alive) return;
+            _target.SetFinishSide(WallSide.Inner, _beforeInner, _beforeInnerTex, _beforeInnerNormal);
+            _target.SetFinishSide(WallSide.Outer, _beforeOuter, _beforeOuterTex, _beforeOuterNormal);
+        }
     }
 
     /// <summary>
@@ -81,6 +114,9 @@ namespace RoomPlanner.Tools
 
         private int _preset;
         private int _tab;          // 0 Color · 1.. = TexTabs categories
+        // 0 = one wall side (the default — headset feedback 2026-08-10), 1 = whole object
+        private int _scope;
+        private static readonly string[] ApplyOptions = { "Side", "Whole" };
         private readonly int[] _pick = new int[TexTabs.Length];
         // tile-size overrides in metres, both axes; 0 = the texture's own catalog tile
         // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
@@ -121,6 +157,7 @@ namespace RoomPlanner.Tools
                         i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
                     .Readout("cname", "Preset", () => Presets[_preset].Name);
                 AddGlossStepper(colorPage, "cg", 0);
+                AddApplyScope(colorPage, "ap-color");
                 colorPage.Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered);
                 // NOTE: the Shading toggles moved to the Rendering page (snap-strip gear).
 
@@ -165,11 +202,38 @@ namespace RoomPlanner.Tools
                         () => _rot[c] = Mathf.Repeat(_rot[c] - 15f, 360f),
                         () => _rot[c] = Mathf.Repeat(_rot[c] + 15f, 360f));
                 AddGlossStepper(page, $"gl-{k}", c + 1);
+                // Apply scope only where a wall can be the target (Walls, Tiles)
+                if (CategoryAccepts(TexTabs[c].cat, SelectableKind.Wall))
+                    AddApplyScope(page, $"ap-{k}");
             }
             else
                 page.Readout($"none-{k}", "Textures", () => "run Download Textures");
             page.Action($"clear-{k}", "Original look (unpaint aimed)", "eraser", ClearHovered);
             return page;
+        }
+
+        /// <summary>One shared paint scope (issue #34): Side = the wall face the ray
+        /// hit, Whole = the entire object. Non-walls always paint whole.</summary>
+        private void AddApplyScope(SettingsSchema page, string id) =>
+            page.Segmented(id, "Apply", ApplyOptions,
+                () => _scope, i => _scope = Mathf.Clamp(i, 0, 1));
+
+        /// <summary>The texture category the active tab paints with; null = Color tab.</summary>
+        private string ActiveCategory => _tab == 0 ? null : TexTabs[_tab - 1].cat;
+
+        /// <summary>Tab-target filter (audit 06 §Б5): a Floors texture must refuse a
+        /// wall and vice versa. Colors apply to anything paintable. Static + public
+        /// so the rule is unit-testable.</summary>
+        public static bool CategoryAccepts(string category, SelectableKind kind)
+        {
+            switch (category)
+            {
+                case "Walls": return kind == SelectableKind.Wall;
+                case "Floors": return kind == SelectableKind.Floor || kind == SelectableKind.Stair;
+                case "Tiles": return kind == SelectableKind.Wall || kind == SelectableKind.Floor;
+                case "Ceiling": return kind == SelectableKind.Floor;
+                default: return true;   // Color tab (null) — anything paintable
+            }
         }
 
         /// <summary>Gloss stepper on every tab (design/04 v1.2): auto = catalog gloss
@@ -248,6 +312,7 @@ namespace RoomPlanner.Tools
         {
             SetHover(null);
             _lastAimed = null;   // a stale target must not survive a tool switch
+            SetReticleDanger(false);
             if (reticle != null) reticle.gameObject.SetActive(false);
         }
 
@@ -257,6 +322,7 @@ namespace RoomPlanner.Tools
             if (blocked)
             {
                 SetHover(null);
+                SetReticleDanger(false);
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 return;
             }
@@ -266,6 +332,10 @@ namespace RoomPlanner.Tools
             if (sel != null && sel.Kind == SelectableKind.Measurement) sel = null;  // not paintable
             SetHover(sel);
 
+            // Tab-target filter (audit 06 §Б5): wrong-category target reads as a
+            // Danger cursor and the trigger refuses with a weak tick.
+            bool mismatch = sel != null && !CategoryAccepts(ActiveCategory, sel.Kind);
+
             // the CURSOR is the aiming feedback — hover tint alone read as "куда я
             // вообще целюсь?" on device (feedback 2026-08-10)
             if (reticle != null)
@@ -273,16 +343,58 @@ namespace RoomPlanner.Tools
                 reticle.gameObject.SetActive(sel != null);
                 if (sel != null) reticle.position = point;
             }
+            SetReticleDanger(mismatch);
 
-            if (input.ConfirmPressed() && _hover != null
-                && TryCurrentFinish(out var finish, out var texture, out var normal))
+            if (input.ConfirmPressed() && _hover != null)
             {
-                sceneModel.History.Execute(new PaintCommand(_hover, finish, texture, normal));
-                input.Pulse(0.5f, 0.02f);
+                if (mismatch || !TryCurrentFinish(out var finish, out var texture, out var normal))
+                {
+                    input.Pulse(0.2f, 0.01f);   // refusal — the cursor is already red
+                }
+                else
+                {
+                    // Apply: Side (default) paints the wall face the ray hit; Whole
+                    // and non-walls keep the object-wide behaviour (issue #34).
+                    var wallView = _scope == 0 && _hover.Kind == SelectableKind.Wall
+                        ? _hover.GetComponent<Wall>() : null;
+                    var cmd = wallView != null
+                        ? new PaintCommand(_hover, finish, texture, wallView.SideOf(point), normal)
+                        : new PaintCommand(_hover, finish, texture, normal);
+                    sceneModel.History.Execute(cmd);
+                    input.Pulse(0.5f, 0.02f);
+                }
             }
 
             if (input.ClearPressed() && manager != null)
                 manager.ActivateTool("select");
+        }
+
+        // ---- Danger cursor for the tab-target filter (audit 06 §Б5) ----
+
+        private static readonly int ReticleBaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ReticleColorId = Shader.PropertyToID("_Color");
+        private Renderer _reticleRenderer;
+        private MaterialPropertyBlock _reticleMpb;
+        private bool _reticleDanger;
+
+        private void SetReticleDanger(bool danger)
+        {
+            if (danger == _reticleDanger) return;
+            _reticleDanger = danger;
+            if (_reticleRenderer == null && reticle != null)
+                _reticleRenderer = reticle.GetComponentInChildren<Renderer>(true);
+            if (_reticleRenderer == null) return;
+            if (danger)
+            {
+                if (_reticleMpb == null) _reticleMpb = new MaterialPropertyBlock();
+                _reticleMpb.SetColor(ReticleBaseColorId, UiTokens.Danger);
+                _reticleMpb.SetColor(ReticleColorId, UiTokens.Danger);
+                _reticleRenderer.SetPropertyBlock(_reticleMpb);
+            }
+            else
+            {
+                _reticleRenderer.SetPropertyBlock(null);
+            }
         }
 
         /// <summary>The last object the tool ray actually touched. Clicking the "Original

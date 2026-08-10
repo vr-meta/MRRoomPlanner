@@ -39,9 +39,6 @@ namespace RoomPlanner.Walls
 
         private const int RoundSegments = 5;
         private const float MinSize = 0.001f;        // smallest sane thickness/height, m
-        /// <summary>How far an imported door leaf stands open (degrees around the hinge) —
-        /// wide enough to walk through, closed enough to read as a door.</summary>
-        public const float DoorOpenAngleDeg = 75f;
         private const float DupEpsSqr = 1e-6f;       // consecutive points closer than 1 mm collapse
         private const float MiterLimit = 4f;         // max miter length in multiples of the offset
 
@@ -96,7 +93,13 @@ namespace RoomPlanner.Walls
             _mode = mode; _join = join; _interior = interior;
             _mesh.Clear();
             if (_edges != null) _edges.Clear();
-            if (_pts.Count < 2) { if (_collider != null) _collider.sharedMesh = null; return; }
+            _leafData.Clear();
+            if (_pts.Count < 2)
+            {
+                if (_collider != null) _collider.sharedMesh = null;
+                SyncLeafViews();
+                return;
+            }
 
             float dOut, dIn;
             switch (mode)
@@ -111,6 +114,7 @@ namespace RoomPlanner.Walls
             // oSign mirrors the footprint across the centerline, which flips triangle
             // orientation; compensate so faces always point outward.
             Triangulate(sections, _height, flip: oSign < 0f);
+            SyncLeafViews();   // the polyline path has no openings — clears stale leaves
         }
 
         /// <summary>Rebuild the mesh from the current centerline and cached parameters.</summary>
@@ -154,10 +158,12 @@ namespace RoomPlanner.Walls
             _segment = s;
             _mesh.Clear();
             if (_edges != null) _edges.Clear();
+            _leafData.Clear();
 
             if (s == null || s.A == null || s.B == null || s.Length < MinSize)
             {
                 if (_collider != null) _collider.sharedMesh = null;
+                SyncLeafViews();
                 return;
             }
 
@@ -193,6 +199,7 @@ namespace RoomPlanner.Walls
                 TriangulateWithOpenings(sections[0], sections[1], height, !towardPlus, s.Openings, s.Length);
             else
                 Triangulate(sections, height, flip: !towardPlus);
+            SyncLeafViews();
         }
 
         /// <summary>
@@ -209,7 +216,12 @@ namespace RoomPlanner.Walls
         {
             var v = new List<Vector3>();
             var uv = new List<Vector2>();
-            var tris = new List<int>();
+            // Per-side wall finishes (issue #34): the body splits into inner (0),
+            // outer (3) and rims — top/bottom/caps/jambs (4); glass (1) and
+            // joinery (2) keep their indices so existing material slots stay valid.
+            var inner = new List<int>();
+            var outer = new List<int>();
+            var rims = new List<int>();
             var glass = new List<int>();
             var joinery = new List<int>();   // frames + door leaves (submesh 2)
             var ev = new List<Vector3>();
@@ -256,17 +268,17 @@ namespace RoomPlanner.Walls
 
             // faces oriented as in Triangulate(): inner toward the room, outer away, etc.
             void FaceInner(float t0, float t1, float y0, float y1) =>
-                Face(tris, I(t0, y0), I(t0, y1), I(t1, y1), I(t1, y0), U(t0), VV(y0), U(t1), VV(y1));
+                Face(inner, I(t0, y0), I(t0, y1), I(t1, y1), I(t1, y0), U(t0), VV(y0), U(t1), VV(y1));
             void FaceOuter(float t0, float t1, float y0, float y1) =>
-                Face(tris, O(t0, y1), O(t0, y0), O(t1, y0), O(t1, y1), U(t0), VV(y1), U(t1), VV(y0));
+                Face(outer, O(t0, y1), O(t0, y0), O(t1, y0), O(t1, y1), U(t0), VV(y1), U(t1), VV(y0));
             void FaceUp(float t0, float t1, float y) =>
-                Face(tris, I(t0, y), O(t0, y), O(t1, y), I(t1, y), U(t0), 0f, U(t1), wu);
+                Face(rims, I(t0, y), O(t0, y), O(t1, y), I(t1, y), U(t0), 0f, U(t1), wu);
             void FaceDown(float t0, float t1, float y) =>
-                Face(tris, O(t0, y), I(t0, y), I(t1, y), O(t1, y), U(t0), 0f, U(t1), wu);
+                Face(rims, O(t0, y), I(t0, y), I(t1, y), O(t1, y), U(t0), 0f, U(t1), wu);
             void FaceCapBack(float t, float y0, float y1) =>   // faces -t (wall start / right jamb)
-                Face(tris, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
+                Face(rims, O(t, y0), O(t, y1), I(t, y1), I(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
             void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
-                Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
+                Face(rims, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
 
             // A free-standing joinery block (frame bar / door leaf): all six faces, each
             // reusing the orientation of the corresponding verified wall-face pattern.
@@ -281,53 +293,55 @@ namespace RoomPlanner.Walls
                 Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1) + dw, VV(y1));
             }
 
-            // Box() with WORLD axes: x along `ax`, y along `ay`, z along `az` (full-length
-            // vectors, corner at `o`). Same face pattern, so the winding stays verified as
-            // long as (ax, ay, az) matches the handedness of the wall's (t, y, d) frame.
-            void BoxWorld(Vector3 o, Vector3 ax, Vector3 ay, Vector3 az)
+            // The moving leaf is NOT part of this mesh (issue #50): doors and garage
+            // panels become OpeningLeafView children, so opening them is transform-only.
+            // Here we just collect the leaf anchors while P() is in scope.
+            var alongW = P(1f, 0f, 0.5f) - P(0f, 0f, 0.5f); alongW.y = 0f;
+            var depthW = P(0.5f, 0f, 1f) - P(0.5f, 0f, 0f); depthW.y = 0f;   // inner → outer
+            bool frameOk = alongW.sqrMagnitude > 1e-8f && depthW.sqrMagnitude > 1e-8f;
+            if (frameOk) { alongW.Normalize(); depthW.Normalize(); }
+
+            void AddLeafData(float t0, float t1, float ys, float yh, WallOpening src)
             {
-                Vector3 Q(float x, float y, float z) => o + ax * x + ay * y + az * z;
-                Face(joinery, Q(0, 0, 0), Q(0, 1, 0), Q(1, 1, 0), Q(1, 0, 0), 0f, 0f, 1f, 1f);
-                Face(joinery, Q(0, 1, 1), Q(0, 0, 1), Q(1, 0, 1), Q(1, 1, 1), 0f, 1f, 1f, 0f);
-                Face(joinery, Q(0, 1, 0), Q(0, 1, 1), Q(1, 1, 1), Q(1, 1, 0), 0f, 1f, 1f, 1f);
-                Face(joinery, Q(0, 0, 1), Q(0, 0, 0), Q(1, 0, 0), Q(1, 0, 1), 0f, 0f, 1f, 0f);
-                Face(joinery, Q(0, 0, 1), Q(0, 1, 1), Q(0, 1, 0), Q(0, 0, 0), 0f, 0f, 0f, 1f);
-                Face(joinery, Q(1, 0, 0), Q(1, 1, 0), Q(1, 1, 1), Q(1, 0, 1), 1f, 0f, 1f, 1f);
-            }
+                if (src == null || !frameOk) return;
+                bool hingeAtEnd = src.HingeDir.sqrMagnitude > 1e-6f
+                    && Vector3.Dot(src.HingeDir, alongW) < 0f;
 
-            // A door leaf swung open around its hinge jamb (imported swing data). Returns
-            // false when the swing is unknown or degenerate — caller emits the closed leaf.
-            bool OpenLeaf(float t0, float t1, float ys, float yh, WallOpening src)
-            {
-                if (src == null) return false;
-                if (src.SwingDir.sqrMagnitude < 1e-6f || src.HingeDir.sqrMagnitude < 1e-6f) return false;
+                if (src.Kind == OpeningKind.Garage)
+                {
+                    var o0 = P(t0, ys, 0.5f);
+                    var o1 = P(t1, ys, 0.5f);
+                    var run = o1 - o0; run.y = 0f;
+                    if (run.sqrMagnitude < 1e-6f || yh - ys < 1e-3f) return;
+                    _leafData.Add(new LeafData
+                    {
+                        Op = src, Kind = OpeningKind.Garage,
+                        Origin = (o0 + o1) * 0.5f,
+                        AxisZ = -depthW,                       // panels fold toward the room
+                        YawSign = -1f,
+                        Width = run.magnitude, Height = yh - ys, Thickness = thickness,
+                    });
+                    return;
+                }
 
-                var alongW = P(1f, 0f, 0.5f) - P(0f, 0f, 0.5f); alongW.y = 0f;
-                var depthW = P(0.5f, 0f, 1f) - P(0.5f, 0f, 0f); depthW.y = 0f;
-                if (alongW.sqrMagnitude < 1e-8f || depthW.sqrMagnitude < 1e-8f) return false;
-                alongW.Normalize(); depthW.Normalize();
-
-                bool hingeAtEnd = Vector3.Dot(src.HingeDir, alongW) < 0f;
                 var pHinge = P(hingeAtEnd ? t1 : t0, ys, 0.5f);
                 var pFree = P(hingeAtEnd ? t0 : t1, ys, 0.5f);
-                var run = pFree - pHinge; run.y = 0f;
-                float w = run.magnitude;
-                float leafH = yh - ys;
-                if (w < 1e-3f || leafH < 1e-3f) return false;
-                run /= w;
-
-                var side = Vector3.Dot(src.SwingDir, depthW) >= 0f ? depthW : -depthW;
-                float a = DoorOpenAngleDeg * Mathf.Deg2Rad;
-                var leafDir = run * Mathf.Cos(a) + side * Mathf.Sin(a);
-                // keep the box frame's handedness equal to the wall frame's, or every
-                // face of the leaf would point inward
-                float hand = Vector3.Dot(Vector3.Cross(alongW, Vector3.up), depthW) >= 0f ? 1f : -1f;
-                var leafN = Vector3.Cross(leafDir, Vector3.up).normalized * hand;
-                float leafT = Mathf.Min(0.04f, thickness * 0.4f);
-
-                BoxWorld(pHinge - leafN * (leafT * 0.5f),
-                    leafDir * w, Vector3.up * leafH, leafN * leafT);
-                return true;
+                var axisX = pFree - pHinge; axisX.y = 0f;
+                float w = axisX.magnitude;
+                if (w < 1e-3f || yh - ys < 1e-3f) return;
+                axisX /= w;
+                var axisZ = Vector3.Cross(axisX, Vector3.up).normalized;
+                var swing = src.SwingDir.sqrMagnitude > 1e-6f
+                    ? (Vector3.Dot(src.SwingDir, depthW) >= 0f ? depthW : -depthW)
+                    : -depthW;                                 // unknown swing: open inward
+                _leafData.Add(new LeafData
+                {
+                    Op = src, Kind = OpeningKind.Door,
+                    Origin = pHinge, AxisZ = axisZ,
+                    // -yaw turns local +X (free edge) toward local +Z
+                    YawSign = Vector3.Dot(swing, axisZ) >= 0f ? -1f : 1f,
+                    Width = w, Height = yh - ys, Thickness = thickness,
+                });
             }
 
             void EdgeRect(System.Func<float, float, Vector3> at, float t0, float t1, float y0, float y1)
@@ -414,34 +428,11 @@ namespace RoomPlanner.Walls
                 {
                     Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.ys + frameY, fd0, fd1); // sill board
                 }
-                else if (op.src != null && op.src.Kind == OpeningKind.Garage)
+                else
                 {
-                    // Sectional garage leaf (audit F1): four stacked panels of alternating
-                    // thickness — the steps read as the section seams without through-gaps.
-                    // Always closed, no swing; opening animation is v2 (design/03).
-                    float thick = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
-                    float thin = thick * 0.55f;
-                    float ys0 = op.ys, yh0 = op.yh - frameY;
-                    const int Panels = 4;
-                    float panelH = (yh0 - ys0) / Panels;
-                    if (panelH > 0.02f)
-                        for (int p = 0; p < Panels; p++)
-                        {
-                            float half = (p & 1) == 0 ? thick : thin;
-                            Box(op.t0 + frameT, op.t1 - frameT,
-                                ys0 + p * panelH, ys0 + (p + 1) * panelH,
-                                0.5f - half, 0.5f + half);
-                        }
-                    else
-                        Box(op.t0 + frameT, op.t1 - frameT, ys0, yh0, 0.5f - thick, 0.5f + thick);
-                }
-                else if (!OpenLeaf(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY, op.src))
-                {
-                    // door leaf: fills the frame, thinner than the wall; closed when the
-                    // swing side is unknown (hand-drawn walls) — opening it is Phase D
-                    float leafHalf = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
-                    Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY,
-                        0.5f - leafHalf, 0.5f + leafHalf);
+                    // door leaf / garage panels live in an OpeningLeafView child
+                    // (issue #50) — collected here, synced after the mesh is set
+                    AddLeafData(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY, op.src);
                 }
 
                 cursor = op.t1;
@@ -461,13 +452,15 @@ namespace RoomPlanner.Walls
             EdgeRect(I, 0f, 1f, 0f, height);
             EdgeRect(O, 0f, 1f, 0f, height);
 
-            _mesh.subMeshCount = 3;
+            _mesh.subMeshCount = 5;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
             _mesh.SetColors(colors);
-            _mesh.SetTriangles(tris, 0);
+            _mesh.SetTriangles(inner, 0);
             _mesh.SetTriangles(glass, 1);
             _mesh.SetTriangles(joinery, 2);
+            _mesh.SetTriangles(outer, 3);
+            _mesh.SetTriangles(rims, 4);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 
@@ -517,6 +510,115 @@ namespace RoomPlanner.Walls
         /// other walls that hang off the same nodes.
         /// </summary>
         public System.Action<WallSegment> GeometryChanged;
+
+        // ---- openable leaves (issue #50): one child view per door/garage opening ----
+
+        private struct LeafData
+        {
+            public WallOpening Op;
+            public OpeningKind Kind;
+            public Vector3 Origin, AxisZ;
+            public float YawSign, Width, Height, Thickness;
+        }
+
+        private readonly List<LeafData> _leafData = new();
+        private readonly Dictionary<int, OpeningLeafView> _leafViews = new();
+        private readonly List<int> _staleLeafIds = new();
+        private Material _leafMat;
+        private bool _leafMatResolved;
+
+        /// <summary>Live leaf views (doors/garage) — the renderer dresses these with
+        /// selection adapters. Enumerated on rebuild events only, never per frame.</summary>
+        public Dictionary<int, OpeningLeafView>.ValueCollection Leaves => _leafViews.Values;
+
+        /// <summary>The leaf view of one opening, or null (windows have none).</summary>
+        public OpeningLeafView LeafOf(WallOpening op) =>
+            op != null && _leafViews.TryGetValue(op.Id, out var v) ? v : null;
+
+        /// <summary>Match leaf children to the freshly triangulated openings: create the
+        /// missing, drop the stale, re-place the rest. Allocation-free while nothing
+        /// changed — node drags rebuild walls every frame (coding rule 4.2).</summary>
+        private void SyncLeafViews()
+        {
+            _staleLeafIds.Clear();
+            foreach (var kv in _leafViews)
+            {
+                bool wanted = false;
+                for (int i = 0; i < _leafData.Count; i++)
+                    if (_leafData[i].Op.Id == kv.Key) { wanted = true; break; }
+                if (!wanted || kv.Value == null) _staleLeafIds.Add(kv.Key);
+            }
+            for (int i = 0; i < _staleLeafIds.Count; i++)
+            {
+                var view = _leafViews[_staleLeafIds[i]];
+                _leafViews.Remove(_staleLeafIds[i]);
+                if (view == null) continue;
+                if (Application.isPlaying) Destroy(view.gameObject);
+                else DestroyImmediate(view.gameObject);
+            }
+
+            for (int i = 0; i < _leafData.Count; i++)
+            {
+                var d = _leafData[i];
+                if (!_leafViews.TryGetValue(d.Op.Id, out var view) || view == null)
+                {
+                    var go = new GameObject($"Leaf#{d.Op.Id}");
+                    go.layer = gameObject.layer;
+                    go.transform.SetParent(transform, false);
+                    view = go.AddComponent<OpeningLeafView>();
+                    _leafViews[d.Op.Id] = view;
+                }
+                view.transform.SetPositionAndRotation(d.Origin,
+                    Quaternion.LookRotation(d.AxisZ, Vector3.up));
+                view.Bind(this, d.Op, d.YawSign);
+                view.Rebuild(d.Kind, d.Width, d.Height, d.Thickness, LeafMaterial());
+            }
+        }
+
+        private Material LeafMaterial()
+        {
+            if (_leafMatResolved) return _leafMat;
+            _leafMatResolved = true;
+            var mr = GetComponent<MeshRenderer>();
+            if (mr == null) return null;
+            var mats = mr.sharedMaterials;   // copies — resolved once, then cached
+            _leafMat = mats.Length > 2 && mats[2] != null ? mats[2]
+                : mats.Length > 0 ? mats[0] : null;
+            return _leafMat;
+        }
+
+        /// <summary>
+        /// Which physical side of the wall a world point lies on (issue #34, per-side
+        /// paint): sign of the point against the outward normal of the nearest
+        /// centreline segment. Points on rims/caps resolve to whichever half carries
+        /// them — good enough for aim-to-paint.
+        /// </summary>
+        public WallSide SideOf(Vector3 p)
+        {
+            if (_pts.Count < 2) return WallSide.Inner;
+            float bestSq = float.MaxValue;
+            int bi = 0;
+            Vector3 closest = _pts[0];
+            for (int i = 0; i < _pts.Count - 1; i++)
+            {
+                Vector3 a = _pts[i];
+                Vector3 d = _pts[i + 1] - a; d.y = 0f;
+                Vector3 ph = p - a; ph.y = 0f;
+                float len2 = d.sqrMagnitude;
+                float t = len2 > 1e-8f ? Mathf.Clamp01(Vector3.Dot(ph, d) / len2) : 0f;
+                Vector3 c = a + d * t;
+                Vector3 diff = p - c; diff.y = 0f;
+                if (diff.sqrMagnitude < bestSq) { bestSq = diff.sqrMagnitude; bi = i; closest = c; }
+            }
+            Vector3 rn = RightNormal(_pts[bi], _pts[bi + 1]);
+            // Graph walls grow toward +right-normal when SideSign >= 0 (WallMesh);
+            // legacy polylines encode the same choice via the interior reference.
+            float outward = _segment != null
+                ? (_segment.SideSign >= 0f ? 1f : -1f)
+                : OutwardSign(_pts, _interior);
+            Vector3 toP = p - closest; toP.y = 0f;
+            return Vector3.Dot(toP, rn) * outward >= 0f ? WallSide.Outer : WallSide.Inner;
+        }
 
         // ---- footprint (cross-sections along the centerline) ----
 
@@ -645,7 +747,12 @@ namespace RoomPlanner.Walls
             var v = new List<Vector3>(m * 4);
             var uv = new List<Vector2>(m * 4);
             var colors = new List<Color>(m * 4);
-            var tris = new List<int>();
+            // Per-side wall finishes (issue #34): inner (0) / outer (3) / rims (4);
+            // 1 and 2 stay glass/joinery (empty on a solid wall) — same layout as
+            // TriangulateWithOpenings, so one material array fits every wall.
+            var inner = new List<int>();
+            var outer = new List<int>();
+            var rims = new List<int>();
             var ev = new List<Vector3>(m * 4);
             var ei = new List<int>();
             Vector3 up = Vector3.up * height;
@@ -653,10 +760,10 @@ namespace RoomPlanner.Walls
             float aoBottom = MeshShading.HeightAO(0f), aoTop = MeshShading.HeightAO(height);
 
             // Reverses winding when the footprint is mirrored (oSign < 0) so faces stay outward.
-            void AddQuad(int a, int b, int c, int d)
+            void AddQuad(List<int> target, int a, int b, int c, int d)
             {
-                if (flip) Quad(tris, a, d, c, b);
-                else Quad(tris, a, b, c, d);
+                if (flip) Quad(target, a, d, c, b);
+                else Quad(target, a, b, c, d);
             }
 
             float run = 0f;                 // distance travelled along the wall, in metres
@@ -691,8 +798,8 @@ namespace RoomPlanner.Walls
             for (int j = 0; j < m - 1; j++)
             {
                 int a = j * 4, b = (j + 1) * 4;
-                AddQuad(a + 1, a + 3, b + 3, b + 1);   // outer wall
-                AddQuad(a + 0, b + 0, b + 2, a + 2);   // inner wall
+                AddQuad(outer, a + 1, a + 3, b + 3, b + 1);   // outer wall
+                AddQuad(inner, a + 0, b + 0, b + 2, a + 2);   // inner wall
 
                 // edge lines along the run
                 ei.Add(a + 1); ei.Add(b + 1); // outer base
@@ -721,8 +828,8 @@ namespace RoomPlanner.Walls
             for (int j = 0; j < m - 1; j++)
             {
                 int a = flatBase + j * 4, b = flatBase + (j + 1) * 4;
-                AddQuad(a + 2, a + 3, b + 3, b + 2);   // bottom (same corner order as before)
-                AddQuad(a + 0, b + 0, b + 1, a + 1);   // top
+                AddQuad(rims, a + 2, a + 3, b + 3, b + 2);   // bottom (same corner order as before)
+                AddQuad(rims, a + 0, b + 0, b + 1, a + 1);   // top
             }
 
             // end caps: U spans the thickness, V climbs the height
@@ -736,26 +843,29 @@ namespace RoomPlanner.Walls
             float w0 = Vector3.Distance(s[0].Inner, s[0].Outer) / TileMeters;
             CapVert(s[0].Inner, 0f, aoBottom); CapVert(s[0].Inner + up, 0f, aoTop);
             CapVert(s[0].Outer + up, w0, aoTop); CapVert(s[0].Outer, w0, aoBottom);
-            AddQuad(capBase + 0, capBase + 1, capBase + 2, capBase + 3);
+            AddQuad(rims, capBase + 0, capBase + 1, capBase + 2, capBase + 3);
             var sl = s[m - 1];
             float wL = Vector3.Distance(sl.Inner, sl.Outer) / TileMeters;
             CapVert(sl.Outer, 0f, aoBottom); CapVert(sl.Outer + up, 0f, aoTop);
             CapVert(sl.Inner + up, wL, aoTop); CapVert(sl.Inner, wL, aoBottom);
-            AddQuad(capBase + 4, capBase + 5, capBase + 6, capBase + 7);
+            AddQuad(rims, capBase + 4, capBase + 5, capBase + 6, capBase + 7);
 
             int e = (m - 1) * 4;
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
             // Submeshes 1/2 are window glass and joinery — empty here, but always present
-            // so a renderer configured with [wall, glass, joinery] is valid for every wall.
-            _mesh.subMeshCount = 3;
+            // so a renderer configured with [wall, glass, joinery, wall, wall] is valid
+            // for every wall.
+            _mesh.subMeshCount = 5;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
             _mesh.SetColors(colors);
-            _mesh.SetTriangles(tris, 0);
+            _mesh.SetTriangles(inner, 0);
             _mesh.SetTriangles(new List<int>(), 1);
             _mesh.SetTriangles(new List<int>(), 2);
+            _mesh.SetTriangles(outer, 3);
+            _mesh.SetTriangles(rims, 4);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 

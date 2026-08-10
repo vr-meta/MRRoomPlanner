@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using RoomPlanner.Core;
 using RoomPlanner.Editing;
 using RoomPlanner.Floors;
 using RoomPlanner.Tools;
+using RoomPlanner.Walls;
 
 namespace RoomPlanner.Tests.Play
 {
@@ -132,6 +134,113 @@ namespace RoomPlanner.Tests.Play
             Assert.IsTrue(mpb.isEmpty, "glass untouched");
             mr.GetPropertyBlock(mpb, 2);
             Assert.IsTrue(mpb.isEmpty, "joinery untouched");
+        }
+
+        // ---- per-side wall finishes (issue #34) ----
+
+        /// <summary>A wall body with the sided material layout the rig prefab uses:
+        /// [wall, glass, joinery, wall, wall] → submeshes 0/3/4 are paintable body.</summary>
+        private (Selectable sel, MeshRenderer mr) MakeSidedWall()
+        {
+            var go = Track(new GameObject("Wall"));
+            go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            mr.sharedMaterials = new[]
+            {
+                new Material(shader), new Material(shader), new Material(shader),
+                new Material(shader), new Material(shader),
+            };
+            var wall = go.AddComponent<Wall>();
+            wall.Build(new List<Vector3> { Vector3.zero, new(4f, 0f, 0f) },
+                0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, new Vector3(2f, 0f, 1f));
+            var sel = go.AddComponent<Selectable>();
+            return (sel, mr);
+        }
+
+        private static void AssertBlock(MeshRenderer mr, int index, Color expected, string why)
+        {
+            var mpb = new MaterialPropertyBlock();
+            mr.GetPropertyBlock(mpb, index);
+            Assert.IsFalse(mpb.isEmpty, why);
+            var c = mpb.GetColor("_BaseColor");
+            Assert.AreEqual(expected.r, c.r, 0.01f, why);
+            Assert.AreEqual(expected.g, c.g, 0.01f, why);
+            Assert.AreEqual(expected.b, c.b, 0.01f, why);
+        }
+
+        private static void AssertBare(MeshRenderer mr, int index, string why)
+        {
+            var mpb = new MaterialPropertyBlock();
+            mr.GetPropertyBlock(mpb, index);
+            Assert.IsTrue(mpb.isEmpty, why);
+        }
+
+        [UnityTest]
+        public IEnumerator SidePaint_KeepsTheOtherSideBare_UndoKeepsMixedState()
+        {
+            var (sel, mr) = MakeSidedWall();
+            var history = new RoomPlanner.Core.EditHistory();
+            yield return null;
+
+            history.Execute(new PaintCommand(sel,
+                SurfaceFinish.OfColor(Terracotta), null, WallSide.Inner));
+            AssertBlock(mr, 0, Terracotta, "inner painted");
+            AssertBare(mr, 3, "outer untouched");
+            AssertBare(mr, 4, "rims untouched while outer is bare");
+            Assert.IsTrue(sel.IsPainted);
+
+            history.Execute(new PaintCommand(sel,
+                SurfaceFinish.OfColor(Color.white), null, WallSide.Outer));
+            AssertBlock(mr, 3, Color.white, "outer painted");
+            AssertBlock(mr, 4, Color.white, "rims follow the outer side");
+            AssertBlock(mr, 0, Terracotta, "inner keeps its own coat");
+
+            history.Undo();
+            AssertBare(mr, 3, "undo strips only the outer coat");
+            AssertBlock(mr, 0, Terracotta, "the mixed state survives the undo");
+
+            history.Undo();
+            AssertBare(mr, 0, "back to the bare wall");
+            Assert.IsFalse(sel.IsPainted);
+        }
+
+        [UnityTest]
+        public IEnumerator WholePaint_CoversBothSides_UndoRestoresTheSideOnlyCoat()
+        {
+            var (sel, mr) = MakeSidedWall();
+            var history = new RoomPlanner.Core.EditHistory();
+            yield return null;
+
+            history.Execute(new PaintCommand(sel,
+                SurfaceFinish.OfColor(Terracotta), null, WallSide.Inner));
+            history.Execute(new PaintCommand(sel, SurfaceFinish.OfColor(Color.white), null));
+            AssertBlock(mr, 0, Color.white, "whole paint covers the inner side");
+            AssertBlock(mr, 3, Color.white, "…the outer side");
+            AssertBlock(mr, 4, Color.white, "…and the rims");
+
+            history.Undo();
+            AssertBlock(mr, 0, Terracotta, "undo returns the inner-only coat");
+            AssertBare(mr, 3, "outer back to bare");
+            AssertBare(mr, 4, "rims back to bare");
+        }
+
+        [Test]
+        public void CategoryAccepts_MatchesTargetsToTabs()
+        {
+            // audit 06 §Б5: parquet must refuse a wall, wallpaper must refuse a floor
+            Assert.IsTrue(PaintController.CategoryAccepts(null, SelectableKind.Wall), "Color tab paints anything");
+            Assert.IsTrue(PaintController.CategoryAccepts(null, SelectableKind.Fixture));
+            Assert.IsTrue(PaintController.CategoryAccepts("Walls", SelectableKind.Wall));
+            Assert.IsFalse(PaintController.CategoryAccepts("Walls", SelectableKind.Floor));
+            Assert.IsFalse(PaintController.CategoryAccepts("Floors", SelectableKind.Wall));
+            Assert.IsTrue(PaintController.CategoryAccepts("Floors", SelectableKind.Floor));
+            Assert.IsTrue(PaintController.CategoryAccepts("Floors", SelectableKind.Stair));
+            Assert.IsTrue(PaintController.CategoryAccepts("Tiles", SelectableKind.Wall));
+            Assert.IsTrue(PaintController.CategoryAccepts("Tiles", SelectableKind.Floor));
+            Assert.IsFalse(PaintController.CategoryAccepts("Tiles", SelectableKind.Stair));
+            Assert.IsTrue(PaintController.CategoryAccepts("Ceiling", SelectableKind.Floor));
+            Assert.IsFalse(PaintController.CategoryAccepts("Ceiling", SelectableKind.Wall));
         }
 
         // ---- texture finishes (design/04 «Текстуры v1») ----

@@ -51,8 +51,20 @@ namespace RoomPlanner.Tests.Play
             return (walls.ViewOf(seg), seg);
         }
 
-        private static bool HitsWall(Wall view, Ray ray, out RaycastHit hit) =>
-            view.GetComponent<MeshCollider>().Raycast(ray, out hit, 20f);
+        /// <summary>Wall mesh OR its leaf children (#50: the leaf is a child view now).</summary>
+        private static bool HitsWall(Wall view, Ray ray, out RaycastHit hit)
+        {
+            Physics.SyncTransforms();
+            hit = default;
+            float best = float.MaxValue;
+            foreach (var col in view.GetComponentsInChildren<Collider>())
+                if (col.Raycast(ray, out var h, 20f) && h.distance < best)
+                {
+                    best = h.distance;
+                    hit = h;
+                }
+            return best < float.MaxValue;
+        }
 
         [UnityTest]
         public IEnumerator GarageDoor_SectionalLeaf_BlocksFullWidth_WithRealSeams()
@@ -106,20 +118,23 @@ namespace RoomPlanner.Tests.Play
                 "the header above the door is solid");
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.Greater(mesh.GetTriangles(2).Length, 0, "frame + leaf live in the joinery submesh");
+            Assert.Greater(mesh.GetTriangles(2).Length, 0, "the frame lives in the joinery submesh");
+            Assert.IsNotNull(view.GetComponentInChildren<OpeningLeafView>(),
+                "the leaf itself is a child view (#50)");
         }
 
         [UnityTest]
         public IEnumerator ImportedDoorLeafStandsOpen_OnItsSwingSide()
         {
             // Same 1 m doorway, but with IFC swing data: hinge on the x = 1.5 jamb,
-            // opening toward −Z. The leaf swings 75° out of the wall — the doorway
-            // becomes passable and the leaf stands on the swing side.
+            // opening toward −Z. OpenFraction 0.75 = the historical 75° stance — the
+            // doorway becomes passable and the leaf stands on the swing side.
             var (view, _) = MakeWall(new WallOpening
             {
                 Id = 1, AlongFraction = 0.5f, Width = 1f, Height = 2.1f, SillHeight = 0f, IsDoor = true,
                 SwingDir = new Vector3(0f, 0f, -1f),
                 HingeDir = new Vector3(1f, 0f, 0f),
+                OpenFraction = 0.75f,
             });
             yield return null;
 
@@ -157,7 +172,7 @@ namespace RoomPlanner.Tests.Play
             yield return null;
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(3, mesh.subMeshCount);
+            Assert.AreEqual(5, mesh.subMeshCount, "inner/glass/joinery/outer/rims (#34)");
             Assert.Greater(mesh.GetTriangles(1).Length, 0, "window pane lives in the glass submesh");
             Assert.Greater(mesh.GetTriangles(2).Length, 0, "window frame lives in the joinery submesh");
 
@@ -192,9 +207,11 @@ namespace RoomPlanner.Tests.Play
 
             Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 1f, -2f), Vector3.forward), out _));
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(3, mesh.subMeshCount, "empty glass/joinery submeshes always present");
+            Assert.AreEqual(5, mesh.subMeshCount, "empty glass/joinery submeshes always present");
             Assert.AreEqual(0, mesh.GetTriangles(1).Length);
             Assert.AreEqual(0, mesh.GetTriangles(2).Length);
+            Assert.Greater(mesh.GetTriangles(3).Length, 0, "outer side populated (#34)");
+            Assert.Greater(mesh.GetTriangles(4).Length, 0, "rims populated (#34)");
             Assert.AreEqual(0, seg.Openings.Count);
         }
     }
