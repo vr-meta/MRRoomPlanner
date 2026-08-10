@@ -9,6 +9,7 @@ namespace RoomPlanner.Core
     {
         public Vector3[] Vertices;
         public int[] Triangles;
+        public Vector2[] UVs;   // optional (plates that show textures); null = no UVs
 
         public bool IsEmpty => Vertices == null || Vertices.Length == 0;
     }

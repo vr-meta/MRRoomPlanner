@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Walls;
 using RoomPlanner.Floors;
 using RoomPlanner.Measure;
@@ -18,6 +19,10 @@ namespace RoomPlanner.Editing
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int FaceColorId = Shader.PropertyToID("_FaceColor"); // TMP labels
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");     // URP
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");     // legacy
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -110,32 +115,49 @@ namespace RoomPlanner.Editing
             }
         }
 
-        // ---- paint (design/04 v1): the user's own color for the BODY of the object ----
+        // ---- finish (design/04 «Текстуры v1»): color OR texture on the BODY ----
 
-        private bool _painted;
-        private Color _paint;
+        private SurfaceFinish _finish = SurfaceFinish.None;
+        private Texture2D _finishTexture;   // resolved by the caller (FinishLibrary)
 
-        public bool IsPainted { get { Resolve(); return _painted; } }
-        public Color Paint { get { Resolve(); return _paint; } }
+        public bool IsPainted { get { Resolve(); return !_finish.IsNone; } }
+
+        /// <summary>Legacy color view of the finish (persisted colors, tint of a texture).</summary>
+        public Color Paint { get { Resolve(); return _finish.Color; } }
+
+        public SurfaceFinish Finish { get { Resolve(); return _finish; } }
+        public Texture2D FinishTexture { get { Resolve(); return _finishTexture; } }
 
         /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
-        public Color BaseBodyColor { get { Resolve(); return _painted ? _paint : _ownColors[0]; } }
+        public Color BaseBodyColor
+        {
+            get
+            {
+                Resolve();
+                return _finish.Kind == FinishKind.Color ? _finish.Color : _ownColors[0];
+            }
+        }
 
-        /// <summary>Paint the object's body (submesh 0 of the first renderer — glass and
-        /// joinery keep their look). Callers own undo via PaintCommand.</summary>
-        public void SetPaint(Color color)
+        /// <summary>Paint the object's body a solid color (submesh 0 of the first
+        /// renderer — glass and joinery keep their look). Undo via PaintCommand.</summary>
+        public void SetPaint(Color color) => SetFinish(SurfaceFinish.OfColor(color), null);
+
+        /// <summary>Apply a finish; for Texture kind the caller resolves the Texture2D
+        /// through FinishLibrary (the model itself never touches assets).</summary>
+        public void SetFinish(SurfaceFinish finish, Texture2D texture)
         {
             Resolve();
-            _painted = true;
-            _paint = color;
+            _finish = finish;
+            _finishTexture = finish.Kind == FinishKind.Texture ? texture : null;
             ApplyVisual();
         }
 
-        /// <summary>Back to the material's own color.</summary>
+        /// <summary>Back to the material's own look.</summary>
         public void ClearPaint()
         {
             Resolve();
-            _painted = false;
+            _finish = SurfaceFinish.None;
+            _finishTexture = null;
             ApplyVisual();
         }
 
@@ -160,13 +182,16 @@ namespace RoomPlanner.Editing
             Color stateColor = _state == HighlightState.Selected ? RoomPlanner.Tools.UiColors.Selected
                                                                  : RoomPlanner.Tools.UiColors.Hover;
             float t = _state == HighlightState.Selected ? SelectTint : HoverTint;
+            bool hasFinish = !_finish.IsNone;
+            bool textured = _finish.Kind == FinishKind.Texture && _finishTexture != null;
 
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var r = _renderers[i];
                 if (r == null) continue;
-                Color own = i == 0 && _painted ? _paint : _ownColors[i];
-                bool needBlock = tint || (i == 0 && _painted);
+                // body color: solid paint, texture tint (usually white), or the material's own
+                Color own = i == 0 && hasFinish ? _finish.Color : _ownColors[i];
+                bool needBlock = tint || (i == 0 && hasFinish);
                 bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
@@ -176,6 +201,15 @@ namespace RoomPlanner.Editing
                     _mpb.SetColor(BaseColorId, c);
                     _mpb.SetColor(ColorId, c);
                     _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
+                    if (i == 0 && textured)
+                    {
+                        // wallpaper/wood over the metric UVs: swap the texture and set the
+                        // metric tiling (design/04) — the material itself is never touched
+                        _mpb.SetTexture(BaseMapId, _finishTexture);
+                        _mpb.SetTexture(MainTexId, _finishTexture);
+                        _mpb.SetVector(BaseMapStId, _finish.UvScaleOffset());
+                        _mpb.SetVector(MainTexStId, _finish.UvScaleOffset());
+                    }
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }

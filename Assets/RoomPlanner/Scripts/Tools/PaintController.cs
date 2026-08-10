@@ -5,21 +5,27 @@ using RoomPlanner.Measure;
 
 namespace RoomPlanner.Tools
 {
-    /// <summary>Paint the object's body a solid color — undo restores the previous paint,
-    /// or the material's own look if it was never painted.</summary>
+    /// <summary>Apply a finish (solid color OR texture) to the object's body — undo
+    /// restores the previous finish, or the material's own look if it never had one.
+    /// Before/after snapshots, not deltas (coding rule: no clamp drift).</summary>
     public class PaintCommand : ICommand, ISelectableCommand
     {
         private readonly Selectable _target;
-        private readonly Color _color;
-        private readonly Color _previous;
-        private readonly bool _wasPainted;
+        private readonly SurfaceFinish _after;
+        private readonly Texture2D _afterTex;
+        private readonly SurfaceFinish _before;
+        private readonly Texture2D _beforeTex;
 
         public PaintCommand(Selectable target, Color color)
+            : this(target, SurfaceFinish.OfColor(color), null) { }
+
+        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex)
         {
             _target = target;
-            _color = color;
-            _wasPainted = target != null && target.IsPainted;
-            _previous = _wasPainted ? target.Paint : Color.clear;
+            _after = after;
+            _afterTex = afterTex;
+            _before = target != null ? target.Finish : SurfaceFinish.None;
+            _beforeTex = target != null ? target.FinishTexture : null;
         }
 
         public ISelectable Target => _target;
@@ -27,13 +33,8 @@ namespace RoomPlanner.Tools
         private bool Alive => _target != null && _target.IsAlive;
 
         public string Name => "Paint";
-        public void Do() { if (Alive) _target.SetPaint(_color); }
-        public void Undo()
-        {
-            if (!Alive) return;
-            if (_wasPainted) _target.SetPaint(_previous);
-            else _target.ClearPaint();
-        }
+        public void Do() { if (Alive) _target.SetFinish(_after, _afterTex); }
+        public void Undo() { if (Alive) _target.SetFinish(_before, _beforeTex); }
     }
 
     /// <summary>
@@ -49,6 +50,8 @@ namespace RoomPlanner.Tools
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private RoomPlanner.Walls.WallGraphRenderer walls;
         [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
+        [SerializeField] private Transform reticle;   // visible aim point (device feedback 2026-08-10)
+        [SerializeField] private FinishLibrary library;   // texture catalog (design/04 «Текстуры v1»)
 
         private static readonly (string Name, Color Color)[] Presets =
         {
@@ -63,6 +66,11 @@ namespace RoomPlanner.Tools
         };
 
         private int _preset;
+        private int _tab;          // 0 Color · 1 Walls · 2 Floors
+        private int _wallTex;      // index into the Walls texture ids
+        private int _floorTex;     // index into the Floors texture ids
+        private string[] _wallIds = System.Array.Empty<string>();
+        private string[] _floorIds = System.Array.Empty<string>();
         private Selectable _hover;
         private SettingsSchema _settings;
 
@@ -76,26 +84,74 @@ namespace RoomPlanner.Tools
 
         public SettingsSchema GetSettings()
         {
-            // v2 (design/20 §2.7): the color is a real swatch grid — hue here IS the data;
-            // booleans became toggles; "Original look" is an eraser action.
+            // Tabs (design/04 «Текстуры v1»): Color = paint grid; Walls/Floors = CC0
+            // texture swatches. The active tab decides what the trigger applies.
             if (_palette == null)
             {
                 _palette = new Color[Presets.Length];
                 for (int i = 0; i < Presets.Length; i++) _palette[i] = Presets[i].Color;
             }
-            // Self-explaining panel (device feedback 2026-08-10): the whole palette is
-            // visible inline, and a hint row says what the trigger does.
-            _settings ??= new SettingsSchema()
-                .Readout("how", "How to", () => "aim wall/floor · Trigger = paint")
-                .Swatch("color", "Color", _palette, () => _preset,
-                    i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
-                .Readout("cname", "Preset", () => Presets[_preset].Name)
-                .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered)
-                .Header("shade", "Shading")
-                .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
-                .Toggle("ssao", "SSAO",
-                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+            if (_settings == null)
+            {
+                _wallIds = library != null ? library.IdsOf("Walls").ToArray()
+                    : System.Array.Empty<string>();
+                _floorIds = library != null ? library.IdsOf("Floors").ToArray()
+                    : System.Array.Empty<string>();
+
+                var colorPage = new SettingsSchema()
+                    .Readout("how", "How to", () => "aim wall/floor · Trigger = paint")
+                    .Swatch("color", "Color", _palette, () => _preset,
+                        i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
+                    .Readout("cname", "Preset", () => Presets[_preset].Name)
+                    .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered)
+                    .Header("shade", "Shading")
+                    .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
+                    .Toggle("ssao", "SSAO",
+                        () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+
+                var wallsPage = new SettingsSchema()
+                    .Readout("howw", "How to", () => "aim a wall · Trigger = apply");
+                if (_wallIds.Length > 0)
+                    wallsPage.TextureSwatch("wtex", "Wallpaper", _wallIds,
+                        () => _wallTex, i => _wallTex = Mathf.Clamp(i, 0, _wallIds.Length - 1));
+                else
+                    wallsPage.Readout("nonew", "Textures", () => "run Download Textures");
+                wallsPage.Action("clearw", "Original look (unpaint aimed)", "eraser", ClearHovered);
+
+                var floorsPage = new SettingsSchema()
+                    .Readout("howf", "How to", () => "aim a floor · Trigger = apply");
+                if (_floorIds.Length > 0)
+                    floorsPage.TextureSwatch("ftex", "Wood", _floorIds,
+                        () => _floorTex, i => _floorTex = Mathf.Clamp(i, 0, _floorIds.Length - 1));
+                else
+                    floorsPage.Readout("nonef", "Textures", () => "run Download Textures");
+                floorsPage.Action("clearf", "Original look (unpaint aimed)", "eraser", ClearHovered);
+
+                _settings = SettingsSchema.Tabbed(
+                    new[] { "Color", "Walls", "Floors" },
+                    () => _tab, i => _tab = Mathf.Clamp(i, 0, 2),
+                    colorPage, wallsPage, floorsPage);
+            }
             return _settings;
+        }
+
+        /// <summary>The finish the trigger applies, decided by the active tab; false if
+        /// the tab has no usable pick (textures not downloaded).</summary>
+        private bool TryCurrentFinish(out SurfaceFinish finish, out Texture2D texture)
+        {
+            finish = SurfaceFinish.None;
+            texture = null;
+            string[] ids = _tab == 1 ? _wallIds : _tab == 2 ? _floorIds : null;
+            if (_tab == 0)
+            {
+                finish = SurfaceFinish.OfColor(CurrentColor);
+                return true;
+            }
+            if (ids == null || ids.Length == 0 || library == null) return false;
+            int pick = Mathf.Clamp(_tab == 1 ? _wallTex : _floorTex, 0, ids.Length - 1);
+            if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
+            finish = SurfaceFinish.OfTexture(ids[pick], tile);
+            return true;
         }
 
         /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>
@@ -115,21 +171,39 @@ namespace RoomPlanner.Tools
 
         public void OnActivate() { }
 
-        public void OnDeactivate() => SetHover(null);
+        public void OnDeactivate()
+        {
+            SetHover(null);
+            if (reticle != null) reticle.gameObject.SetActive(false);
+        }
 
         public void Tick(bool blocked)
         {
             if (pointer == null || input == null || sceneModel == null) return;
-            if (blocked) { SetHover(null); return; }
+            if (blocked)
+            {
+                SetHover(null);
+                if (reticle != null) reticle.gameObject.SetActive(false);
+                return;
+            }
 
-            sceneModel.TryPick(pointer.GetRay(), out var picked, out _);
+            sceneModel.TryPick(pointer.GetRay(), out var picked, out var point);
             var sel = picked as Selectable;
             if (sel != null && sel.Kind == SelectableKind.Measurement) sel = null;  // not paintable
             SetHover(sel);
 
-            if (input.ConfirmPressed() && _hover != null)
+            // the CURSOR is the aiming feedback — hover tint alone read as "куда я
+            // вообще целюсь?" on device (feedback 2026-08-10)
+            if (reticle != null)
             {
-                sceneModel.History.Execute(new PaintCommand(_hover, CurrentColor));
+                reticle.gameObject.SetActive(sel != null);
+                if (sel != null) reticle.position = point;
+            }
+
+            if (input.ConfirmPressed() && _hover != null
+                && TryCurrentFinish(out var finish, out var texture))
+            {
+                sceneModel.History.Execute(new PaintCommand(_hover, finish, texture));
                 input.Pulse(0.5f, 0.02f);
             }
 
@@ -137,31 +211,12 @@ namespace RoomPlanner.Tools
                 manager.ActivateTool("select");
         }
 
-        /// <summary>Inspector row: strip the paint from whatever the ray is on.</summary>
+        /// <summary>Inspector row: strip the finish from whatever the ray is on —
+        /// itself an undoable paint action (finish → None).</summary>
         private void ClearHovered()
         {
             if (_hover == null || !_hover.IsPainted || sceneModel == null) return;
-            // going back to the material is itself an undoable paint action
-            var cmd = new PaintCommand(_hover, _hover.Paint);   // captures previous state
-            _hover.ClearPaint();
-            sceneModel.History.Record(new UnpaintRecord(_hover, cmd));
-        }
-
-        /// <summary>Undo unit for "original look": re-applies / re-clears the paint.</summary>
-        private class UnpaintRecord : ICommand
-        {
-            private readonly Selectable _target;
-            private readonly PaintCommand _restore;
-
-            public UnpaintRecord(Selectable target, PaintCommand restore)
-            {
-                _target = target;
-                _restore = restore;
-            }
-
-            public string Name => "Unpaint";
-            public void Do() { if (_target != null && _target.IsAlive) _target.ClearPaint(); }
-            public void Undo() => _restore.Do();
+            sceneModel.History.Execute(new PaintCommand(_hover, SurfaceFinish.None, null));
         }
 
         private void SetHover(Selectable sel)

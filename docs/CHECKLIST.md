@@ -466,6 +466,28 @@
     дубле `libopenxr_loader.so` (гейт Meta-препроцессора, см. I7) — повторная
     сборка на прогретой Library проходит
 
+## 2n. Текстуры стен и пола (дизайн: `design/04-surfaces-materials.md` § «Текстуры v1», ветка `worktree-work3`)
+
+CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, паркет/ламинат ×4) поверх
+машинерии покраски; выбор — табами в Paint; всё через MPB и метрические UV.
+
+- [x] T0. UX-фикс покраски: видимый ретикл на точке прицеливания в Paint
+  (жалоба «не могу навести курсором» — целились вслепую) + вайринг в Setup
+- [ ] T1. Editor-загрузчик **RoomPlanner → Download Textures**: ambientCG 1K-JPG →
+  `Assets/RoomPlanner/Textures/<cat>/` (gitignore), идемпотентно, импорт-настройки
+  (Repeat, mip, 1024); понятная ошибка SetupRig при отсутствии набора
+- [ ] T2. Core `SurfaceFinish` (None/Color/Texture + тинт + tileMeters) + тесты;
+  `FinishLibrary` на риге (id → Texture2D, wired Setup'ом)
+- [ ] T3. `Selectable.ApplyVisual`: _BaseMap + _BaseMap_ST (1/tile) + тинт;
+  `PaintCommand` → before/after SurfaceFinish; Original look для любой отделки;
+  PlayMode-тесты (undo/redo, hover поверх текстуры)
+- [ ] T4. Floor: верх с планом не трогаем; без плана — метрические UV верха
+  (`TopUvMetric` + Rebuild) для текстурного пола + тест
+- [ ] T5. Paint UI: Tabs **Color / Walls / Floors**, текстурные свотчи (плашка с
+  текстурой через MPB), подсказки; UiShots-рендер панели
+- [ ] T6. Персист `ProjectData` (finishKind/textureId/tile) + round-trip тест
+- [ ] T7. SetupRig + прогон + APK + шлем
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

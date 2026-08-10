@@ -133,5 +133,73 @@ namespace RoomPlanner.Tests.Play
             mr.GetPropertyBlock(mpb, 2);
             Assert.IsTrue(mpb.isEmpty, "joinery untouched");
         }
+
+        // ---- texture finishes (design/04 «Текстуры v1») ----
+
+        private readonly List<Texture2D> _textures = new();
+
+        [TearDown]
+        public void CleanupTextures()
+        {
+            foreach (var t in _textures) if (t != null) Object.DestroyImmediate(t);
+            _textures.Clear();
+        }
+
+        private Texture2D MakeTexture()
+        {
+            var t = new Texture2D(4, 4);
+            _textures.Add(t);
+            return t;
+        }
+
+        [UnityTest]
+        public IEnumerator TextureFinish_SetsMapAndMetricTiling_UndoRestores()
+        {
+            var (sel, renderer) = MakeSlab();
+            var history = new RoomPlanner.Core.EditHistory();
+            var tex = MakeTexture();
+            yield return null;
+
+            var finish = RoomPlanner.Core.SurfaceFinish.OfTexture("parquet-051", 2f);
+            history.Execute(new PaintCommand(sel, finish, tex));
+
+            var mpb = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(mpb);
+            Assert.AreEqual(tex, mpb.GetTexture("_BaseMap"), "wallpaper/wood rides the MPB");
+            var st = mpb.GetVector("_BaseMap_ST");
+            Assert.AreEqual(0.5f, st.x, 1e-4f, "metric tiling: 1 m UV / 2 m tile");
+            AssertColor(Color.white, mpb.GetColor("_BaseColor"), "untinted texture stays white");
+            Assert.IsTrue(sel.IsPainted);
+            Assert.AreEqual("parquet-051", sel.Finish.TextureId);
+
+            sel.SetHighlight(HighlightState.Hover);
+            renderer.GetPropertyBlock(mpb);
+            Assert.AreEqual(tex, mpb.GetTexture("_BaseMap"), "hover keeps the texture");
+            sel.SetHighlight(HighlightState.None);
+
+            history.Undo();
+            renderer.GetPropertyBlock(mpb);
+            Assert.IsTrue(mpb.isEmpty, "undo returns the material's own look");
+            Assert.IsFalse(sel.IsPainted);
+        }
+
+        [UnityTest]
+        public IEnumerator TextureOverColor_UndoRestoresTheColor()
+        {
+            var (sel, renderer) = MakeSlab();
+            var history = new RoomPlanner.Core.EditHistory();
+            var tex = MakeTexture();
+            yield return null;
+
+            history.Execute(new PaintCommand(sel, Terracotta));
+            history.Execute(new PaintCommand(sel,
+                RoomPlanner.Core.SurfaceFinish.OfTexture("wallpaper-001a", 1f), tex));
+            Assert.AreEqual(RoomPlanner.Core.FinishKind.Texture, sel.Finish.Kind);
+
+            history.Undo();
+            Assert.AreEqual(RoomPlanner.Core.FinishKind.Color, sel.Finish.Kind,
+                "undo of the texture returns the terracotta paint");
+            AssertColor(Terracotta, BlockColor(renderer), "color reapplied");
+        }
     }
 }

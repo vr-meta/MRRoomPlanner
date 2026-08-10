@@ -113,6 +113,7 @@ namespace RoomPlanner.Tools
             var normals = new Vector3[data.Vertices.Length];
             for (int i = 0; i < normals.Length; i++) normals[i] = Vector3.back;
             mesh.SetNormals(normals);
+            if (data.UVs != null) mesh.SetUVs(0, data.UVs);
             mesh.RecalculateBounds();
             return mesh;
         }

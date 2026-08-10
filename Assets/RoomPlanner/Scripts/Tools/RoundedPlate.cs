@@ -64,6 +64,7 @@ namespace RoomPlanner.Tools
             var normals = new Vector3[data.Vertices.Length];
             for (int i = 0; i < normals.Length; i++) normals[i] = Vector3.back;
             _mesh.SetNormals(normals);
+            if (data.UVs != null) _mesh.SetUVs(0, data.UVs);
             _mesh.RecalculateBounds();
             GetComponent<MeshFilter>().sharedMesh = _mesh;
         }

@@ -63,6 +63,7 @@ namespace RoomPlanner.Core
 
         // Swatch palette (selection via GetIndex/SetIndex)
         public Color[] Palette;
+        public string[] TextureOptions;   // texture-catalog ids — textured chips instead of colors
 
         // Action
         public bool Destructive;       // outline + hold-to-fill Danger (design/20 §2.8)
@@ -202,6 +203,19 @@ namespace RoomPlanner.Core
             {
                 Id = id, Caption = caption, Kind = SettingKind.Swatch,
                 Palette = palette, GetIndex = getIndex, SetIndex = setIndex,
+            });
+            return this;
+        }
+
+        /// <summary>Swatch row whose chips show TEXTURES from the finish catalog
+        /// (design/04 «Текстуры v1») — ids resolve via FinishLibrary at render time.</summary>
+        public SettingsSchema TextureSwatch(string id, string caption, string[] textureIds,
+            Func<int> getIndex, Action<int> setIndex)
+        {
+            _fields.Add(new SettingField
+            {
+                Id = id, Caption = caption, Kind = SettingKind.Swatch,
+                TextureOptions = textureIds, GetIndex = getIndex, SetIndex = setIndex,
             });
             return this;
         }

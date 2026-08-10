@@ -94,6 +94,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("insetMaterial").objectReferenceValue = ctx.InsetMat;
             so.FindProperty("iconMaterial").objectReferenceValue = ctx.IconMat;
             so.FindProperty("popups").objectReferenceValue = popups;
+            so.FindProperty("finishLibrary").objectReferenceValue = ctx.Finishes;
             so.ApplyModifiedProperties();
 
             // v2 builds in real meters on the 6 mm grid; ×1.55 on top per device feedback

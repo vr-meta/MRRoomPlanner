@@ -26,6 +26,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private Material insetMaterial;    // slider tracks, fields, wells
         [SerializeField] private Material iconMaterial;
         [SerializeField] private UiPopups popups;
+        [SerializeField] private RoomPlanner.Editing.FinishLibrary finishLibrary;   // texture chips
 
         [Header("Selection labels")]
         [SerializeField] private TMP_Text selTitleLabel;
@@ -85,7 +86,12 @@ namespace RoomPlanner.Tools
             RefreshValues();
         }
 
-        private static int VisibleRowCount(SettingsSchema page) => page.Fields.Count;
+        private static int VisibleRowCount(SettingsSchema page)
+        {
+            int rows = 0;
+            foreach (var f in page.Fields) rows += 1 + ExtraRowsFor(f);
+            return rows;
+        }
 
         /// <summary>Fill the selection group labels (title + one-line description).</summary>
         public void SetSelection(string title, string info)
@@ -136,7 +142,7 @@ namespace RoomPlanner.Tools
             {
                 float y = -(PanelLayout.RowY(row, schema.HasTabs) + topOffset);
                 BuildRow(f, y);
-                row++;
+                row += 1 + ExtraRowsFor(f);   // texture grids span several row slots
             }
         }
 
@@ -181,6 +187,9 @@ namespace RoomPlanner.Tools
                 case SettingKind.Header: BuildHeader(f, y); return;
                 case SettingKind.Action: BuildAction(f, y); return;
                 case SettingKind.Readout: BuildReadout(f, y); return;
+                case SettingKind.Swatch when f.TextureOptions != null:
+                    BuildTextureSwatchInline(f, y);   // textured chips (design/04 «Текстуры v1»)
+                    return;
                 case SettingKind.Swatch when (f.Palette?.Length ?? 0) <= 12:
                     BuildSwatchInline(f, y);   // full-width chip grid — no caption, no popup
                     return;
@@ -386,6 +395,72 @@ namespace RoomPlanner.Tools
                 for (int i = 0; i < rims.Length; i++)
                     if (rims[i] != null) rims[i].SetActive(i == cur);
             });
+        }
+
+        /// <summary>Textured chips: larger than color chips (a pattern needs pixels to
+        /// read), 4 per row wrapping onto extra rows; the texture rides an MPB on the
+        /// chip plate. Cyan ring = current (state ≠ hue rule).</summary>
+        private void BuildTextureSwatchInline(SettingField f, float y)
+        {
+            var options = f.TextureOptions;
+            const int perRow = 4;
+            const float gap = 0.005f;
+            float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
+            var rims = new GameObject[options.Length];
+            for (int i = 0; i < options.Length; i++)
+            {
+                int idx = i;
+                int row = i / perRow, col = i % perRow;
+                float x = -PanelLayout.ContentWidth * 0.5f + chip * 0.5f + col * (chip + gap);
+                // chips are taller than a row — align the grid's TOP with the slot's top
+                float cy = y + UiTokens.RowHeight * 0.5f - chip * 0.5f - row * (chip + gap);
+                var mb = MakeButton(rowsRoot, $"{f.Id}Tex{i}", null,
+                    new Vector3(x, cy, 0f), new Vector2(chip, chip),
+                    () => f.SetIndex?.Invoke(idx), background: false);
+                var plate = MakePlate(mb.transform, "Tex", new Vector3(0f, 0f, 0.001f),
+                    chip, chip, UiTokens.RadiusS, buttonMaterial);
+                var r = plate.GetComponent<Renderer>();
+                if (finishLibrary != null && finishLibrary.TryGet(options[i], out var tex, out _))
+                    TintTextured(r, tex);
+                else
+                    Tint(r, UiTokens.InsetBg);
+                rims[i] = MakePlate(mb.transform, "Rim", new Vector3(0f, 0f, 0.002f),
+                    chip + 0.005f, chip + 0.005f, UiTokens.RadiusS + 0.0025f, buttonMaterial);
+                Tint(rims[i].GetComponent<Renderer>(), UiTokens.Hover);
+                rims[i].SetActive(false);
+            }
+            _refreshers.Add(() =>
+            {
+                int cur = f.GetIndex?.Invoke() ?? -1;
+                for (int i = 0; i < rims.Length; i++)
+                    if (rims[i] != null) rims[i].SetActive(i == cur);
+            });
+        }
+
+        /// <summary>Extra row slots a texture-swatch grid occupies beyond its first —
+        /// textured chips are taller than a standard row, so convert real height into
+        /// RowStep units for the layout/auto-height math.</summary>
+        internal static int ExtraRowsFor(SettingField f)
+        {
+            if (f.Kind != SettingKind.Swatch || f.TextureOptions == null) return 0;
+            const int perRow = 4;
+            const float gap = 0.005f;
+            float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
+            int chipRows = (f.TextureOptions.Length + perRow - 1) / perRow;
+            float height = chipRows * (chip + gap);
+            return Mathf.Max(0, Mathf.CeilToInt(height / UiTokens.RowStep) - 1);
+        }
+
+        private void TintTextured(Renderer r, Texture2D tex)
+        {
+            if (r == null) return;
+            _tintMpb ??= new MaterialPropertyBlock();
+            r.GetPropertyBlock(_tintMpb);
+            _tintMpb.SetColor(BaseColorId, Color.white);
+            _tintMpb.SetColor(ColorId, Color.white);
+            _tintMpb.SetTexture(Shader.PropertyToID("_BaseMap"), tex);
+            _tintMpb.SetTexture(Shader.PropertyToID("_MainTex"), tex);
+            r.SetPropertyBlock(_tintMpb);
         }
 
         private void BuildSwatch(SettingField f, float y)

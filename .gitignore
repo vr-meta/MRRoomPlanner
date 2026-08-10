@@ -41,3 +41,7 @@ ci-shots/
 
 # other agents work trees (embedded repos)
 .claude/worktrees/
+
+# CC0 textures — restored via RoomPlanner > Download Textures
+Assets/RoomPlanner/Textures/**/*.jpg
+Assets/RoomPlanner/Textures/**/*.jpg.meta

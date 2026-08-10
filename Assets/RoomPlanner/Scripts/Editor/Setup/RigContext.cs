@@ -40,6 +40,7 @@ namespace RoomPlanner.EditorTools
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
         public Material IconMat, InsetMat, ScrimMat;   // UI v2 (design/20): icons, wells, radial scrim
         public RoomPlanner.Tools.RadialMenu Radial;
+        public FinishLibrary Finishes;                 // texture catalog (design/04 «Текстуры v1»)
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
         public Material FurnitureMat, ProxyMat, RailingMat;
         public Material WireMat, FixtureMat;

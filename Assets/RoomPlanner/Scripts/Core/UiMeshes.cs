@@ -89,7 +89,11 @@ namespace RoomPlanner.Core
                 // outline is clockwise on screen → center→current→next faces −Z
                 tris.Add(0); tris.Add(i); tris.Add(j);
             }
-            return new SvgMesh { Vertices = verts.ToArray(), Triangles = tris.ToArray() };
+            // 0..1 UVs so texture swatch chips actually SHOW their texture
+            var uvs = new Vector2[verts.Count];
+            for (int i = 0; i < verts.Count; i++)
+                uvs[i] = new Vector2(verts[i].x / width + 0.5f, verts[i].y / height + 0.5f);
+            return new SvgMesh { Vertices = verts.ToArray(), Triangles = tris.ToArray(), UVs = uvs };
         }
 
         /// <summary>Radial falloff for the scrim texture: 1 at the center, 0 at the rim.
