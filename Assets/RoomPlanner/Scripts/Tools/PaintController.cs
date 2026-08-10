@@ -202,6 +202,7 @@ namespace RoomPlanner.Tools
         public void OnDeactivate()
         {
             SetHover(null);
+            _lastAimed = null;   // a stale target must not survive a tool switch
             if (reticle != null) reticle.gameObject.SetActive(false);
         }
 
@@ -239,16 +240,25 @@ namespace RoomPlanner.Tools
                 manager.ActivateTool("select");
         }
 
-        /// <summary>Inspector row: strip the finish from whatever the ray is on —
+        /// <summary>The last object the tool ray actually touched. Clicking the "Original
+        /// look" row necessarily happens with the cursor ON the panel (blocked → _hover
+        /// already null), so the row acts on this — the reason it never fired before
+        /// (audit 06 §Б2).</summary>
+        private Selectable _lastAimed;
+
+        /// <summary>Inspector row: strip the finish from the last aimed object —
         /// itself an undoable paint action (finish → None).</summary>
         private void ClearHovered()
         {
-            if (_hover == null || !_hover.IsPainted || sceneModel == null) return;
-            sceneModel.History.Execute(new PaintCommand(_hover, SurfaceFinish.None, null));
+            var target = _hover != null ? _hover : _lastAimed;
+            if (target == null || !target.IsAlive || target.IsHidden
+                || !target.IsPainted || sceneModel == null) return;
+            sceneModel.History.Execute(new PaintCommand(target, SurfaceFinish.None, null));
         }
 
         private void SetHover(Selectable sel)
         {
+            if (sel != null) _lastAimed = sel;
             if (ReferenceEquals(sel, _hover)) return;
             if (_hover != null && _hover.IsAlive) _hover.SetHighlight(HighlightState.None);
             _hover = sel;
