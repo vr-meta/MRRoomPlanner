@@ -231,7 +231,7 @@ namespace RoomPlanner.Tools
                 UiMeshes.Sector(UiTokens.RadialInnerRadius, UiTokens.RadialOuterRadius * 1.06f, -half, half),
                 "RadialSectorHover");
             _stripeMesh = IconRenderer.ToMesh(
-                UiMeshes.Sector(UiTokens.RadialOuterRadius + 0.004f, UiTokens.RadialOuterRadius + 0.007f,
+                UiMeshes.Sector(UiTokens.RadialOuterRadius + 0.006f, UiTokens.RadialOuterRadius + 0.0105f,
                     -half + 2f, half - 2f),
                 "RadialActiveStripe");
 
@@ -273,7 +273,7 @@ namespace RoomPlanner.Tools
                     dot.transform.SetParent(transform, false);
                     dot.transform.localPosition = new Vector3(
                         dir.x * UiTokens.RadialIconRadius, dir.y * UiTokens.RadialIconRadius, -0.002f);
-                    var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.004f, 20), "ReservedDot");
+                    var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.006f, 20), "ReservedDot");
                     _ownedMeshes.Add(dotMesh);
                     dot.AddComponent<MeshFilter>().sharedMesh = dotMesh;
                     var dr = dot.AddComponent<MeshRenderer>();
@@ -289,7 +289,7 @@ namespace RoomPlanner.Tools
                         + new Vector3(0f, 0f, -0.002f);
                     var ir = icon.AddComponent<IconRenderer>();
                     ir.Init(_slots != null && i < _slots.Length ? _slots[i].IconId : null,
-                        iconMaterial, 0.024f);
+                        iconMaterial, 0.034f);
                     _icons[i] = ir;
                 }
             }
@@ -324,12 +324,12 @@ namespace RoomPlanner.Tools
 
             var hubIconGo = new GameObject("HubIcon") { layer = gameObject.layer };
             hubIconGo.transform.SetParent(transform, false);
-            hubIconGo.transform.localPosition = new Vector3(0f, 0.013f, -0.003f);
+            hubIconGo.transform.localPosition = new Vector3(0f, 0.020f, -0.003f);
             _hubIcon = hubIconGo.AddComponent<IconRenderer>();
-            _hubIcon.Init("select-cursor", iconMaterial, 0.026f);
+            _hubIcon.Init("select-cursor", iconMaterial, 0.040f);
 
-            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.014f, -0.003f), 0.016f);
-            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.031f, -0.003f), 0.009f);
+            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.022f, -0.003f), 0.026f);
+            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.048f, -0.003f), 0.013f);
             _hubHint.color = UiTokens.LabelDim;
 
             RefreshStatic();

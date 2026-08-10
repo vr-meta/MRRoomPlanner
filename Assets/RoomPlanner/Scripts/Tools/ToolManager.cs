@@ -559,6 +559,7 @@ namespace RoomPlanner.Tools
             _active = index;
             ITool next = ActiveTool();
             if (next != null) next.OnActivate();
+            if (inspector != null) inspector.NoteToolChanged();
             RefreshMenu();
         }
 

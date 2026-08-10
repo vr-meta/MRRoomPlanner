@@ -60,7 +60,10 @@ namespace RoomPlanner.Tools
 
             // Re-place ONLY when the parked position is useless (never shown, behind the
             // user, or far away) — a grip-parked panel survives tool switches (UX v2 P0.4).
-            if (show && !panelRoot.activeSelf && NeedsPlacement()) PlaceInFront();
+            // A tool JUST picked also re-checks even if the panel is already visible: an
+            // out-of-view panel reads as "no settings" (device feedback 2026-08-10).
+            bool considerPlace = !panelRoot.activeSelf || _toolJustChanged;
+            if (show && considerPlace && NeedsPlacement()) PlaceInFront();
             panelRoot.SetActive(show);
             if (!show)
             {
@@ -573,14 +576,25 @@ namespace RoomPlanner.Tools
             background.localPosition = new Vector3(lp.x, -h * 0.5f, lp.z);
         }
 
+        private bool _toolJustChanged;
+
+        /// <summary>Called by ToolManager on tool activation: a freshly picked tool whose
+        /// panel sits out of view reads as "the tool has no settings" (device feedback
+        /// 2026-08-10) — re-place aggressively on the NEXT show, while a grip-parked panel
+        /// still survives ordinary refreshes.</summary>
+        public void NoteToolChanged() => _toolJustChanged = true;
+
         private bool NeedsPlacement()
         {
             if (!_everPlaced) return true;
             EnsureCam();
             if (_cam == null) return false;
             Vector3 to = panelRoot.transform.position - _cam.position;
-            if (to.magnitude > 2.5f) return true;
-            return Vector3.Angle(_cam.forward, to) > 45f;   // parked behind the user's back
+            float maxDist = _toolJustChanged ? 1.4f : 2.5f;
+            float maxAngle = _toolJustChanged ? 28f : 45f;   // parked behind the user's back
+            _toolJustChanged = false;
+            if (to.magnitude > maxDist) return true;
+            return Vector3.Angle(_cam.forward, to) > maxAngle;
         }
 
         /// <summary>Move the panel so the grabbed point tracks the pointer (drag).</summary>

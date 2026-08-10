@@ -78,12 +78,14 @@ namespace RoomPlanner.Core
         public const float ZModalContent = -0.030f;
 
         // ---- radial menu (§1, §6.5) ----
-        public const float RadialOuterRadius = 0.11f;    // at 0.6 m spawn distance
-        public const float RadialInnerRadius = 0.11f * 0.45f;
-        public const float RadialHubRadius = 0.11f * 0.36f;
-        public const float RadialIconRadius = 0.11f * 0.72f;
+        // 0.165 (was 0.11): device feedback 2026-08-10 — the wheel read too small; ×1.5
+        // keeps every derived proportion (hub/icons/scrim) via the shared base constant
+        public const float RadialOuterRadius = 0.165f;   // at 0.6 m spawn distance
+        public const float RadialInnerRadius = RadialOuterRadius * 0.45f;
+        public const float RadialHubRadius = RadialOuterRadius * 0.36f;
+        public const float RadialIconRadius = RadialOuterRadius * 0.72f;
         public const float RadialSectorGapDeg = 2.5f;
-        public const float RadialScrimRadius = 0.11f * 1.25f;
+        public const float RadialScrimRadius = RadialOuterRadius * 1.25f;
         public const float RadialScrimAlpha = 0.55f;
         public const float RadialSpawnDistance = 0.60f;
 

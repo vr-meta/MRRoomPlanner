@@ -96,8 +96,10 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("popups").objectReferenceValue = popups;
             so.ApplyModifiedProperties();
 
-            // v2 builds in real meters — no compensating scale; text sizes come from the grid
-            panelRoot.transform.localScale = Vector3.one;
+            // v2 builds in real meters on the 6 mm grid; ×1.55 on top per device feedback
+            // 2026-08-10 («шрифт минимум ×3») — with the ×3.3 font recalibration this puts
+            // row text at ~×5 of the first build, the regime the user asked for
+            panelRoot.transform.localScale = Vector3.one * 1.55f;
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.MenuLayer);
             panelRoot.SetActive(false); // shown when a tool with settings becomes active
             return inspector;
