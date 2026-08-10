@@ -69,12 +69,16 @@ namespace RoomPlanner.EditorTools
             ctx.RailingMat = CreatePlainLitMat("MEP_Railing", new Color(0.35f, 0.36f, 0.38f));     // dark metal
             // TVs/monitors (matched by IFC name): near-black glossy glass, not wood
             ctx.ScreenMat = CreatePlainLitMat("MEP_Screen", new Color(0.05f, 0.05f, 0.06f));
-            if (ctx.ScreenMat.HasProperty("_Smoothness")) ctx.ScreenMat.SetFloat("_Smoothness", 0.85f);
+            MakeGlossy(ctx.ScreenMat, 0.85f);
 
             // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
             // hole on passthrough; fixtures near-white, so they read as trade plastic.
-            ctx.WireMat = CreateMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
-            ctx.FixtureMat = CreateMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            // LIT since 2026-08-11 (headset feedback: unlit fixtures read as flat decals):
+            // outlets/switches = glossy trade plastic, wires = satin PVC sheath.
+            ctx.WireMat = CreatePlainLitMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
+            MakeGlossy(ctx.WireMat, 0.30f);
+            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            MakeGlossy(ctx.FixtureMat, 0.55f);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
@@ -266,6 +270,14 @@ namespace RoomPlanner.EditorTools
         }
 
         /// <summary>Matte building surfaces: no smooth plastic sheen on concrete/wood.</summary>
+        /// <summary>Opposite of TameSpecular: glossy plastic/glass with a live highlight
+        /// (electric fixtures, TV screens) — call AFTER the Create* factory.</summary>
+        private static void MakeGlossy(Material mat, float smoothness)
+        {
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+            if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 1f);
+        }
+
         private static void TameSpecular(Material mat)
         {
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);
