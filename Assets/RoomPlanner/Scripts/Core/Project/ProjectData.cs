@@ -50,7 +50,10 @@ namespace RoomPlanner.Core.Project
         public int Offset, Join;
         public bool Painted;
         public Color Paint;
+        /// <summary>v3: the INNER side (v2 readers treated it as the whole wall).</summary>
         public ProjectFinish Finish = new();
+        /// <summary>v3: the OUTER side; Kind 0 in a v2 file (absent field).</summary>
+        public ProjectFinish FinishB = new();
         public List<ProjectOpening> Openings = new();
     }
 
@@ -137,8 +140,11 @@ namespace RoomPlanner.Core.Project
     public class ProjectData
     {
         /// <summary>Current format version. 1 = walls/floors/stairs/MEP only;
-        /// 2 = + electrical layer. Readers accept anything up to this and refuse newer.</summary>
-        public const int CurrentVersion = 2;
+        /// 2 = + electrical layer; 3 = per-side wall finishes (issue #34) — in v3
+        /// ProjectWall.Finish is the INNER side and FinishB the outer, while a v2
+        /// file's single Finish paints the whole wall. Readers accept anything up
+        /// to this and refuse newer.</summary>
+        public const int CurrentVersion = 3;
 
         public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();

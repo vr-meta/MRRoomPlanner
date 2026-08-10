@@ -48,7 +48,10 @@ namespace RoomPlanner.Import
                         Join = (int)s.Join,
                         Painted = sel != null && sel.IsPainted,
                         Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
+                        // v3 (issue #34): Finish = inner side, FinishB = outer side
                         Finish = CaptureFinish(sel),
+                        FinishB = Capture(sel != null
+                            ? sel.FinishOf(WallSide.Outer) : SurfaceFinish.None),
                     };
                     foreach (var op in s.Openings)
                         w.Openings.Add(new ProjectOpening
@@ -210,8 +213,11 @@ namespace RoomPlanner.Import
         /// flat colour and textured floors came back white after every load.</summary>
         private static ProjectFinish CaptureFinish(Editing.Selectable sel)
         {
-            if (sel == null) return new ProjectFinish();
-            var f = sel.Finish;
+            return Capture(sel == null ? SurfaceFinish.None : sel.Finish);
+        }
+
+        private static ProjectFinish Capture(SurfaceFinish f)
+        {
             return new ProjectFinish
             {
                 Kind = (int)f.Kind,
@@ -270,6 +276,9 @@ namespace RoomPlanner.Import
                     HasPaint = w.Painted,
                     PaintColor = w.Paint,
                     Finish = ToFinish(w.Finish),
+                    // v2 files carried ONE finish for the whole wall — mirror it onto
+                    // the outer side so the old look survives; v3 is verbatim per side.
+                    FinishB = data.Version >= 3 ? ToFinish(w.FinishB) : ToFinish(w.Finish),
                 };
                 iw.Path.Add(data.Nodes[w.NodeA].Position);
                 iw.Path.Add(data.Nodes[w.NodeB].Position);

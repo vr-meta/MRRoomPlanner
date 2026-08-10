@@ -118,17 +118,35 @@ namespace RoomPlanner.Editing
         }
 
         // ---- finish (design/04 «Текстуры v1»): color OR texture on the BODY ----
+        // Walls carry a PAIR of finishes (issue #34): _finish = inner side (and the
+        // whole object for every other kind), _finishOuter = outer side; the mesh
+        // splits the body into submeshes 0 (inner) / 3 (outer) / 4 (rims → outer).
 
         private SurfaceFinish _finish = SurfaceFinish.None;
         private Texture2D _finishTexture;   // resolved by the caller (FinishLibrary)
+        private SurfaceFinish _finishOuter = SurfaceFinish.None;
+        private Texture2D _finishTextureOuter;
 
-        public bool IsPainted { get { Resolve(); return !_finish.IsNone; } }
+        public bool IsPainted { get { Resolve(); return !_finish.IsNone || !_finishOuter.IsNone; } }
 
         /// <summary>Legacy color view of the finish (persisted colors, tint of a texture).</summary>
         public Color Paint { get { Resolve(); return _finish.Color; } }
 
         public SurfaceFinish Finish { get { Resolve(); return _finish; } }
         public Texture2D FinishTexture { get { Resolve(); return _finishTexture; } }
+
+        /// <summary>Per-side view: non-walls answer with their single finish.</summary>
+        public SurfaceFinish FinishOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishOuter : _finish;
+        }
+
+        public Texture2D FinishTextureOf(WallSide side)
+        {
+            Resolve();
+            return side == WallSide.Outer && _wall != null ? _finishTextureOuter : _finishTexture;
+        }
 
         /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
         public Color BaseBodyColor
@@ -144,13 +162,28 @@ namespace RoomPlanner.Editing
         /// renderer — glass and joinery keep their look). Undo via PaintCommand.</summary>
         public void SetPaint(Color color) => SetFinish(SurfaceFinish.OfColor(color), null);
 
-        /// <summary>Apply a finish; for Texture kind the caller resolves the Texture2D
-        /// through FinishLibrary (the model itself never touches assets).</summary>
+        /// <summary>Apply a finish to the WHOLE object (both wall sides); for Texture
+        /// kind the caller resolves the Texture2D through FinishLibrary (the model
+        /// itself never touches assets).</summary>
         public void SetFinish(SurfaceFinish finish, Texture2D texture)
         {
             Resolve();
             _finish = finish;
             _finishTexture = finish.Kind == FinishKind.Texture ? texture : null;
+            _finishOuter = _wall != null ? finish : SurfaceFinish.None;
+            _finishTextureOuter = _wall != null ? _finishTexture : null;
+            ApplyVisual();
+        }
+
+        /// <summary>Apply a finish to ONE wall side (issue #34); anything that is not
+        /// a wall degrades to the whole-object path.</summary>
+        public void SetFinishSide(WallSide side, SurfaceFinish finish, Texture2D texture)
+        {
+            Resolve();
+            if (_wall == null) { SetFinish(finish, texture); return; }
+            var tex = finish.Kind == FinishKind.Texture ? texture : null;
+            if (side == WallSide.Outer) { _finishOuter = finish; _finishTextureOuter = tex; }
+            else { _finish = finish; _finishTexture = tex; }
             ApplyVisual();
         }
 
@@ -160,6 +193,8 @@ namespace RoomPlanner.Editing
             Resolve();
             _finish = SurfaceFinish.None;
             _finishTexture = null;
+            _finishOuter = SurfaceFinish.None;
+            _finishTextureOuter = null;
             ApplyVisual();
         }
 
@@ -185,38 +220,30 @@ namespace RoomPlanner.Editing
                                                                  : RoomPlanner.Tools.UiColors.Hover;
             float t = _state == HighlightState.Selected ? SelectTint : HoverTint;
             bool hasFinish = !_finish.IsNone;
-            bool textured = _finish.Kind == FinishKind.Texture && _finishTexture != null;
 
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var r = _renderers[i];
                 if (r == null) continue;
-                // body color: solid paint, texture tint (usually white), or the material's own
-                Color own = i == 0 && hasFinish ? _finish.Color : _ownColors[i];
+
+                // Wall body with per-side submeshes (issue #34): inner (0) takes its
+                // own finish, outer (3) and rims (4) take the outer one — rims follow
+                // the outer look, as real decorating leaves reveals unpapered.
+                if (i == 0 && _wall != null && r.sharedMaterials.Length >= 5)
+                {
+                    BodyBlock(r, 0, _finish, _finishTexture, tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 3, _finishOuter, _finishTextureOuter, tint, stateColor, t, _ownColors[i]);
+                    BodyBlock(r, 4, _finishOuter, _finishTextureOuter, tint, stateColor, t, _ownColors[i]);
+                    continue;
+                }
+
                 bool needBlock = tint || (i == 0 && hasFinish);
                 bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
                 {
-                    Color c = tint ? Color.Lerp(own, stateColor, t) : own;
-                    _mpb.Clear();
-                    _mpb.SetColor(BaseColorId, c);
-                    _mpb.SetColor(ColorId, c);
-                    _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
-                    // finish gloss applies to color paint AND textures (design/04 v1.2)
-                    if (i == 0 && hasFinish) _mpb.SetFloat(SmoothnessId, _finish.Smoothness);
-                    if (i == 0 && textured)
-                    {
-                        // wallpaper/wood over the metric UVs: swap the texture and set the
-                        // metric tiling (design/04) — the material itself is never touched
-                        _mpb.SetTexture(BaseMapId, _finishTexture);
-                        _mpb.SetTexture(MainTexId, _finishTexture);
-                        _mpb.SetVector(BaseMapStId, _finish.UvScaleOffset());
-                        _mpb.SetVector(MainTexStId, _finish.UvScaleOffset());
-                        // floors keep the blueprint projection in uv0; finish textures
-                        // tile over the metric uv1 channel (design/04, T4)
-                        if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
-                    }
+                    var finish = i == 0 ? _finish : SurfaceFinish.None;
+                    FillBlock(finish, i == 0 ? _finishTexture : null, tint, stateColor, t, _ownColors[i]);
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
@@ -225,6 +252,46 @@ namespace RoomPlanner.Editing
                     if (bodyOnly) r.SetPropertyBlock(null, 0);
                     else r.SetPropertyBlock(null);   // restore the material's own color
                 }
+            }
+        }
+
+        /// <summary>One body submesh of a per-side wall: block when painted or
+        /// highlighted, cleared otherwise.</summary>
+        private void BodyBlock(Renderer r, int index, SurfaceFinish finish, Texture2D tex,
+            bool tint, Color stateColor, float t, Color ownColor)
+        {
+            if (!tint && finish.IsNone) { r.SetPropertyBlock(null, index); return; }
+            FillBlock(finish, tex, tint, stateColor, t, ownColor);
+            r.SetPropertyBlock(_mpb, index);
+        }
+
+        /// <summary>Fill _mpb for one surface: paint/texture/tint — the single place
+        /// deciding what a finish looks like.</summary>
+        private void FillBlock(SurfaceFinish finish, Texture2D tex,
+            bool tint, Color stateColor, float t, Color ownColor)
+        {
+            bool hasFinish = !finish.IsNone;
+            bool textured = finish.Kind == FinishKind.Texture && tex != null;
+            // body color: solid paint, texture tint (usually white), or the material's own
+            Color own = hasFinish ? finish.Color : ownColor;
+            Color c = tint ? Color.Lerp(own, stateColor, t) : own;
+            _mpb.Clear();
+            _mpb.SetColor(BaseColorId, c);
+            _mpb.SetColor(ColorId, c);
+            _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
+            // finish gloss applies to color paint AND textures (design/04 v1.2)
+            if (hasFinish) _mpb.SetFloat(SmoothnessId, finish.Smoothness);
+            if (textured)
+            {
+                // wallpaper/wood over the metric UVs: swap the texture and set the
+                // metric tiling (design/04) — the material itself is never touched
+                _mpb.SetTexture(BaseMapId, tex);
+                _mpb.SetTexture(MainTexId, tex);
+                _mpb.SetVector(BaseMapStId, finish.UvScaleOffset());
+                _mpb.SetVector(MainTexStId, finish.UvScaleOffset());
+                // floors keep the blueprint projection in uv0; finish textures
+                // tile over the metric uv1 channel (design/04, T4)
+                if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
             }
         }
 

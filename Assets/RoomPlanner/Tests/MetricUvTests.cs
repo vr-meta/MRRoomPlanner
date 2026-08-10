@@ -60,7 +60,11 @@ namespace RoomPlanner.Tests
                 var wall = go.AddComponent<Wall>();
                 wall.Build(new List<Vector3> { Vector3.zero, new(2f, 0f, 0f) },
                     0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, new Vector3(1f, 0f, -1f));
-                AssertMetricUnwrap(go.GetComponent<MeshFilter>().sharedMesh, 0);
+                // body submeshes since #34: 0 inner, 3 outer, 4 rims/caps
+                var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                AssertMetricUnwrap(mesh, 0);
+                AssertMetricUnwrap(mesh, 3);
+                AssertMetricUnwrap(mesh, 4);
             }
             finally { Object.DestroyImmediate(go); }
         }
@@ -86,7 +90,11 @@ namespace RoomPlanner.Tests
                     IsDoor = false,
                 });
                 wall.BuildSegment(seg);
-                AssertMetricUnwrap(go.GetComponent<MeshFilter>().sharedMesh, 0);
+                // jambs live in the rims submesh (4) since the per-side split (#34)
+                var mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                AssertMetricUnwrap(mesh, 0);
+                AssertMetricUnwrap(mesh, 3);
+                AssertMetricUnwrap(mesh, 4);
             }
             finally { Object.DestroyImmediate(go); }
         }

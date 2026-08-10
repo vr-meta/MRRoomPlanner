@@ -646,6 +646,27 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 - [ ] **S2** — SetupRig + полный прогон + синхронизация доков (10-controls при смене
   слота, 03-openings по факту)
 
+## 2t. Покраска по сторонам стены + фильтр табов (issue #34, `design/04` §«Двусторонние стены», ветка `worktree-audit-fixes`)
+
+Фидбек шлема 2026-08-10: «красится вся стена целиком; нужны обои внутри / краска снаружи».
+
+- [x] **P1** — Core/Wall: тело стены в 3 сабмеша (0 inner / 3 outer / 4 торцы-откосы;
+  1 стекло и 2 столярка без изменений), оба пути триангуляции; `Wall.SideOf(point)`;
+  +тесты `WallSideTests` (сабмеши, winding, SideOf в обоих режимах)
+- [x] **P2** — Selectable: пара финишей у стены (`FinishOf/SetFinishSide`, торцы
+  наследуют внешнюю), `ApplyVisual` пишет блоки на 0/3/4; `PaintCommand` before/after
+  обеих сторон; +Play-тесты (per-side undo со смешанным состоянием, whole)
+- [x] **P3** — PaintController: Segmented **Apply: Side | Whole** (дефолт Side),
+  сторона по `SideOf(hit)`; фильтр категорий (аудит 06 §Б5): Walls→стены,
+  Floors→полы/лестницы, Tiles→стены+полы, Ceiling→плиты; ретикл Danger + отказ;
+  +тест `CategoryAccepts`
+- [x] **P4** — Персист: формат v3 (`ProjectWall.FinishB`), v2-файл = обе стороны
+  одной записью; round-trip-тест (v3 пер-сторонний + v2-легаси)
+- [x] **P5** — SetupRig (5 материалов у Wall-префаба; текстуры скачаны в worktree —
+  FinishLibrary снова полная) + полный прогон (EditMode 402/402, PlayMode 128/128) +
+  доки (`design/04`, аудит 06 §Р1/Б5). Хвост: замер draw calls на Quest (в #34);
+  проверка в шлеме — Apply Side/Whole, Danger-ретикл
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

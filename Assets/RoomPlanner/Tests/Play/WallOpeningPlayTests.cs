@@ -157,7 +157,7 @@ namespace RoomPlanner.Tests.Play
             yield return null;
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(3, mesh.subMeshCount);
+            Assert.AreEqual(5, mesh.subMeshCount, "inner/glass/joinery/outer/rims (#34)");
             Assert.Greater(mesh.GetTriangles(1).Length, 0, "window pane lives in the glass submesh");
             Assert.Greater(mesh.GetTriangles(2).Length, 0, "window frame lives in the joinery submesh");
 
@@ -192,9 +192,11 @@ namespace RoomPlanner.Tests.Play
 
             Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 1f, -2f), Vector3.forward), out _));
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(3, mesh.subMeshCount, "empty glass/joinery submeshes always present");
+            Assert.AreEqual(5, mesh.subMeshCount, "empty glass/joinery submeshes always present");
             Assert.AreEqual(0, mesh.GetTriangles(1).Length);
             Assert.AreEqual(0, mesh.GetTriangles(2).Length);
+            Assert.Greater(mesh.GetTriangles(3).Length, 0, "outer side populated (#34)");
+            Assert.Greater(mesh.GetTriangles(4).Length, 0, "rims populated (#34)");
             Assert.AreEqual(0, seg.Openings.Count);
         }
     }

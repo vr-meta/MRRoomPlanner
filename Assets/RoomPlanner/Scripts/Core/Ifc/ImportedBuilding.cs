@@ -31,8 +31,11 @@ namespace RoomPlanner.Core.Ifc
         public float BaseHeight;
         public bool HasPaint;
         public Color PaintColor;
-        /// <summary>Full surface finish from a project file (v2); None for IFC imports.</summary>
+        /// <summary>Full surface finish from a project file (v2); None for IFC imports.
+        /// v3 per-side walls (issue #34): this is the INNER side.</summary>
         public SurfaceFinish Finish;
+        /// <summary>The OUTER side (v3); loaders mirror Finish here for older files.</summary>
+        public SurfaceFinish FinishB;
     }
 
     public sealed class ImportedSlab
