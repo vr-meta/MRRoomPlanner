@@ -24,7 +24,12 @@ namespace RoomPlanner.Core
     public static class BlueprintMath
     {
         private const float MinScale = 1e-4f;
-        private const float MinSegment = 1e-3f;   // shorter calibration segments are noise
+        private const float MinSegment = 1e-3f;   // plan-side: shorter segments are noise
+
+        /// <summary>Room-side calibration base, metres. Below this the solved similarity is
+        /// noise amplified ~scale-fold — design/15 asks for ~10 cm between the room points
+        /// (audit 2026-08-10, 07 §Б1; the old 1 mm threshold accepted garbage).</summary>
+        public const float MinRoomSegment = 0.1f;
 
         private static float SafeScale(float s) => Mathf.Abs(s) > MinScale ? s : 1f;
 
@@ -65,7 +70,7 @@ namespace RoomPlanner.Core
             Vector2 uvB = WorldToPlanUV(fromB, current);
             Vector2 dUV = uvB - uvA;
             Vector2 dW = new Vector2(toB.x - toA.x, toB.z - toA.z);
-            if (dUV.magnitude < MinSegment || dW.magnitude < MinSegment) return current;
+            if (dUV.magnitude < MinSegment || dW.magnitude < MinRoomSegment) return current;
 
             float scale = dW.magnitude / dUV.magnitude;
             float rotRad = Mathf.Atan2(dW.y, dW.x) - Mathf.Atan2(dUV.y, dUV.x);

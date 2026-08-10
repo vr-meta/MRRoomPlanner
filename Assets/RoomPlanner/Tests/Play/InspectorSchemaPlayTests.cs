@@ -455,5 +455,35 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(target.OriginX, bp.PlanOffsetX, 1e-3f);
             Assert.AreEqual(target.OriginZ, bp.PlanOffsetZ, 1e-3f);
         }
+
+        [Test]
+        public void BlueprintCalibration_ScaleOutsideSliderRange_IsRefused()
+        {
+            // Audit 07 §Б1: the solved similarity used to be applied unclamped — after a
+            // bad calibration the scale slider pointed outside its own track.
+            var go = new GameObject("BlueprintCtl");
+            _spawned.Add(go);
+            var bp = go.AddComponent<BlueprintController>();
+            float scale0 = bp.PlanScale, ox0 = bp.PlanOffsetX;
+
+            var current = new BlueprintPlacement
+            {
+                Scale = scale0, RotationDeg = bp.PlanRotationDeg,
+                OriginX = ox0, OriginZ = bp.PlanOffsetZ,
+            };
+            var wild = new BlueprintPlacement { Scale = 100f };   // far past the 50 m maximum
+            var uvA = new Vector2(0.2f, 0.3f);
+            var uvB = new Vector2(0.8f, 0.5f);
+
+            bp.BeginCalibration();
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvA, 0f, current));
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvA, 0f, wild));
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvB, 0f, current));
+            bp.CalibratePoint(BlueprintMath.PlanUVToWorld(uvB, 0f, wild));
+
+            Assert.AreEqual(-1, bp.CalibrationStep, "the gesture still ends");
+            Assert.AreEqual(scale0, bp.PlanScale, 1e-4f, "wild scale refused — placement kept");
+            Assert.AreEqual(ox0, bp.PlanOffsetX, 1e-4f);
+        }
     }
 }
