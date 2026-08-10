@@ -5,7 +5,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using RoomPlanner.Core.Ifc;
+using RoomPlanner.Core.Project;
 using RoomPlanner.Editing;
+using RoomPlanner.Electrical;
 using RoomPlanner.Floors;
 using RoomPlanner.Import;
 using RoomPlanner.Walls;
@@ -118,6 +120,73 @@ namespace RoomPlanner.Tests.Play
             basin.Triangles.AddRange(new[] { 0, 1, 2 });
             b.Plumbing.Add(basin);
             return b;
+        }
+
+        [UnityTest]
+        public IEnumerator ElectricalLayer_SurvivesTheRoundTrip()
+        {
+            // Format v2 (audit B1): the autosave used to drop every outlet and wire
+            // while ClearScene actively destroyed them — building + wiring + restart
+            // returned the building without its electrics.
+            var (import, walls, model) = MakeRig();
+            var electric = Track(new GameObject("Electric")).AddComponent<ElectricController>();
+            SetField(electric, "sceneModel", model);
+
+            import.BuildScene(SampleBuilding());
+
+            var fxGo = Track(new GameObject("Outlet"));
+            fxGo.AddComponent<MeshFilter>();
+            fxGo.AddComponent<MeshRenderer>();
+            var fx = fxGo.AddComponent<ElectricFixture>();
+            fx.Build(FixtureKind.Outlet, posts: 2, keys: 1);
+            fx.transform.position = new Vector3(1f, 0.3f, 0f);
+            var fxSel = fxGo.AddComponent<Selectable>();
+            model.Register(fxSel);
+            string savedId = fxSel.Id;
+
+            var wGo = Track(new GameObject("Run"));
+            wGo.AddComponent<MeshFilter>();
+            wGo.AddComponent<MeshRenderer>();
+            var route = wGo.AddComponent<WireRoute>();
+            Assert.IsTrue(route.Build(new List<Vector3>
+                { fx.TerminalWorld, new Vector3(1f, 2.3f, 0f) }, CableType.C3x15));
+            route.StartFixtureId = savedId;
+            model.Register(wGo.AddComponent<Selectable>());
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Fixtures.Count, "the outlet is captured");
+            Assert.AreEqual(1, data.Wires.Count, "the run is captured");
+            Assert.AreEqual(savedId, data.Wires[0].StartId);
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            Assert.AreEqual(0,
+                Object.FindObjectsByType<ElectricFixture>(FindObjectsSortMode.None).Length,
+                "clear really destroys the electrics");
+
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var rFx = Object.FindObjectsByType<ElectricFixture>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, rFx.Length);
+            Assert.AreEqual(FixtureKind.Outlet, rFx[0].Kind);
+            Assert.AreEqual(2, rFx[0].Posts);
+            Assert.AreEqual(new Vector3(1f, 0.3f, 0f), rFx[0].transform.position);
+            var rSel = rFx[0].GetComponent<Selectable>();
+            Assert.AreEqual(savedId, rSel.Id, "the saved id is kept verbatim");
+
+            var rRoute = Object.FindObjectsByType<WireRoute>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, rRoute.Length);
+            Assert.AreEqual(CableType.C3x15, rRoute[0].Cable);
+            Assert.AreEqual(savedId, rRoute[0].StartFixtureId);
+
+            // the id link must be LIVE, not just a string: moving the restored outlet
+            // drags the attached wire end, exactly like before the restart
+            Vector3 endBefore = rRoute[0].GetPoint(0);
+            rSel.MoveBy(new Vector3(0.3f, 0f, 0f));
+            Assert.AreEqual(endBefore + new Vector3(0.3f, 0f, 0f), rRoute[0].GetPoint(0),
+                "wire ends re-attach through the preserved id");
         }
 
         [UnityTest]

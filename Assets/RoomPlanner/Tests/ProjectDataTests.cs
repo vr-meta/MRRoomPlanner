@@ -7,6 +7,25 @@ namespace RoomPlanner.Tests
     public class ProjectDataTests
     {
         [Test]
+        public void FromJson_RefusesANewerFormatVersion()
+        {
+            // Audit 12 §Б2: partially reading a newer file would silently drop whatever
+            // the newer build saved — and the next autosave would overwrite the original.
+            var d = new ProjectData { Version = ProjectData.CurrentVersion + 1 };
+            Assert.IsNull(ProjectData.FromJson(d.ToJson()));
+        }
+
+        [Test]
+        public void FromJson_V1File_LoadsWithEmptyElectrics()
+        {
+            var d = new ProjectData { Version = 1 };
+            var round = ProjectData.FromJson(d.ToJson());
+            Assert.IsNotNull(round, "v1 files stay loadable");
+            Assert.AreEqual(0, round.Fixtures.Count);
+            Assert.AreEqual(0, round.Wires.Count);
+        }
+
+        [Test]
         public void JsonRoundTrip_KeepsEverything()
         {
             var data = new ProjectData { PlanScale = 7.5f, PlanRotationDeg = 90f, PlanOffsetX = 1.5f };
@@ -33,7 +52,7 @@ namespace RoomPlanner.Tests
 
             var round = ProjectData.FromJson(data.ToJson());
 
-            Assert.AreEqual(1, round.Version);
+            Assert.AreEqual(ProjectData.CurrentVersion, round.Version);
             Assert.AreEqual(2, round.Nodes.Count);
             Assert.AreEqual(new Vector3(4f, 0f, 2f), round.Nodes[1].Position);
             var w = round.Walls[0];

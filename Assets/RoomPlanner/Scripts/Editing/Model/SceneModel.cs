@@ -36,6 +36,10 @@ namespace RoomPlanner.Editing
         {
             if (s == null || !s.IsAlive || _items.Contains(s)) return;
             if (string.IsNullOrEmpty(s.Id)) s.Id = (_nextId++).ToString();
+            // A pre-set numeric id (project restore keeps saved ids so wire↔fixture
+            // links survive) must also advance the counter — otherwise the next new
+            // object could mint a duplicate id (audit B1).
+            else if (int.TryParse(s.Id, out int n) && n >= _nextId) _nextId = n + 1;
             _items.Add(s);
         }
 

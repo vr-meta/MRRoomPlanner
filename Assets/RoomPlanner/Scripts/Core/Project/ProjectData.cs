@@ -79,15 +79,45 @@ namespace RoomPlanner.Core.Project
         public Color Paint;
     }
 
+    // ---- v2: the electrical layer (audit 2026-08-10, 12 §Р1 / B1). Before this the
+    // autosave silently dropped every outlet and wire while load DESTROYED them. ----
+
+    [Serializable]
+    public class ProjectFixture
+    {
+        /// <summary>SceneModel id, kept verbatim — wire ends re-attach by this id.</summary>
+        public string Id;
+        public int Kind;                  // FixtureKind as int
+        public int Posts = 1, Keys = 1;
+        public int Reserve = -1;          // panel BOM reserve %; -1 = default
+        public Vector3 Position;
+        public Quaternion Rotation = Quaternion.identity;
+        public float BaseLevel;
+    }
+
+    [Serializable]
+    public class ProjectWire
+    {
+        public List<Vector3> Points = new();
+        public int Cable;                 // CableType as int
+        public string StartId, EndId;     // attached fixture ids; null/empty = free end
+    }
+
     [Serializable]
     public class ProjectData
     {
-        public int Version = 1;
+        /// <summary>Current format version. 1 = walls/floors/stairs/MEP only;
+        /// 2 = + electrical layer. Readers accept anything up to this and refuse newer.</summary>
+        public const int CurrentVersion = 2;
+
+        public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();
         public List<ProjectWall> Walls = new();
         public List<ProjectFloor> Floors = new();
         public List<ProjectStair> Stairs = new();
         public List<ProjectMep> Plumbing = new();
+        public List<ProjectFixture> Fixtures = new();
+        public List<ProjectWire> Wires = new();
 
         // blueprint placement travels with the project — the plan image is a file next to it
         public float PlanScale = 5f;
@@ -96,6 +126,14 @@ namespace RoomPlanner.Core.Project
         public float PlanOffsetZ;
 
         public string ToJson() => JsonUtility.ToJson(this);
-        public static ProjectData FromJson(string json) => JsonUtility.FromJson<ProjectData>(json);
+
+        /// <summary>Null for unparsable json OR a file from a NEWER format version —
+        /// reading it partially would silently drop whatever the newer build saved
+        /// (audit 12 §Б2). v1 files load fine: the new sections default to empty.</summary>
+        public static ProjectData FromJson(string json)
+        {
+            var d = JsonUtility.FromJson<ProjectData>(json);
+            return d != null && d.Version <= CurrentVersion ? d : null;
+        }
     }
 }

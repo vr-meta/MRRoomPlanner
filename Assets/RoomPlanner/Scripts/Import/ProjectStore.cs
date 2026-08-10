@@ -112,6 +112,45 @@ namespace RoomPlanner.Import
                 data.Plumbing.Add(pm);
             }
 
+            // v2: the electrical layer (audit B1) — REGISTERED objects only: the tool's
+            // ghost preview and the parked prefab template are not in the model. Hidden
+            // (deleted, undo-able) ones stay out, same as every other layer.
+            var model = Editing.SceneModel.Instance;
+            if (model != null)
+            {
+                foreach (var item in model.Items)
+                {
+                    if (item is not Editing.Selectable s || !s.IsAlive || s.IsHidden) continue;
+                    if (s.Fixture != null)
+                    {
+                        data.Fixtures.Add(new ProjectFixture
+                        {
+                            Id = s.Id,
+                            Kind = (int)s.Fixture.Kind,
+                            Posts = s.Fixture.Posts,
+                            Keys = s.Fixture.Keys,
+                            Reserve = s.Fixture.ReservePercent,
+                            Position = s.Fixture.transform.position,
+                            Rotation = s.Fixture.transform.rotation,
+                            BaseLevel = s.Fixture.BaseLevel,
+                        });
+                    }
+                    else if (s.Kind == Editing.SelectableKind.Wire)
+                    {
+                        var route = s.GetComponent<Electrical.WireRoute>();
+                        if (route == null) continue;
+                        var pw = new ProjectWire
+                        {
+                            Cable = (int)route.Cable,
+                            StartId = route.StartFixtureId,
+                            EndId = route.EndFixtureId,
+                        };
+                        pw.Points.AddRange(route.Points);
+                        data.Wires.Add(pw);
+                    }
+                }
+            }
+
             if (blueprint != null)
             {
                 data.PlanScale = blueprint.PlanScale;
@@ -128,9 +167,28 @@ namespace RoomPlanner.Import
             if (data == null || import == null) return;
             import.ClearScene();
             import.BuildScene(ToBuilding(data));
+            RestoreElectrical(data);
             if (blueprint != null)
                 blueprint.SetPlacement(data.PlanScale, data.PlanRotationDeg,
                     data.PlanOffsetX, data.PlanOffsetZ);
+        }
+
+        /// <summary>
+        /// Recreate the electrical layer (format v2, audit B1). The controller is found
+        /// at load time instead of being rig-wired — one call per load, and restore must
+        /// work even on rigs saved before the field existed. Public for round-trip tests.
+        /// </summary>
+        public static void RestoreElectrical(ProjectData data)
+        {
+            if (data.Fixtures.Count == 0 && data.Wires.Count == 0) return;
+            var electric = Object.FindFirstObjectByType<Electrical.ElectricController>();
+            if (electric == null)
+            {
+                Debug.LogWarning("[Project] file carries electrical data but the rig has no ElectricController");
+                return;
+            }
+            foreach (var f in data.Fixtures) electric.RestoreFixture(f);
+            foreach (var w in data.Wires) electric.RestoreWire(w);
         }
 
         /// <summary>Project → the import pipeline's input model.</summary>
