@@ -60,6 +60,16 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void Smoothness_KeptAndClamped()
+        {
+            Assert.AreEqual(0.6f, SurfaceFinish.OfTexture("t", 1f, 0f, null, 0.6f).Smoothness, 1e-5f);
+            Assert.AreEqual(1f, SurfaceFinish.OfTexture("t", 1f, 0f, null, 5f).Smoothness, 1e-5f);
+            Assert.AreEqual(0.3f, SurfaceFinish.OfColor(Color.red, 0.3f).Smoothness, 1e-5f);
+            Assert.AreEqual(0f, SurfaceFinish.OfColor(Color.red).Smoothness,
+                "default stays matte — the original look");
+        }
+
+        [Test]
         public void UvScale_TileYZero_FallsBackToSquare()
         {
             var f = SurfaceFinish.OfTexture("wood", 2.0f);

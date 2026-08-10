@@ -52,6 +52,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
+        [SerializeField] private Light sunLight;           // Rendering page: sun-shadows toggle
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -675,8 +676,40 @@ namespace RoomPlanner.Tools
                 .Header("rhead", "Rendering")
                 .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
                 .Toggle("ssao", "SSAO",
-                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao())
+                .Toggle("sunsh", "Sun shadows",
+                    () => sunLight != null && sunLight.shadows != LightShadows.None,
+                    _ => ToggleSunShadows())
+                .Toggle("objsh", "Cast shadows (all)",
+                    () => RoomPlanner.Import.MepView.CastShadows, _ => ToggleCastShadows());
             return _renderSchema;
+        }
+
+        /// <summary>One switch for EVERY content caster — walls, floors, stairs,
+        /// furniture, fixtures (feedback 2026-08-11). Imports go two-sided (arbitrary
+        /// Brep winding); our procedural meshes cast normally. UI never casts.</summary>
+        private void ToggleCastShadows()
+        {
+            bool on = !RoomPlanner.Import.MepView.CastShadows;
+            RoomPlanner.Import.MepView.CastShadows = on;   // future imports follow
+            foreach (var sel in FindObjectsByType<Selectable>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                bool import = sel.GetComponent<RoomPlanner.Import.MepView>() != null;
+                foreach (var r in sel.GetComponentsInChildren<MeshRenderer>(true))
+                    r.shadowCastingMode = !on ? UnityEngine.Rendering.ShadowCastingMode.Off
+                        : import ? UnityEngine.Rendering.ShadowCastingMode.TwoSided
+                                 : UnityEngine.Rendering.ShadowCastingMode.On;
+            }
+        }
+
+        /// <summary>Sun patches through the windows (feedback 2026-08-11) — toggleable
+        /// because a 2K shadow map is not free on Quest.</summary>
+        private void ToggleSunShadows()
+        {
+            if (sunLight == null) return;
+            sunLight.shadows = sunLight.shadows == LightShadows.None
+                ? LightShadows.Soft : LightShadows.None;
         }
 
         /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>

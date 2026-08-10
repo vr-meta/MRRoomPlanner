@@ -36,16 +36,18 @@ namespace RoomPlanner.EditorTools
             var ids = new List<string>();
             var textures = new List<Texture2D>();
             var tiles = new List<float>();
+            var glosses = new List<float>();
             var cats = new List<string>();
 
             int missing = 0;
-            foreach (var (cat, _, id, tile) in TextureDownloader.Curated)
+            foreach (var (cat, _, id, tile, gloss) in TextureDownloader.Curated)
             {
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TextureDownloader.PathFor(cat, id));
                 if (tex == null) { missing++; continue; }
                 ids.Add(id);
                 textures.Add(tex);
                 tiles.Add(tile);
+                glosses.Add(gloss);
                 cats.Add(cat);
             }
             if (missing > 0)
@@ -56,6 +58,7 @@ namespace RoomPlanner.EditorTools
             FillArray(so.FindProperty("ids"), ids.Count, (p, i) => p.stringValue = ids[i]);
             FillArray(so.FindProperty("textures"), textures.Count, (p, i) => p.objectReferenceValue = textures[i]);
             FillArray(so.FindProperty("tileMeters"), tiles.Count, (p, i) => p.floatValue = tiles[i]);
+            FillArray(so.FindProperty("gloss"), glosses.Count, (p, i) => p.floatValue = glosses[i]);
             FillArray(so.FindProperty("categories"), cats.Count, (p, i) => p.stringValue = cats[i]);
             so.ApplyModifiedProperties();
             return lib;

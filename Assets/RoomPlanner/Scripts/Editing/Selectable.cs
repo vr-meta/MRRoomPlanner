@@ -24,6 +24,7 @@ namespace RoomPlanner.Editing
         private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -202,6 +203,8 @@ namespace RoomPlanner.Editing
                     _mpb.SetColor(BaseColorId, c);
                     _mpb.SetColor(ColorId, c);
                     _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
+                    // finish gloss applies to color paint AND textures (design/04 v1.2)
+                    if (i == 0 && hasFinish) _mpb.SetFloat(SmoothnessId, _finish.Smoothness);
                     if (i == 0 && textured)
                     {
                         // wallpaper/wood over the metric UVs: swap the texture and set the

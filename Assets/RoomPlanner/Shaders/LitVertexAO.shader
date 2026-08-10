@@ -14,6 +14,8 @@ Shader "RoomPlanner/LitVertexAO"
         // across slabs), uv1 = metric world XZ (finish textures tile in metres).
         // Selectable flips this per-renderer via MPB when a texture finish is applied.
         _UseUV1("Sample UV1 (metric channel)", Float) = 0
+        // Finish gloss (design/04 v1.2): 0 = the old pure-matte look, 1 = glossy tile.
+        _Smoothness("Smoothness", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -29,6 +31,7 @@ Shader "RoomPlanner/LitVertexAO"
             half4 _BaseColor;
             float _Cull;
             float _UseUV1;
+            float _Smoothness;
         CBUFFER_END
         ENDHLSL
 
@@ -107,6 +110,18 @@ Shader "RoomPlanner/LitVertexAO"
                 half ndl = saturate(dot(n, mainLight.direction));
                 color += albedo * mainLight.color
                     * (ndl * mainLight.shadowAttenuation * mainLight.distanceAttenuation);
+
+                // finish gloss (design/04 v1.2): one cheap Blinn-Phong lobe off the main
+                // light; _Smoothness = 0 keeps the original pure-Lambert look
+                if (_Smoothness > 0.001)
+                {
+                    half3 viewDir = GetWorldSpaceNormalizeViewDir(i.positionWS);
+                    half3 halfway = normalize(mainLight.direction + viewDir);
+                    half specPow = exp2(1.0h + half(_Smoothness) * 9.0h);
+                    half spec = pow(saturate(dot(n, halfway)), specPow) * half(_Smoothness);
+                    color += mainLight.color
+                        * (spec * ndl * mainLight.shadowAttenuation * mainLight.distanceAttenuation);
+                }
 
                 #if defined(_ADDITIONAL_LIGHTS)
                 // Forward path only: uses per-object light indices, which Forward+ does

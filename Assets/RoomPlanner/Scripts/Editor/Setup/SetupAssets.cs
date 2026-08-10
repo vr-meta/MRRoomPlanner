@@ -48,8 +48,11 @@ namespace RoomPlanner.EditorTools
             // skybox shader survives build stripping
             ctx.SkyMat = CreateSkyMat("Env_Sky");
 
-            // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
+            // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent.
+            // Glass must NOT cast shadows: sun comes through the window into the house
+            // (feedback 2026-08-11) — belt-and-braces, the badge shader has no caster pass.
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
+            ctx.GlassMat.SetShaderPassEnabled("ShadowCaster", false);
             // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone, lit
             ctx.JoineryMat = CreateSurfaceMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f), null);
             // stairs share the concrete look of walls/floors until painting lands
@@ -64,11 +67,18 @@ namespace RoomPlanner.EditorTools
             ctx.FurnitureMat = CreatePlainLitMat("MEP_Furniture", new Color(0.62f, 0.50f, 0.38f)); // warm wood
             ctx.ProxyMat = CreatePlainLitMat("MEP_Generic", new Color(0.78f, 0.78f, 0.80f));       // trade plastic
             ctx.RailingMat = CreatePlainLitMat("MEP_Railing", new Color(0.35f, 0.36f, 0.38f));     // dark metal
+            // TVs/monitors (matched by IFC name): near-black glossy glass, not wood
+            ctx.ScreenMat = CreatePlainLitMat("MEP_Screen", new Color(0.05f, 0.05f, 0.06f));
+            MakeGlossy(ctx.ScreenMat, 0.85f);
 
             // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
             // hole on passthrough; fixtures near-white, so they read as trade plastic.
-            ctx.WireMat = CreateMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
-            ctx.FixtureMat = CreateMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            // LIT since 2026-08-11 (headset feedback: unlit fixtures read as flat decals):
+            // outlets/switches = glossy trade plastic, wires = satin PVC sheath.
+            ctx.WireMat = CreatePlainLitMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
+            MakeGlossy(ctx.WireMat, 0.30f);
+            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            MakeGlossy(ctx.FixtureMat, 0.55f);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
@@ -260,6 +270,14 @@ namespace RoomPlanner.EditorTools
         }
 
         /// <summary>Matte building surfaces: no smooth plastic sheen on concrete/wood.</summary>
+        /// <summary>Opposite of TameSpecular: glossy plastic/glass with a live highlight
+        /// (electric fixtures, TV screens) — call AFTER the Create* factory.</summary>
+        private static void MakeGlossy(Material mat, float smoothness)
+        {
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
+            if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 1f);
+        }
+
         private static void TameSpecular(Material mat)
         {
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);

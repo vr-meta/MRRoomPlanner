@@ -64,8 +64,9 @@ namespace RoomPlanner.Tests
 
                 var mesh = go.GetComponent<MeshFilter>().sharedMesh;
                 // Texture unwrap (2026-08-11): sides, caps, top and bottom carry dedicated
-                // vertices for their own metric UVs — a plain box is 6 faces * 4 verts.
-                Assert.AreEqual(24, mesh.vertexCount, "6 unwrapped faces * 4 verts");
+                // vertices for their own metric UVs.
+                Assert.AreEqual(24, mesh.vertexCount,
+                    "2 cross-sections * (4 ring + 4 top/bottom) + 8 cap verts");
                 Assert.AreSame(s, wall.Segment);
                 Assert.AreEqual(2, wall.Points.Count, "centerline stays inspectable");
                 Assert.AreEqual(Height, mesh.bounds.size.y, 1e-3f);

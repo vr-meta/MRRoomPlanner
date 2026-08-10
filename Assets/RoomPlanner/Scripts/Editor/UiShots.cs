@@ -119,6 +119,10 @@ namespace RoomPlanner.EditorTools
                 RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-walls");
                 paint.GetSettings().SelectTab(2);
                 RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-floors");
+                paint.GetSettings().SelectTab(3);
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-tiles");
+                paint.GetSettings().SelectTab(4);
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-ceiling");
                 paint.GetSettings().SelectTab(0);
 
                 var electric = host.AddComponent<RoomPlanner.Electrical.ElectricController>();

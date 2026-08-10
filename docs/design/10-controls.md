@@ -65,14 +65,15 @@ Offset/Corner/Place (сегменты — все опции видны).
 B на плане → B в комнате; масштаб+поворот+смещение одним действием; B — отмена),
 Status (readout). Смещение — стиком. Разрешение на чтение изображений запрашивается
 при первом входе в инструмент.
-**Инспектор Paint («Pnt», покраска — `04-surfaces-materials.md` v1):** табы
-Color / Walls / Floors; **Color** — сетка 8 пресетов, **Walls/Floors** — свотчи
-CC0-текстур + степперы **размера плитки** (Walls: Tile width/height; Floors:
-Tile X/Z; ±25 см, «auto» = тайл каталога, height/Z по умолчанию = квадрат);
-триггер по стене/полу/лестнице — применить (отменяемо),
+**Инспектор Paint («Pnt», покраска — `04-surfaces-materials.md` v1.2):** табы
+**Color / Walls / Floors / Tiles / Ceiling**; Color — сетка 8 пресетов + Gloss;
+текстурные табы — свотчи CC0-текстур (~37 материалов) + степперы **Tile W/H**
+(±25 см, «auto» = тайл каталога, H по умолчанию = квадрат) + **Gloss**
+(auto/0–100 %, шаг 10 %); триггер по стене/полу/лестнице — применить (отменяемо),
 **Original look** (кнопка-ластик) — снять отделку с объекта под прицелом.
-Тумблеры **Vertex AO / SSAO переехали** на страницу **Rendering** (gear на панели
-снапов). B — возврат в Select.
+Страница **Rendering** (gear на панели снапов): Vertex AO, SSAO, **Sun shadows**
+(карта теней), **Cast shadows (all)** (отбрасывание теней всеми элементами).
+B — возврат в Select.
 **Инспектор Import («Imp», IFC из Revit — `18-ifc-import.md`):** **IFC file**
 (Select-список `.ifc` из Download/Documents шлема и папки приложения), **Load IFC**
 (кнопка; статус — readout «Nw Ms (K skip)»), **Storey** (Select: All/L1/L2/… — фильтр

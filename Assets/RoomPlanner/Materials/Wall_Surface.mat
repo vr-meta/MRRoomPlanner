@@ -30,6 +30,8 @@ Material:
     m_Ints: []
     m_Floats:
     - _Cull: 2
+    - _Smoothness: 0.08
+    - _UseUV1: 0
     m_Colors:
     - _BaseColor: {r: 0.82, g: 0.82, b: 0.8, a: 1}
   m_BuildTextureStacks: []
