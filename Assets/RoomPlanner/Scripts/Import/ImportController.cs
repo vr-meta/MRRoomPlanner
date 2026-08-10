@@ -212,6 +212,7 @@ namespace RoomPlanner.Import
             int wallCount = segments.Count;
 
             int slabCount = 0, holeCount = 0;
+            var importedFloors = new List<RoomPlanner.Floors.Floor>();
             foreach (var slab in building.Slabs)
             {
                 var f = floors.CreateImported(slab.Outline, slab.Level, slab.Thickness);
@@ -221,10 +222,12 @@ namespace RoomPlanner.Import
                 var slabSel = f.GetComponent<Selectable>();
                 if (slab.HasPaint && slabSel != null) slabSel.SetPaint(slab.PaintColor);
                 _created.Add((slabSel, slab.StoreyIndex));
+                importedFloors.Add(f);
                 slabCount++;
             }
 
             int stairCount = 0;
+            var importedStairs = new List<RoomPlanner.Stairs.Stair>();
             foreach (var st in building.Stairs)
             {
                 var go = new GameObject("Stair (imported)") { layer = SelectableLayer };
@@ -239,8 +242,19 @@ namespace RoomPlanner.Import
                 if (st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
+                importedStairs.Add(stair);
                 stairCount++;
             }
+
+            // Stairs must never leave you head-butting the slab above (audit 05 §Б1):
+            // the file's own stairwell holes are checked against each flight and widened
+            // (or created) wherever the 2.0 m headroom rule is violated.
+            int headroomFixes = 0;
+            foreach (var st in importedStairs)
+                foreach (var f in importedFloors)
+                    if (st.CutHeadroomIn(f)) headroomFixes++;
+            if (headroomFixes > 0)
+                Debug.Log($"[Import] stair headroom: widened/created {headroomFixes} slab opening(s)");
 
             int mepCount = 0;
             foreach (var mep in building.Plumbing)
@@ -279,6 +293,7 @@ namespace RoomPlanner.Import
             int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs
                 + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
             _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
+                + (headroomFixes > 0 ? $" {headroomFixes}hr" : "")
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
                 + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");

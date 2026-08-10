@@ -229,6 +229,100 @@ namespace RoomPlanner.Stairs
             }
         }
 
+        /// <summary>
+        /// Ensure the slab above this flight is open wherever it violates
+        /// StairMath.MinHeadroom (audit 05 §Б1 — imported stairwell holes that leave you
+        /// head-butting the ceiling). Any existing holes the required opening overlaps are
+        /// absorbed into one rectangle in the flight's frame; the rectangle is clamped to
+        /// the slab's extent and cut once. Returns true when the slab was modified.
+        /// </summary>
+        public bool CutHeadroomIn(Floor slab)
+        {
+            if (slab == null || slab.Outline.Count < 3) return false;
+            float bottomAboveBase = slab.Level - slab.Thickness - Base.y;
+            // The slab the flight stands on (or anything below) is not "above the head".
+            if (bottomAboveBase <= RiserHeight) return false;
+            if (!StairMath.CutRange(Risers, RiserHeight, TreadDepth, bottomAboveBase,
+                    out float d0, out float d1)) return false;
+
+            var rot = Quaternion.Euler(0f, YawDeg, 0f);
+            Vector3 run = rot * Vector3.forward;
+            Vector3 side = rot * Vector3.right;
+            float s0 = -(Width * 0.5f + StairMath.SideMargin);
+            float s1 = Width * 0.5f + StairMath.SideMargin;
+            List<Vector3> RectRing() => new()
+            {
+                Base + run * d0 + side * s0, Base + run * d1 + side * s0,
+                Base + run * d1 + side * s1, Base + run * d0 + side * s1,
+            };
+
+            // Already open? Sample a coarse grid over the required opening: a point is a
+            // problem only when it is solid slab (inside the outline, outside every hole).
+            bool anyMaterial = false;
+            const int N = 4;
+            for (int i = 0; i <= N && !anyMaterial; i++)
+                for (int j = 0; j <= N && !anyMaterial; j++)
+                {
+                    Vector3 p = Base
+                        + run * Mathf.Lerp(d0 + 0.01f, d1 - 0.01f, i / (float)N)
+                        + side * Mathf.Lerp(s0 + 0.01f, s1 - 0.01f, j / (float)N);
+                    if (!Polygon.Contains(slab.Outline, p)) continue;
+                    bool inHole = false;
+                    foreach (var h in slab.Holes)
+                        if (Polygon.Contains(h, p)) { inHole = true; break; }
+                    if (!inHole) anyMaterial = true;
+                }
+            if (!anyMaterial) return false;      // already open, or the flight is not under this slab
+
+            // Absorb every hole the opening overlaps (their extent joins the rectangle in
+            // the flight's frame). Growing the rectangle can reach further holes → loop.
+            var absorbed = new List<List<Vector3>>();
+            bool grew = true;
+            while (grew)
+            {
+                grew = false;
+                for (int i = slab.Holes.Count - 1; i >= 0; i--)
+                {
+                    var h = slab.Holes[i];
+                    if (!Polygon.RingsOverlap(RectRing(), h)) continue;
+                    foreach (var pt in h)
+                    {
+                        float d = Vector3.Dot(pt - Base, run);
+                        float s = Vector3.Dot(pt - Base, side);
+                        d0 = Mathf.Min(d0, d); d1 = Mathf.Max(d1, d);
+                        s0 = Mathf.Min(s0, s); s1 = Mathf.Max(s1, s);
+                    }
+                    absorbed.Add(new List<Vector3>(h));
+                    slab.RemoveHole(i);
+                    grew = true;
+                }
+            }
+
+            // Clamp to the slab's own extent in the flight frame — AddHole refuses rings
+            // poking past the edge. Non-convex slabs may still refuse; that is surfaced to
+            // the caller instead of silently mangling anything.
+            float dMin = float.MaxValue, dMax = float.MinValue;
+            float sMin = float.MaxValue, sMax = float.MinValue;
+            foreach (var pt in slab.Outline)
+            {
+                float d = Vector3.Dot(pt - Base, run);
+                float s = Vector3.Dot(pt - Base, side);
+                dMin = Mathf.Min(dMin, d); dMax = Mathf.Max(dMax, d);
+                sMin = Mathf.Min(sMin, s); sMax = Mathf.Max(sMax, s);
+            }
+            const float inset = 0.02f;
+            d0 = Mathf.Max(d0, dMin + inset); d1 = Mathf.Min(d1, dMax - inset);
+            s0 = Mathf.Max(s0, sMin + inset); s1 = Mathf.Min(s1, sMax - inset);
+
+            bool ok = d1 - d0 > 0.2f && s1 - s0 > 0.2f && slab.AddHole(RectRing());
+            if (!ok)
+            {
+                foreach (var h in absorbed) slab.AddHole(h);   // put back what we took
+                return false;
+            }
+            return true;
+        }
+
         private void OnDestroy()
         {
             if (_mesh == null) return;
