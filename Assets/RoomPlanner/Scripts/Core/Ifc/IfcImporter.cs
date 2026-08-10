@@ -759,6 +759,24 @@ namespace RoomPlanner.Core.Ifc
             return Frame(x, y, new Vector3(0f, 0f, 1f), loc);
         }
 
+        /// <summary>
+        /// IFCCARTESIANTRANSFORMATIONOPERATOR3D(Axis1, Axis2, LocalOrigin, Scale, Axis3) →
+        /// matrix. The AXES matter: wall-mounted Revit families store their mounting
+        /// rotation here, and ignoring it lays shower columns flat on the floor.
+        /// </summary>
+        private static Matrix4x4 MapOperator(Ctx c, StepValue opRef)
+        {
+            var op = c.F.Deref(opRef);
+            if (op == null || op.Count < 4) return Matrix4x4.identity;
+            float s = op[3].Kind == StepKind.Number ? op[3].AsFloat : 1f;
+            var origin = op[2].Kind == StepKind.Ref ? Point(c, op[2]) : Vector3.zero;
+            var x = op[0].Kind == StepKind.Ref ? Direction(c, op[0]) : Vector3.right;
+            var y = op[1].Kind == StepKind.Ref ? Direction(c, op[1]) : Vector3.up;
+            var z = op.Count > 4 && op[4].Kind == StepKind.Ref ? Direction(c, op[4]) : Vector3.Cross(x, y);
+            if (z.sqrMagnitude < 1e-12f) z = new Vector3(0f, 0f, 1f);
+            return Frame(x * s, y * s, z * s, origin);
+        }
+
         private static Matrix4x4 Frame(Vector3 x, Vector3 y, Vector3 z, Vector3 t)
         {
             var m = Matrix4x4.identity;

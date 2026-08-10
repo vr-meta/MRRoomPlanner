@@ -232,6 +232,34 @@ namespace RoomPlanner.EditorTools
             Debug.Log($"[CI] shot {name}.png");
         }
 
+        /// <summary>Diagnostic: import RP_SHOT_IFC and dump every plumbing fixture's
+        /// position/size against the storey levels — for chasing misplaced sanitary ware.</summary>
+        public static void DumpMep()
+        {
+            try
+            {
+                string ifc = Environment.GetEnvironmentVariable("RP_SHOT_IFC");
+                var b = RoomPlanner.Core.Ifc.IfcImporter.Import(
+                    RoomPlanner.Core.Ifc.StepFile.Parse(System.IO.File.ReadAllText(ifc)));
+                foreach (var s in b.Storeys)
+                    Debug.Log($"[CI] storey {s.Name} @ {s.Elevation:0.###}");
+                foreach (var m in b.Plumbing)
+                {
+                    Vector3 min = m.Vertices[0], max = m.Vertices[0];
+                    foreach (var p in m.Vertices) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+                    var size = max - min;
+                    Debug.Log($"[CI] mep '{m.Name}' storey={m.StoreyIndex} origin=({m.Origin.x:0.##},{m.Origin.y:0.##},{m.Origin.z:0.##}) "
+                        + $"size=({size.x:0.##},{size.y:0.##},{size.z:0.##}) bottomY={m.Origin.y + min.y:0.##}");
+                }
+                Debug.Log($"[CI] mep dump done: {b.Plumbing.Count} fixtures, skipped {b.SkippedMep}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[CI] DumpMep failed: {e}");
+                EditorApplication.Exit(1);
+            }
+        }
+
         /// <summary>Force a script recompile + asset refresh (used to verify compilation headless).</summary>
         public static void Compile()
         {

@@ -48,6 +48,15 @@ namespace RoomPlanner.Tools
         /// <summary>Holding the trigger auto-repeats OnClick (stepper −/+ rows; UX v2 P0.2).</summary>
         public bool Repeatable;
 
+        /// <summary>Full-word hint shown by the palette while hovered — the button labels
+        /// are abbreviations ("Sel") and need explaining (headset feedback 2026-08-10).</summary>
+        [SerializeField] private string tooltip;
+        public string Tooltip
+        {
+            get => tooltip;
+            set => tooltip = value;
+        }
+
         /// <summary>Disabled buttons keep their collider but ignore hover/press.</summary>
         public bool Interactable => _enabled;
 

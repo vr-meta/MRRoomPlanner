@@ -36,8 +36,10 @@ namespace RoomPlanner.Import
         private string _status = "pick file";
         private SettingsSchema _settings;
 
-        // Everything the LAST import created, per storey — drives the visibility filter.
+        // Everything the LAST import created, per storey — drives the visibility filter
+        // and lets a repeated Load REPLACE the previous building instead of stacking two.
         private readonly List<(Selectable view, int storey)> _created = new();
+        private readonly List<WallSegment> _importedSegments = new();
         private ImportedBuilding _building;
         private int _storeyFilter = -1;   // -1 = show all storeys
 
@@ -49,7 +51,8 @@ namespace RoomPlanner.Import
             _settings ??= new SettingsSchema()
                 .Cycle("file", "IFC file", SelectedFileLabel, NextFile)
                 .Cycle("load", "Load", () => _status, Load)
-                .Cycle("storey", "Storey", StoreyLabel, NextStorey);
+                .Cycle("storey", "Storey", StoreyLabel, NextStorey)
+                .Cycle("new", "New project", () => "reset all", NewProject);
             return _settings;
         }
 
@@ -136,8 +139,9 @@ namespace RoomPlanner.Import
             var graph = walls != null ? walls.Graph : null;
             if (graph == null || floors == null) { _status = "rig not wired"; return; }
 
+            RemovePreviousImport();
+
             _building = building;
-            _created.Clear();
             _storeyFilter = -1;
 
             var touched = new HashSet<WallNode>();
@@ -166,6 +170,7 @@ namespace RoomPlanner.Import
                     touched.Add(b);
                     segments.Add((seg, iw.StoreyIndex, wi));
                     ownSegments.Add(seg);
+                    _importedSegments.Add(seg);
                 }
             }
             int openingCount = AttachOpenings(building, wallSegments);
@@ -288,6 +293,44 @@ namespace RoomPlanner.Import
         }
 
         /// <summary>
+        /// Tear down what the PREVIOUS import created — a repeated Load replaces the
+        /// building instead of stacking a second one (headset feedback 2026-08-10).
+        /// User-drawn geometry is untouched.
+        /// </summary>
+        private void RemovePreviousImport()
+        {
+            foreach (var seg in _importedSegments)
+                if (seg != null) walls.RemoveSegment(seg);   // renderer unregisters + destroys views
+            _importedSegments.Clear();
+            foreach (var (sel, _) in _created)
+            {
+                if (sel == null) continue;                   // wall views died with their segments
+                if (sceneModel != null) sceneModel.Unregister(sel);
+                Destroy(sel.gameObject);
+            }
+            _created.Clear();
+            // the old batch command would replay against destroyed objects — drop it
+            if (sceneModel != null) sceneModel.History.PurgeWhere(c => c is ImportBatchCommand);
+        }
+
+        /// <summary>Full reset (inspector "New project" row): clear the scene AND delete the
+        /// autosave, or yesterday's building would resurrect on the next launch.</summary>
+        public void NewProject()
+        {
+            ClearScene();
+            try
+            {
+                if (System.IO.File.Exists(ProjectAutosave.DefaultPath))
+                    System.IO.File.Delete(ProjectAutosave.DefaultPath);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[Import] could not delete autosave: {e.Message}");
+            }
+            _status = "new project";
+        }
+
+        /// <summary>
         /// Remove EVERYTHING buildable from the scene (project load starts clean): the wall
         /// graph with its views, every slab, stair and MEP fixture, plus the history —
         /// commands referencing destroyed objects must never replay.
@@ -307,6 +350,7 @@ namespace RoomPlanner.Import
             foreach (var m in TeleportCommand.CollectMep())
                 if (m != null) Destroy(m.gameObject);
             _created.Clear();
+            _importedSegments.Clear();
             _building = null;
             _storeyFilter = -1;
             if (sceneModel != null) sceneModel.History.Clear();

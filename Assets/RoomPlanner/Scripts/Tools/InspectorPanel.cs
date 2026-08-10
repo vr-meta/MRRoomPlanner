@@ -190,8 +190,8 @@ namespace RoomPlanner.Tools
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             tmp.enableAutoSizing = true;
             // readability floor ≥ ~0.9° at 60 cm (UX v2 P1.5) — auto-sizing is only a clamp
-            tmp.fontSizeMin = size.y * 0.78f;
-            tmp.fontSizeMax = size.y * 0.9f;
+            tmp.fontSizeMin = size.y * 0.88f;
+            tmp.fontSizeMax = size.y * 1.02f;
             return tmp;
         }
 

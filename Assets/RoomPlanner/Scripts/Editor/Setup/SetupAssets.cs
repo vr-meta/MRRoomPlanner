@@ -431,9 +431,10 @@ namespace RoomPlanner.EditorTools
             // shrinks to unreadable — panels are scaled up on top of this (see Setup*).
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             tmp.enableAutoSizing = true;
-            // readability floor (UX v2 P1.5): auto-sizing is a clamp, not a shrink-to-fit
-            tmp.fontSizeMin = size.y * 0.78f;
-            tmp.fontSizeMax = size.y * 0.9f;
+            // readability floor (UX v2 P1.5, raised per headset feedback 2026-08-10):
+            // auto-sizing is a clamp, not a shrink-to-fit
+            tmp.fontSizeMin = size.y * 0.88f;
+            tmp.fontSizeMax = size.y * 1.02f;
             return tmp;
         }
     }
