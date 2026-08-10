@@ -631,12 +631,12 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 Двери/окна/**гаражные ворота** руками (панелизация давно готова — не хватало только
 инструмента) + первые параметры лестниц в инспекторе.
 
-- [ ] **O1** — Core: `OpeningKind` (Door/Window/Garage) на `WallOpening` (легаси
+- [x] **O1** — Core: `OpeningKind` (Door/Window/Garage) на `WallOpening` (легаси
   `IsDoor` живёт как производное), панелизация Garage — секционное полотно 4 панели
   в срединной плоскости, submesh столярки; +тесты (рейкасты в полотно/перемычку)
-- [ ] **O2** — Core: `OpeningMath` — `CanPlace` (простенок ≥5 см, перемычка ≥5 см,
+- [x] **O2** — Core: `OpeningMath` — `CanPlace` (простенок ≥5 см, перемычка ≥5 см,
   ширина ≥30 см, без пересечений), `NearestOpening` (для удаления по прицелу); +тесты
-- [ ] **O3** — `OpeningsController : ITool` («Open», слот 4 радиала, иконка
+- [~] **O3** — `OpeningsController : ITool` («Open», слот 4 радиала, иконка
   `door-window`): табы Door/Window/Garage (Numeric-размеры), ghost-рамка с цветом
   валидности, триггер = `CreateOpeningCommand` (undo), B у проёма = `DeleteOpening`,
   B по пустоте = Esc; `SetupOpeningsTool` + реестр + слот; +Play-тесты
