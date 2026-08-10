@@ -103,6 +103,7 @@ namespace RoomPlanner.Import
                     Name = m.name, Origin = m.transform.position,
                     Category = (int)m.Category,
                     Transparency = m.Transparency,
+                    Storey = m.StoreyIndex,
                     Painted = msel != null && msel.IsPainted,
                     Paint = msel != null && msel.IsPainted ? msel.Paint : Color.clear,
                 };

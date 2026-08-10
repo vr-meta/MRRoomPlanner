@@ -274,6 +274,7 @@ namespace RoomPlanner.Import
                 var view = go.AddComponent<MepView>();
                 view.Category = mep.Category;
                 view.Transparency = mep.Transparency;
+                view.StoreyIndex = mep.StoreyIndex;   // survives capture — storey filter after load (B6)
                 // Selectable only for the hide/show machinery (undo, storey filter) — no
                 // collider, so it is invisible to picking and never registered for it.
                 var sel = go.AddComponent<Selectable>();

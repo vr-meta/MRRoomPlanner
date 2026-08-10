@@ -110,7 +110,7 @@ namespace RoomPlanner.Tests.Play
                 Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f,
                 Kind = RoomPlanner.Stairs.StairKind.Open,
             });
-            var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f) };
+            var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f), StoreyIndex = 2 };
             basin.Vertices.AddRange(new[]
             {
                 new Vector3(-0.2f, 0f, -0.2f), new Vector3(0.2f, 0f, -0.2f), new Vector3(0f, 0f, 0.2f),
@@ -175,6 +175,9 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, mep.Length);
             Assert.AreEqual(new Vector3(4f, 0.8f, 4f), mep[0].transform.position);
             Assert.AreEqual(3, mep[0].GetComponent<MeshFilter>().sharedMesh.vertexCount);
+            // B6: ProjectMep.Storey existed but Capture never filled it — the storey
+            // filter silently died after every save/load round-trip.
+            Assert.AreEqual(2, mep[0].StoreyIndex, "storey survives the round-trip");
         }
     }
 }
