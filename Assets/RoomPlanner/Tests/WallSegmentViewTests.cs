@@ -63,7 +63,8 @@ namespace RoomPlanner.Tests
                 wall.BuildSegment(s);
 
                 var mesh = go.GetComponent<MeshFilter>().sharedMesh;
-                Assert.AreEqual(8, mesh.vertexCount, "2 cross-sections * 4 verts");
+                Assert.AreEqual(24, mesh.vertexCount,
+                    "2 cross-sections * (4 ring + 4 top/bottom) + 8 cap verts");
                 Assert.AreSame(s, wall.Segment);
                 Assert.AreEqual(2, wall.Points.Count, "centerline stays inspectable");
                 Assert.AreEqual(Height, mesh.bounds.size.y, 1e-3f);

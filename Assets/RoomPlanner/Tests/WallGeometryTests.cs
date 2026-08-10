@@ -272,7 +272,7 @@ namespace RoomPlanner.Tests
                     0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
 
                 Assert.AreEqual(2, wall.Points.Count, "duplicates collapse");
-                Assert.AreEqual(8, go.GetComponent<MeshFilter>().sharedMesh.vertexCount,
+                Assert.AreEqual(24, go.GetComponent<MeshFilter>().sharedMesh.vertexCount,
                     "geometry equals the clean two-point wall");
             }
             finally { Object.DestroyImmediate(go); }
@@ -326,8 +326,9 @@ namespace RoomPlanner.Tests
                 var wall = go.AddComponent<Wall>();
                 wall.Build(new List<Vector3> { A, B, new Vector3(1f, 0f, 1f) },
                     0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Bevel, Interior);
-                // miter corner = 3 sections (12 verts); bevel replaces the corner section with 2
-                Assert.AreEqual(16, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
+                // miter corner = 3 sections; bevel replaces the corner section with 2 →
+                // 4 sections × (4 ring + 4 top/bottom) + 8 cap verts
+                Assert.AreEqual(40, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
             }
             finally { Object.DestroyImmediate(go); }
         }
@@ -361,7 +362,7 @@ namespace RoomPlanner.Tests
                 wall.Build((List<Vector3>)wall.Points, 0.3f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, Interior);
 
                 Assert.AreEqual(2, wall.Points.Count, "input aliasing must not clear the centerline");
-                Assert.AreEqual(8, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
+                Assert.AreEqual(24, go.GetComponent<MeshFilter>().sharedMesh.vertexCount);
             }
             finally { Object.DestroyImmediate(go); }
         }
