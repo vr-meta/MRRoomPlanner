@@ -54,6 +54,15 @@ DATA;
 #40=IFCBUILDINGELEMENTPROXY('p1',$,'ShowerBox',$,$,#36,#33,$,$);
 #41=IFCFURNISHINGELEMENT('f1',$,'Sofa',$,$,#36,#33,$);
 #42=IFCRAILING('r1',$,'Rail',$,$,#36,#33,$,.HANDRAIL.);
+#60=IFCCARTESIANPOINT((0.,0.));
+#61=IFCAXIS2PLACEMENT2D(#60,$);
+#62=IFCRECTANGLEPROFILEDEF(.AREA.,$,#61,1.,0.5);
+#63=IFCAXIS2PLACEMENT3D(#34,$,$);
+#64=IFCDIRECTION((0.,0.,1.));
+#65=IFCEXTRUDEDAREASOLID(#62,#63,#64,0.4);
+#66=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#65));
+#67=IFCPRODUCTDEFINITIONSHAPE($,$,(#66));
+#68=IFCFURNISHINGELEMENT('f2',$,'Box',$,$,#36,#67,$);
 #50=IFCCOLOURRGB($,0.8,0.2,0.1);
 #51=IFCSURFACESTYLERENDERING(#50,0.5,$,$,$,$,$,.FLAT.);
 #52=IFCSURFACESTYLE('Glassy',.BOTH.,(#51));
@@ -67,29 +76,32 @@ END-ISO-10303-21;";
         private static ImportedBuilding Building =>
             _building ??= IfcImporter.Import(StepFile.Parse(Doc));
 
+        private static ImportedMep[] CubeElements() =>
+            Building.Plumbing.Where(m => m.Name != "Box").ToArray();
+
         [Test]
         public void ImportsFurnitureProxyAndRailingAsBakedMeshes()
         {
-            Assert.AreEqual(3, Building.Plumbing.Count);
+            Assert.AreEqual(4, Building.Plumbing.Count);
             Assert.AreEqual(0, Building.SkippedMep);
             CollectionAssert.AreEquivalent(
                 new[] { MepCategory.Proxy, MepCategory.Furniture, MepCategory.Railing },
-                Building.Plumbing.Select(m => m.Category).ToArray());
+                CubeElements().Select(m => m.Category).ToArray());
 
-            foreach (var m in Building.Plumbing)
+            foreach (var m in CubeElements())
             {
                 Assert.AreEqual(24, m.Vertices.Count, "6 quad faces, 4 corners each");
                 Assert.AreEqual(36, m.Triangles.Count, "2 triangles per face");
                 // baked around the bbox centre of the unit cube
                 Assert.AreEqual(0f, Vector3.Distance(m.Origin, new Vector3(0.5f, 0.5f, 0.5f)), 1e-4);
             }
-            Assert.AreEqual("Sofa", Building.Plumbing.Single(m => m.Category == MepCategory.Furniture).Name);
+            Assert.AreEqual("Sofa", CubeElements().Single(m => m.Category == MepCategory.Furniture).Name);
         }
 
         [Test]
         public void StyledItemSuppliesColourAndTransparency()
         {
-            foreach (var m in Building.Plumbing)
+            foreach (var m in CubeElements())
             {
                 Assert.IsTrue(m.HasColor, $"{m.Category} carries the file colour");
                 Assert.AreEqual(0.8f, m.Color.r, 1e-4);
@@ -97,6 +109,25 @@ END-ISO-10303-21;";
                 Assert.AreEqual(0.1f, m.Color.b, 1e-4);
                 Assert.AreEqual(0.5f, m.Transparency, 1e-4);
             }
+        }
+
+        [Test]
+        public void ExtrudedSolidFurnitureTessellates()
+        {
+            // IKEA-style furniture ships as SweptSolid extrusions, not Breps: a 1 × 0.5
+            // rectangle extruded 0.4 up → a box of 8 verts, 4 side quads + 2 caps.
+            var box = Building.Plumbing.Single(m => m.Name == "Box");
+            Assert.AreEqual(MepCategory.Furniture, box.Category);
+            Assert.AreEqual(8, box.Vertices.Count);
+            Assert.AreEqual(36, box.Triangles.Count);
+            Assert.IsFalse(box.HasColor, "no styled item on the extrusion");
+
+            Vector3 min = box.Vertices[0], max = box.Vertices[0];
+            foreach (var p in box.Vertices) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+            var size = max - min;
+            Assert.AreEqual(1f, size.x, 1e-4);
+            Assert.AreEqual(0.4f, size.y, 1e-4, "extrusion depth becomes Unity height");
+            Assert.AreEqual(0.5f, size.z, 1e-4);
         }
     }
 }

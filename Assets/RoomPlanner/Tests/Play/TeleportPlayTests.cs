@@ -101,6 +101,44 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator ElectricalLayerTeleportsToo_UndoRestores()
+        {
+            // Outlets and wires are world-anchored model data: without the shift they
+            // visually "follow the user" after a teleport (headset feedback 2026-08-10).
+            var (walls, _, model) = MakeScene();
+            var fxGo = Track(new GameObject("Outlet"));
+            fxGo.AddComponent<MeshFilter>();
+            fxGo.AddComponent<MeshRenderer>();
+            var fx = fxGo.AddComponent<RoomPlanner.Electrical.ElectricFixture>();
+            fx.Build(RoomPlanner.Electrical.FixtureKind.Outlet, 1, 1);
+            fxGo.transform.position = new Vector3(2f, 0.3f, 0f);
+            fx.BaseLevel = 0f;
+
+            var wireGo = Track(new GameObject("Wire"));
+            wireGo.AddComponent<MeshFilter>();
+            wireGo.AddComponent<MeshRenderer>();
+            var wire = wireGo.AddComponent<RoomPlanner.Electrical.WireRoute>();
+            wire.Build(new List<Vector3> { new(2f, 0.3f, 0f), new(2f, 2.5f, 0f), new(0f, 2.5f, 0f) },
+                RoomPlanner.Electrical.CableType.C3x25);
+            yield return null;
+
+            var delta = new Vector3(2f, -3.15f, 1f);
+            model.History.Execute(new TeleportCommand(walls, TeleportCommand.CollectFloors(), delta,
+                TeleportCommand.CollectStairs(), TeleportCommand.CollectMep(),
+                TeleportCommand.CollectFixtures(), TeleportCommand.CollectRoutes()));
+
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(4f, -2.85f, 1f), fx.transform.position), 1e-5f);
+            Assert.AreEqual(-3.15f, fx.BaseLevel, 1e-5f, "storey-relative height stays honest");
+            Assert.AreEqual(0.3f, fx.HeightAboveLevel, 1e-4f);
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(2f, -0.65f, 1f), wire.GetPoint(2)), 1e-4f);
+
+            model.History.Undo();
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(2f, 0.3f, 0f), fx.transform.position), 1e-5f);
+            Assert.AreEqual(0f, fx.BaseLevel, 1e-5f);
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(0f, 2.5f, 0f), wire.GetPoint(2)), 1e-4f);
+        }
+
+        [UnityTest]
         public IEnumerator MepFixturesTeleportByTransform()
         {
             var (walls, _, model) = MakeScene();

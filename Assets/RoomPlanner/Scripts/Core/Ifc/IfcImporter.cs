@@ -141,33 +141,97 @@ namespace RoomPlanner.Core.Ifc
                 }
             }
 
+            // Furniture ships as SweptSolid stacks (IKEA sofa = 7 extrusions), not Breps —
+            // tessellate them into the same mesh: side quads + ear-clipped caps.
+            void EmitExtruded(int solidId, Matrix4x4 m)
+            {
+                var sa = c.F.Args(solidId);
+                if (sa == null || sa.Count < 4) return;
+                var ring = ProfileOutline(c, sa[0]);
+                if (ring == null || ring.Count < 3) return;
+                var pm = m * Axis2Placement3D(c, sa[1]);
+                var dir = Direction(c, sa[2]) * sa[3].AsFloat;
+
+                float area2 = 0f;                      // normalize the ring CCW in-plane
+                for (int i = 0; i < ring.Count; i++)
+                {
+                    var p0 = ring[i]; var p1 = ring[(i + 1) % ring.Count];
+                    area2 += p0.x * p1.y - p1.x * p0.y;
+                }
+                if (area2 < 0f) ring.Reverse();
+                bool up = dir.z >= 0f;                 // extrusion along the profile normal?
+
+                int n = ring.Count;
+                int lo = verts.Count;
+                foreach (var p in ring) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p)));
+                int hi = verts.Count;
+                foreach (var p in ring) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p + dir)));
+
+                // sides: outward for a CCW ring extruded along +normal (order survives the
+                // Unity axis swap for the same reason the Brep loops above do)
+                for (int i = 0; i < n; i++)
+                {
+                    int j = (i + 1) % n;
+                    if (up) { tris.Add(lo + i); tris.Add(lo + j); tris.Add(hi + j); tris.Add(lo + i); tris.Add(hi + j); tris.Add(hi + i); }
+                    else { tris.Add(lo + j); tris.Add(lo + i); tris.Add(hi + i); tris.Add(lo + j); tris.Add(hi + i); tris.Add(hi + j); }
+                }
+
+                // caps: ear-clip the profile, establish the +normal order numerically
+                var flat = new List<Vector3>(n);
+                foreach (var p in ring) flat.Add(new Vector3(p.x, 0f, p.y));
+                var capTris = Polygon.Triangulate(flat);
+                if (capTris.Count >= 3)
+                {
+                    var a2 = ring[capTris[0]]; var b2 = ring[capTris[1]]; var c2 = ring[capTris[2]];
+                    bool flip = (b2.x - a2.x) * (c2.y - a2.y) - (b2.y - a2.y) * (c2.x - a2.x) < 0f;
+                    for (int i = 0; i + 2 < capTris.Count; i += 3)
+                    {
+                        int ca = capTris[i];
+                        int cb = flip ? capTris[i + 2] : capTris[i + 1];
+                        int cc = flip ? capTris[i + 1] : capTris[i + 2];
+                        int top = up ? hi : lo, bot = up ? lo : hi;
+                        tris.Add(top + ca); tris.Add(top + cb); tris.Add(top + cc);
+                        tris.Add(bot + ca); tris.Add(bot + cc); tris.Add(bot + cb);
+                    }
+                }
+                any = true;
+            }
+
+            void EmitItem(StepValue itemRef, Matrix4x4 m)
+            {
+                switch (c.F.TypeOf(itemRef.Ref))
+                {
+                    case "IFCFACETEDBREP":
+                        EmitBrep(itemRef.Ref, m);
+                        TakeStyle(itemRef.Ref);
+                        break;
+                    case "IFCEXTRUDEDAREASOLID":
+                        EmitExtruded(itemRef.Ref, m);
+                        TakeStyle(itemRef.Ref);
+                        break;
+                }
+            }
+
             foreach (var it in items)
             {
                 if (it.Kind != StepKind.Ref) continue;
-                switch (c.F.TypeOf(it.Ref))
+                if (c.F.TypeOf(it.Ref) == "IFCMAPPEDITEM")
                 {
-                    case "IFCFACETEDBREP":
-                        EmitBrep(it.Ref, place);
-                        TakeStyle(it.Ref);
-                        break;
-                    case "IFCMAPPEDITEM":
-                    {
-                        var mi = c.F.Args(it.Ref);
-                        var map = c.F.Deref(mi[0]);       // IFCREPRESENTATIONMAP(Origin, Rep)
-                        if (map == null || map.Count < 2) continue;
-                        var opM = MapOperator(c, mi[1]);   // honors mounting-rotation axes
-                        var extra = opM * Axis2Placement3D(c, map[0]).inverse;
-                        var rep = c.F.Deref(map[1]);
-                        if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
-                        TakeStyle(it.Ref);
-                        foreach (var inner in rep[3].Items)
-                            if (inner.Kind == StepKind.Ref && c.F.TypeOf(inner.Ref) == "IFCFACETEDBREP")
-                            {
-                                EmitBrep(inner.Ref, place * extra);
-                                TakeStyle(inner.Ref);
-                            }
-                        break;
-                    }
+                    var mi = c.F.Args(it.Ref);
+                    var map = c.F.Deref(mi[0]);       // IFCREPRESENTATIONMAP(Origin, Rep)
+                    if (map == null || map.Count < 2) continue;
+                    var opM = MapOperator(c, mi[1]);   // honors mounting-rotation axes
+                    var extra = opM * Axis2Placement3D(c, map[0]).inverse;
+                    var rep = c.F.Deref(map[1]);
+                    if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
+                    TakeStyle(it.Ref);
+                    foreach (var inner in rep[3].Items)
+                        if (inner.Kind == StepKind.Ref)
+                            EmitItem(inner, place * extra);
+                }
+                else
+                {
+                    EmitItem(it, place);
                 }
             }
             hasColor = foundStyle;
@@ -906,21 +970,105 @@ namespace RoomPlanner.Core.Ifc
                         m2.MultiplyPoint3x4(new Vector3(-hx, hy, 0f)),
                     };
                 }
+                case "IFCCIRCLEPROFILEDEF": // furniture legs and the like — a 12-gon is plenty
+                {
+                    float r = profile[3].AsFloat;
+                    if (r <= 0f) return null;
+                    var m2 = Axis2Placement2D(c, profile[2]);
+                    var pts = new List<Vector3>(12);
+                    for (int i = 0; i < 12; i++)
+                    {
+                        float ang = i * Mathf.PI * 2f / 12f;
+                        pts.Add(m2.MultiplyPoint3x4(new Vector3(Mathf.Cos(ang) * r, Mathf.Sin(ang) * r, 0f)));
+                    }
+                    return pts;
+                }
                 case "IFCARBITRARYCLOSEDPROFILEDEF":
                 case "IFCARBITRARYPROFILEDEFWITHVOIDS": // voids ignored by the MVP subset
                 {
-                    if (profile[2].Kind != StepKind.Ref || c.F.TypeOf(profile[2].Ref) != "IFCPOLYLINE") return null;
-                    var pts = new List<Vector3>();
-                    foreach (var ptRef in c.F.Args(profile[2].Ref)[0].Items)
-                        pts.Add(Point(c, ptRef));
-                    // IFC closes the polyline by repeating the first point — our outlines don't.
+                    if (profile[2].Kind != StepKind.Ref) return null;
+                    var pts = c.F.TypeOf(profile[2].Ref) switch
+                    {
+                        "IFCPOLYLINE" => PolylinePoints(c, profile[2].Ref),
+                        "IFCCOMPOSITECURVE" => CompositePoints(c, profile[2].Ref),
+                        _ => null,
+                    };
+                    if (pts == null) return null;
+                    // IFC closes the ring by repeating the first point — our outlines don't.
                     if (pts.Count > 1 && (pts[0] - pts[pts.Count - 1]).sqrMagnitude < 1e-6f)
                         pts.RemoveAt(pts.Count - 1);
-                    return pts;
+                    return pts.Count >= 3 ? pts : null;
                 }
                 default:
                     return null;
             }
+        }
+
+        private static List<Vector3> PolylinePoints(Ctx c, int polyId)
+        {
+            var a = c.F.Args(polyId);
+            if (a == null || a.Count < 1 || a[0].Kind != StepKind.List) return null;
+            var pts = new List<Vector3>();
+            foreach (var ptRef in a[0].Items) pts.Add(Point(c, ptRef));
+            return pts;
+        }
+
+        /// <summary>
+        /// IFCCOMPOSITECURVE((segments), …) → ring points. Polyline pieces come verbatim;
+        /// trimmed arcs contribute their trim CARTESIANPOINTs — a chord. In Revit exports
+        /// the arcs are small corner fillets (sofa arms), where a chord is invisible.
+        /// </summary>
+        private static List<Vector3> CompositePoints(Ctx c, int curveId)
+        {
+            var a = c.F.Args(curveId);
+            if (a == null || a.Count < 1 || a[0].Kind != StepKind.List) return null;
+            var pts = new List<Vector3>();
+            void Push(Vector3 p)
+            {
+                if (pts.Count == 0 || (pts[pts.Count - 1] - p).sqrMagnitude > 1e-6f) pts.Add(p);
+            }
+            foreach (var segRef in a[0].Items)
+            {
+                // IFCCOMPOSITECURVESEGMENT(Transition, SameSense, ParentCurve)
+                var seg = c.F.Deref(segRef);
+                if (seg == null || seg.Count < 3 || seg[2].Kind != StepKind.Ref) continue;
+                int parent = seg[2].Ref;
+                switch (c.F.TypeOf(parent))
+                {
+                    case "IFCPOLYLINE":
+                    {
+                        var pl = PolylinePoints(c, parent);
+                        if (pl == null) break;
+                        bool same = seg[1].Kind != StepKind.Enum || seg[1].Text != "F";
+                        if (!same) pl.Reverse();
+                        foreach (var p in pl) Push(p);
+                        break;
+                    }
+                    case "IFCTRIMMEDCURVE":
+                    {
+                        // (BasisCurve, Trim1, Trim2, SenseAgreement, Master) — take the
+                        // cartesian trim points when present; parameter-only trims are
+                        // skipped (the neighbours' endpoints still close the ring).
+                        var tc = c.F.Args(parent);
+                        if (tc == null || tc.Count < 3) break;
+                        Vector3? t1 = TrimPoint(c, tc[1]), t2 = TrimPoint(c, tc[2]);
+                        bool same = seg[1].Kind != StepKind.Enum || seg[1].Text != "F";
+                        if (same) { if (t1 != null) Push(t1.Value); if (t2 != null) Push(t2.Value); }
+                        else { if (t2 != null) Push(t2.Value); if (t1 != null) Push(t1.Value); }
+                        break;
+                    }
+                }
+            }
+            return pts;
+        }
+
+        private static Vector3? TrimPoint(Ctx c, StepValue trim)
+        {
+            if (trim == null || trim.Kind != StepKind.List) return null;
+            foreach (var it in trim.Items)
+                if (it.Kind == StepKind.Ref && c.F.TypeOf(it.Ref) == "IFCCARTESIANPOINT")
+                    return Point(c, it);
+            return null;
         }
 
         // ---------------------------------------------------------------- geometry plumbing
