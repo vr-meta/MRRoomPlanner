@@ -5,9 +5,11 @@ using RoomPlanner.Floors;
 
 namespace RoomPlanner.Stairs
 {
-    /// <summary>Two construction kinds (design/18 I12): a solid monolithic wedge, or an
-    /// open flight — treads carried by two stringers, nothing underneath.</summary>
-    public enum StairKind { Solid, Open }
+    /// <summary>Construction kinds (design/18 I12/I16): a solid monolithic wedge down to
+    /// the ground, an open flight (treads on two stringers, nothing underneath), or a
+    /// waist slab — the apartment-stairwell flight: steps on top of an inclined slab of
+    /// constant thickness with a flat sloped soffit.</summary>
+    public enum StairKind { Solid, Open, Waist }
 
     /// <summary>
     /// A parametric stair flight (docs/design/18-ifc-import.md I9/I12): base point + yaw +
@@ -22,6 +24,7 @@ namespace RoomPlanner.Stairs
         private const float TreadThickness = 0.06f;
         private const float StringerDepth = 0.30f;   // measured vertically under the nose line
         private const float StringerWidth = 0.06f;
+        private const float WaistDepth = 0.25f;      // slab depth under the nose line, vertical
 
         private MeshFilter _mf;
         private Mesh _mesh;
@@ -153,17 +156,37 @@ namespace RoomPlanner.Stairs
             float H = TotalHeight, Lrun = RunLength;
             float half = Width * 0.5f;
 
-            if (Kind == StairKind.Solid)
+            List<Vector2> StepProfileTop()
             {
-                var profile = new List<Vector2> { new(0f, 0f) };
+                var top = new List<Vector2> { new(0f, 0f) };
                 for (int i = 0; i < Risers; i++)
                 {
                     float x = i * TreadDepth;
-                    profile.Add(new Vector2(x, (i + 1) * RiserHeight));
+                    top.Add(new Vector2(x, (i + 1) * RiserHeight));
                     if (i < Risers - 1)
-                        profile.Add(new Vector2(x + TreadDepth, (i + 1) * RiserHeight));
+                        top.Add(new Vector2(x + TreadDepth, (i + 1) * RiserHeight));
                 }
+                return top;
+            }
+
+            // The waist slab needs room for its soffit; degenerate flights fall back to solid.
+            bool waistFits = H > WaistDepth * 1.5f && Lrun > 0.05f;
+
+            if (Kind == StairKind.Solid || (Kind == StairKind.Waist && !waistFits))
+            {
+                var profile = StepProfileTop();
                 profile.Add(new Vector2(Lrun, 0f));
+                Prism(profile, -half, half);
+            }
+            else if (Kind == StairKind.Waist)
+            {
+                // Steps on an inclined slab of constant depth: the soffit runs parallel to
+                // the nose line (y = H/Lrun · x − WaistDepth), meets the ground short of the
+                // first riser, and the top end is cut vertically under the landing edge.
+                float xGround = WaistDepth * Lrun / H;
+                var profile = StepProfileTop();
+                profile.Add(new Vector2(Lrun, H - WaistDepth));
+                profile.Add(new Vector2(xGround, 0f));
                 Prism(profile, -half, half);
             }
             else

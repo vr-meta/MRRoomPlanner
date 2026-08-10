@@ -95,6 +95,40 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void WaistKindHasSlopedSoffit_NotAFullWedge()
+        {
+            // 13 risers × 0.175, 12 treads × 0.275 → H = 2.275, L = 3.3. The soffit is a
+            // plane parallel to the nose line, 0.25 below it, meeting the ground at
+            // x = 0.25 · L / H ≈ 0.363 — beyond that nothing touches the floor.
+            _stair.Build(Vector3.zero, 0f, 1.2f, 13, 0.175f, 0.275f, StairKind.Waist);
+            Assert.AreEqual(StairKind.Waist, _stair.Kind);
+
+            float H = 13 * 0.175f, L = 12 * 0.275f;
+            float xGround = 0.25f * L / H;
+            var bounds = Mesh.bounds;
+            Assert.AreEqual(H, bounds.size.y, 1e-4, "same total height as solid");
+            Assert.AreEqual(L, bounds.size.z, 1e-4, "same run length as solid");
+            foreach (var p in Mesh.vertices)
+            {
+                if (p.y < 1e-3f)
+                    Assert.LessOrEqual(p.z, xGround + 1e-3f,
+                        "ground contact only where the soffit lands, no foundation wedge");
+                Assert.GreaterOrEqual(p.y, (H / L) * p.z - 0.25f - 1e-3f,
+                    "no vertex below the soffit plane");
+            }
+            // the vertical cut under the landing edge exists
+            Assert.IsTrue(System.Array.Exists(Mesh.vertices,
+                p => Mathf.Abs(p.z - L) < 1e-3f && Mathf.Abs(p.y - (H - 0.25f)) < 1e-3f),
+                "top end is cut vertically to waist depth");
+
+            // still walkable: straight down onto the middle of the 6th tread
+            var col = _go.GetComponent<MeshCollider>();
+            var ray = new Ray(new Vector3(0f, 5f, 5.5f * 0.275f), Vector3.down);
+            Assert.IsTrue(col.Raycast(ray, out var hit, 10f));
+            Assert.AreEqual(6 * 0.175f, hit.point.y, 1e-3);
+        }
+
+        [Test]
         public void NormalizeStairSize_HandlesMmMetersAndRevitFeet()
         {
             // honest file units: 175 mm in a milli file

@@ -85,6 +85,11 @@ namespace RoomPlanner.Tests.Play
             {
                 WallIndex = 0, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f, Sill = 0.9f,
             });
+            b.Openings.Add(new ImportedOpening
+            {
+                WallIndex = 0, AlongFraction = 0.2f, Width = 0.9f, Height = 2.1f, IsDoor = true,
+                SwingDir = new Vector3(0f, 0f, 1f), HingeDir = new Vector3(-1f, 0f, 0f),
+            });
             var slab = new ImportedSlab
             {
                 Outline =
@@ -102,7 +107,8 @@ namespace RoomPlanner.Tests.Play
             b.Stairs.Add(new ImportedStair
             {
                 Base = new Vector3(1f, 0f, 1f), YawDeg = 30f, Width = 1.1f,
-                Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f, Open = true,
+                Risers = 5, RiserHeight = 0.18f, TreadDepth = 0.26f,
+                Kind = RoomPlanner.Stairs.StairKind.Open,
             });
             var basin = new ImportedMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f) };
             basin.Vertices.AddRange(new[]
@@ -139,8 +145,13 @@ namespace RoomPlanner.Tests.Play
             var seg = walls.Graph.Segments[0];
             Assert.AreEqual(0.15f, seg.Thickness, 1e-4);
             Assert.AreEqual(WallJoin.Round, seg.Join, "user edits round-trip");
-            Assert.AreEqual(1, seg.Openings.Count);
+            Assert.AreEqual(2, seg.Openings.Count);
             Assert.AreEqual(0.9f, seg.Openings[0].Width, 1e-4);
+            var door = seg.Openings.Find(o => o.IsDoor);
+            Assert.IsNotNull(door);
+            Assert.AreEqual(0f, Vector3.Distance(door.SwingDir, new Vector3(0f, 0f, 1f)), 1e-4,
+                "door swing survives the round-trip");
+            Assert.AreEqual(0f, Vector3.Distance(door.HingeDir, new Vector3(-1f, 0f, 0f)), 1e-4);
             Assert.IsNotNull(walls.Graph.FindNode(new Vector3(7f, 0f, 0f)), "geometry back in place");
 
             var restoredSel = walls.ViewOf(seg).GetComponent<Selectable>();

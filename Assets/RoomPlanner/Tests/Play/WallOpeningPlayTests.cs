@@ -80,6 +80,29 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator ImportedDoorLeafStandsOpen_OnItsSwingSide()
+        {
+            // Same 1 m doorway, but with IFC swing data: hinge on the x = 1.5 jamb,
+            // opening toward −Z. The leaf swings 75° out of the wall — the doorway
+            // becomes passable and the leaf stands on the swing side.
+            var (view, _) = MakeWall(new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 1f, Height = 2.1f, SillHeight = 0f, IsDoor = true,
+                SwingDir = new Vector3(0f, 0f, -1f),
+                HingeDir = new Vector3(1f, 0f, 0f),
+            });
+            yield return null;
+
+            Assert.IsFalse(HitsWall(view, new Ray(new Vector3(2.2f, 1f, -2f), Vector3.forward), out _),
+                "an open doorway is passable");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(1.7f, 1f, -2f), Vector3.forward), out var leafHit),
+                "the swung leaf stands in front of the wall near the hinge");
+            Assert.Less(leafHit.point.z, -0.15f, "the leaf sticks out on the swing side");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(0.5f, 1f, -2f), Vector3.forward), out _),
+                "the pier beside the door stays solid");
+        }
+
+        [UnityTest]
         public IEnumerator FloorToCeilingWindowStillGetsGlass()
         {
             // Panoramic window: sill 0 — the IFC TYPE, not the sill, decides glass vs leaf.

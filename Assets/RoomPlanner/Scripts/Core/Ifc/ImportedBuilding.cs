@@ -58,6 +58,12 @@ namespace RoomPlanner.Core.Ifc
         public float Width, Height;    // metres
         public float Sill;             // bottom above the wall base, 0 for doors
         public bool IsDoor;
+        /// <summary>World-horizontal direction the door leaf swings toward (IFC door style
+        /// + placement axes); zero = unknown, rendered closed.</summary>
+        public Vector3 SwingDir;
+        /// <summary>World-horizontal direction along the wall from the hinge jamb toward
+        /// the free edge of the leaf; zero = unknown.</summary>
+        public Vector3 HingeDir;
     }
 
     /// <summary>A stair flight as PARAMETERS (design/18 I9) — meshed by our Stair module.</summary>
@@ -71,9 +77,10 @@ namespace RoomPlanner.Core.Ifc
         public int Risers;
         public float RiserHeight;   // metres
         public float TreadDepth;    // metres
-        /// <summary>Open flight (treads on stringers) vs solid monolith. IFC gives no
-        /// reliable signal, so imports default to solid; project files keep the choice.</summary>
-        public bool Open;
+        /// <summary>Construction kind (Solid / Open / Waist). IFC gives no reliable
+        /// signal; imports default to WAIST — the apartment-stairwell slab flight
+        /// (headset feedback 2026-08-10) — and project files keep the choice.</summary>
+        public RoomPlanner.Stairs.StairKind Kind;
         public int StoreyIndex = -1;
         public bool HasPaint;
         public Color PaintColor;

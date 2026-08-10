@@ -210,7 +210,7 @@ namespace RoomPlanner.Import
                 if (stairMat != null) mr.sharedMaterial = stairMat;
                 var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
                 stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
-                    st.Open ? RoomPlanner.Stairs.StairKind.Open : RoomPlanner.Stairs.StairKind.Solid);
+                    st.Kind);
                 var sel = go.AddComponent<Selectable>();
                 if (st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
@@ -286,6 +286,8 @@ namespace RoomPlanner.Import
                     Height = op.Height,
                     SillHeight = op.Sill,
                     IsDoor = op.IsDoor,
+                    SwingDir = op.SwingDir,
+                    HingeDir = op.HingeDir,
                 });
                 count++;
             }

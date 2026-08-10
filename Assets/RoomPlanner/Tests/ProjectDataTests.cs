@@ -25,7 +25,7 @@ namespace RoomPlanner.Tests
             floor.Holes.Add(new ProjectRing { Points = { new Vector3(1f, 0f, 1f), new Vector3(2f, 0f, 1f), new Vector3(2f, 0f, 2f) } });
             data.Floors.Add(floor);
             data.Stairs.Add(new ProjectStair
-                { Base = new Vector3(3f, 0f, 3f), Yaw = 45f, Width = 1.2f, Risers = 13, RiserHeight = 0.175f, TreadDepth = 0.275f, Open = true });
+                { Base = new Vector3(3f, 0f, 3f), Yaw = 45f, Width = 1.2f, Risers = 13, RiserHeight = 0.175f, TreadDepth = 0.275f, Open = true, Kind = 2 });
             var mep = new ProjectMep { Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f) };
             mep.Vertices.Add(new Vector3(0.1f, 0.2f, 0.3f));
             mep.Triangles.AddRange(new[] { 0, 0, 0 });
@@ -45,6 +45,7 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(3, round.Floors[0].Outline.Count);
             Assert.AreEqual(3, round.Floors[0].Holes[0].Points.Count, "nested rings survive");
             Assert.IsTrue(round.Stairs[0].Open);
+            Assert.AreEqual(2, round.Stairs[0].Kind, "stair kind int survives JSON");
             Assert.AreEqual(13, round.Stairs[0].Risers);
             Assert.AreEqual("Basin", round.Plumbing[0].Name);
             Assert.AreEqual(new Vector3(0.1f, 0.2f, 0.3f), round.Plumbing[0].Vertices[0]);

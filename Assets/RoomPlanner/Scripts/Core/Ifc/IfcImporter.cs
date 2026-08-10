@@ -186,6 +186,11 @@ namespace RoomPlanner.Core.Ifc
                     Risers = risers,
                     RiserHeight = riserH,
                     TreadDepth = treadD,
+                    // Monolithic Revit stairs read as a wall of concrete in MR — imports
+                    // default to the waist-slab kind, the familiar stairwell flight
+                    // (headset feedback 2026-08-10); the choice round-trips through
+                    // project files either way.
+                    Kind = RoomPlanner.Stairs.StairKind.Waist,
                     StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
                 });
             }
@@ -302,6 +307,7 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, float> LayerThickness = new();  // element id → summed layers (file units)
             public readonly Dictionary<int, List<int>> VoidsOfElement = new(); // element id → opening ids
             public readonly Dictionary<int, int> FillerOfOpening = new();   // opening id → door/window id
+            public readonly Dictionary<int, int> TypeOfElement = new();     // element id → style/type record
         }
 
         private static void MapVoidsAndFills(Ctx c)
@@ -321,6 +327,16 @@ namespace RoomPlanner.Core.Ifc
                 var a = c.F.Args(id);
                 if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref || a[5].Kind != StepKind.Ref) continue;
                 c.FillerOfOpening[a[4].Ref] = a[5].Ref;
+            }
+            // IFCRELDEFINESBYTYPE(…, RelatedObjects, RelatingType) — doors need their
+            // IfcDoorStyle for the swing side.
+            foreach (int id in c.F.OfType("IFCRELDEFINESBYTYPE"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 6 || a[4].Kind != StepKind.List || a[5].Kind != StepKind.Ref) continue;
+                foreach (var el in a[4].Items)
+                    if (el.Kind == StepKind.Ref)
+                        c.TypeOfElement[el.Ref] = a[5].Ref;
             }
         }
 
@@ -365,6 +381,20 @@ namespace RoomPlanner.Core.Ifc
                     if (el.Kind == StepKind.Ref)
                         c.StoreyOfElement[el.Ref] = storey;
             }
+
+            // IFCRELAGGREGATES(…, RelatingObject, RelatedObjects): stair flights and
+            // landings live under their IfcStair, not in the storey container — they
+            // inherit the parent's storey. Two passes cover parent-before-child order.
+            for (int pass = 0; pass < 2; pass++)
+                foreach (int id in c.F.OfType("IFCRELAGGREGATES"))
+                {
+                    var a = c.F.Args(id);
+                    if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref || a[5].Kind != StepKind.List) continue;
+                    if (!c.StoreyOfElement.TryGetValue(a[4].Ref, out int storey)) continue;
+                    foreach (var el in a[5].Items)
+                        if (el.Kind == StepKind.Ref && !c.StoreyOfElement.ContainsKey(el.Ref))
+                            c.StoreyOfElement[el.Ref] = storey;
+                }
         }
 
         private static void MapLayerThickness(Ctx c)
@@ -480,6 +510,8 @@ namespace RoomPlanner.Core.Ifc
                 bool isDoor = c.FillerOfOpening.TryGetValue(openingId, out int filler)
                     ? c.F.TypeOf(filler) == "IFCDOOR"
                     : yMin - a.y < 0.1f;                         // unfilled: floor-level = a doorway
+                Vector3 swingDir = default, hingeDir = default;
+                if (isDoor && filler != 0) DoorSwing(c, filler, out swingDir, out hingeDir);
                 b.Openings.Add(new ImportedOpening
                 {
                     WallIndex = wallIndex,
@@ -488,8 +520,40 @@ namespace RoomPlanner.Core.Ifc
                     Height = yMax - yMin,
                     Sill = Mathf.Max(0f, yMin - a.y),
                     IsDoor = isDoor,
+                    SwingDir = swingDir,
+                    HingeDir = hingeDir,
                 });
             }
+        }
+
+        /// <summary>
+        /// Which way a door opens, from its IfcDoorStyle + placement axes (IFC convention:
+        /// the leaf swings toward the local +Y; hinges sit on the ±X side per OperationType,
+        /// and Revit encodes mirrored instances in the placement itself). Both vectors are
+        /// world-horizontal Unity directions; zero = unknown, the leaf stays closed.
+        /// </summary>
+        private static bool DoorSwing(Ctx c, int doorId, out Vector3 swingDir, out Vector3 hingeDir)
+        {
+            swingDir = default; hingeDir = default;
+            if (!c.TypeOfElement.TryGetValue(doorId, out int styleId)) return false;
+            if (c.F.TypeOf(styleId) != "IFCDOORSTYLE") return false;
+            var sa = c.F.Args(styleId);   // (…, Tag7, OperationType8, …)
+            if (sa == null || sa.Count < 9 || sa[8].Kind != StepKind.Enum) return false;
+            bool left = sa[8].Text == "SINGLE_SWING_LEFT";
+            bool right = sa[8].Text == "SINGLE_SWING_RIGHT";
+            if (!left && !right) return false;   // double/sliding doors keep the closed leaf
+
+            var da = c.F.Args(doorId);
+            if (da == null || da.Count < 6) return false;
+            var place = Placement(c, da[5]);
+            Vector4 xf = place.GetColumn(0), yf = place.GetColumn(1);   // file space (Z up)
+            var along = new Vector3(xf.x, 0f, xf.y);                    // file XY → Unity XZ
+            var swing = new Vector3(yf.x, 0f, yf.y);
+            if (along.sqrMagnitude < 1e-8f || swing.sqrMagnitude < 1e-8f) return false;
+            swingDir = swing.normalized;
+            // hinge on the -X side for LEFT → the leaf runs toward +X, and vice versa
+            hingeDir = (left ? along : -along).normalized;
+            return true;
         }
 
         /// <summary>Profile outline of an opening's extruded solid, in world FILE units; null if mesh-only.</summary>
@@ -568,7 +632,29 @@ namespace RoomPlanner.Core.Ifc
 
                 var bodyItems = FindRepresentation(c, a[6], "Body");
                 int solid = ResolveExtruded(c, bodyItems, out var extra);
-                if (solid == 0) { b.SkippedSlabs++; continue; }
+                if (solid == 0)
+                {
+                    // Stair landings (Revit "Monolithic Landing") are Brep-only slabs:
+                    // recover the outline from the shell's top face instead of skipping.
+                    if (BrepTopRing(c, a[6], place, out var topRing, out float ringTopZ, out float ringThick))
+                    {
+                        var landing = new ImportedSlab
+                        {
+                            Thickness = ringThick * c.Scale,
+                            Level = ringTopZ * c.Scale,
+                            StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int ls) ? ls : -1,
+                        };
+                        foreach (var p in topRing)
+                        {
+                            var u = ToUnity(c, p);
+                            u.y = landing.Level;
+                            landing.Outline.Add(u);
+                        }
+                        b.Slabs.Add(landing);
+                    }
+                    else b.SkippedSlabs++;
+                    continue;
+                }
                 var sa = c.F.Args(solid);
                 var m = place * extra * Axis2Placement3D(c, sa[1]);
                 float depth = sa[3].AsFloat;
@@ -612,6 +698,74 @@ namespace RoomPlanner.Core.Ifc
 
                 b.Slabs.Add(slab);
             }
+        }
+
+        /// <summary>
+        /// Outline of a Brep-only slab: the face of its closed shell whose vertices all sit
+        /// on the highest Z plane (world FILE units, after placement). Thickness is the full
+        /// shell height — honest for landings, whose soffit slopes into the flights.
+        /// </summary>
+        private static bool BrepTopRing(Ctx c, StepValue pdsRef, Matrix4x4 place,
+            out List<Vector3> ring, out float topZ, out float thickness)
+        {
+            ring = null; topZ = 0f; thickness = 0f;
+            var items = FindRepresentation(c, pdsRef, "Body");
+            if (items == null) return false;
+
+            var faces = new List<List<Vector3>>();
+            float zMin = float.MaxValue, zMax = float.MinValue;
+            foreach (var it in items)
+            {
+                if (it.Kind != StepKind.Ref || c.F.TypeOf(it.Ref) != "IFCFACETEDBREP") continue;
+                var brep = c.F.Args(it.Ref);              // (Outer shell)
+                var shell = c.F.Deref(brep[0]);           // IFCCLOSEDSHELL((faces))
+                if (shell == null || shell.Count < 1 || shell[0].Kind != StepKind.List) continue;
+                foreach (var faceRef in shell[0].Items)
+                {
+                    var face = c.F.Deref(faceRef);        // IFCFACE((bounds))
+                    if (face == null || face.Count < 1 || face[0].Kind != StepKind.List) continue;
+                    foreach (var boundRef in face[0].Items)
+                    {
+                        if (c.F.TypeOf(boundRef.Ref) != "IFCFACEOUTERBOUND") continue;
+                        var bound = c.F.Args(boundRef.Ref);
+                        var loop = c.F.Deref(bound[0]);   // IFCPOLYLOOP((points))
+                        if (loop == null || loop.Count < 1 || loop[0].Kind != StepKind.List) continue;
+                        var pts = new List<Vector3>(loop[0].Items.Count);
+                        foreach (var ptRef in loop[0].Items)
+                        {
+                            var p = place.MultiplyPoint3x4(Point(c, ptRef));
+                            zMin = Mathf.Min(zMin, p.z);
+                            zMax = Mathf.Max(zMax, p.z);
+                            pts.Add(p);
+                        }
+                        if (pts.Count >= 3) faces.Add(pts);
+                    }
+                }
+            }
+            if (faces.Count == 0 || zMax - zMin < 1e-4f) return false;
+
+            float tol = Mathf.Max(1e-4f, (zMax - zMin) * 0.02f);
+            float bestArea = 0f;
+            foreach (var pts in faces)
+            {
+                bool onTop = true;
+                foreach (var p in pts) onTop &= zMax - p.z <= tol;
+                if (!onTop) continue;
+                float area2 = 0f;                          // signed, in the XY plane
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var p0 = pts[i]; var p1 = pts[(i + 1) % pts.Count];
+                    area2 += p0.x * p1.y - p1.x * p0.y;
+                }
+                if (Mathf.Abs(area2) <= Mathf.Abs(bestArea)) continue;
+                bestArea = area2;
+                ring = pts;
+            }
+            if (ring == null) return false;
+            if (bestArea < 0f) ring.Reverse();             // outlines are CCW like IFC profiles
+            topZ = zMax;
+            thickness = zMax - zMin;
+            return true;
         }
 
         private static void AddHoleRing(Ctx c, ImportedSlab slab, Matrix4x4 m, List<Vector3> localRing)
