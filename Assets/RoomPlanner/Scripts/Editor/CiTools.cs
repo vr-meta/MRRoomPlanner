@@ -164,14 +164,33 @@ namespace RoomPlanner.EditorTools
                 var cam = camGo.AddComponent<Camera>();
                 cam.fieldOfView = 62f;
                 cam.nearClipPlane = 0.05f;
-                cam.farClipPlane = 300f;
-                cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = new Color(0.13f, 0.18f, 0.24f);
+                cam.farClipPlane = 500f;
+
+                // environment: procedural sky + a ground plane under the model — the same
+                // world the scan-off mode shows on device
+                var sky = AssetDatabase.LoadAssetAtPath<Material>("Assets/RoomPlanner/Materials/Env_Sky.mat");
+                if (sky != null)
+                {
+                    RenderSettings.skybox = sky;
+                    cam.clearFlags = CameraClearFlags.Skybox;
+                }
+                else
+                {
+                    cam.clearFlags = CameraClearFlags.SolidColor;
+                    cam.backgroundColor = new Color(0.13f, 0.18f, 0.24f);
+                }
 
                 System.IO.Directory.CreateDirectory("Build/shots");
                 Vector3 c = bounds.center;
                 float size = Mathf.Max(bounds.size.x, bounds.size.z);
                 float eyeY = bounds.min.y + 1.65f;
+
+                var groundMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/RoomPlanner/Materials/Env_Ground.mat");
+                var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+                ground.name = "ShotGround";
+                ground.transform.position = new Vector3(c.x, bounds.min.y - 0.02f, c.z);
+                ground.transform.localScale = new Vector3(60f, 1f, 60f);
+                if (groundMat != null) ground.GetComponent<Renderer>().sharedMaterial = groundMat;
 
                 Shoot(cam, c + new Vector3(0.8f, 0.9f, -1f).normalized * size * 1.15f, c, "overview");
                 // four interior looks from the ground-floor centre — at least one faces a room

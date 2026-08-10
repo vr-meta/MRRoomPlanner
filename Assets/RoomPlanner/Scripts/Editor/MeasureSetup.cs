@@ -72,6 +72,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("importTool").objectReferenceValue = ctx.Import;
             so.FindProperty("paint").objectReferenceValue = ctx.Paint;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
+            so.FindProperty("skyMat").objectReferenceValue = ctx.SkyMat;
             so.ApplyModifiedProperties();
         }
     }

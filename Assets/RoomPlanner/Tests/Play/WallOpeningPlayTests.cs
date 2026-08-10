@@ -62,7 +62,7 @@ namespace RoomPlanner.Tests.Play
             // mid-plane (opening it is a Phase D interaction).
             var (view, _) = MakeWall(new WallOpening
             {
-                Id = 1, AlongFraction = 0.5f, Width = 1f, Height = 2.1f, SillHeight = 0f,
+                Id = 1, AlongFraction = 0.5f, Width = 1f, Height = 2.1f, SillHeight = 0f, IsDoor = true,
             });
             yield return null;
 
@@ -77,6 +77,20 @@ namespace RoomPlanner.Tests.Play
 
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
             Assert.Greater(mesh.GetTriangles(2).Length, 0, "frame + leaf live in the joinery submesh");
+        }
+
+        [UnityTest]
+        public IEnumerator FloorToCeilingWindowStillGetsGlass()
+        {
+            // Panoramic window: sill 0 — the IFC TYPE, not the sill, decides glass vs leaf.
+            var (view, _) = MakeWall(new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 1.5f, Height = 2.4f, SillHeight = 0f, IsDoor = false,
+            });
+            yield return null;
+
+            var m = view.GetComponent<MeshFilter>().sharedMesh;
+            Assert.Greater(m.GetTriangles(1).Length, 0, "panoramic window keeps its glass");
         }
 
         [UnityTest]
@@ -108,7 +122,7 @@ namespace RoomPlanner.Tests.Play
         {
             var (view, _) = MakeWall(new WallOpening
             {
-                Id = 1, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f, SillHeight = 0f,
+                Id = 1, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f, SillHeight = 0f, IsDoor = true,
             });
             yield return null;
 

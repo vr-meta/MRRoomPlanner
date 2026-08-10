@@ -280,6 +280,7 @@ namespace RoomPlanner.Import
                     Width = op.Width,
                     Height = op.Height,
                     SillHeight = op.Sill,
+                    IsDoor = op.IsDoor,
                 });
                 count++;
             }

@@ -20,6 +20,7 @@ namespace RoomPlanner.Core.Project
     public class ProjectOpening
     {
         public float Along, Width, Height, Sill;
+        public bool IsDoor;
     }
 
     [Serializable]

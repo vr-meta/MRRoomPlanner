@@ -44,6 +44,9 @@ namespace RoomPlanner.EditorTools
             // virtual ground for the scan-off mode (design/18 I10) — muted; PLAIN lit:
             // the Unity plane primitive has no vertex colors for the AO shader
             ctx.GroundMat = CreatePlainLitMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
+            // procedural sky for the scan-off mode and render shots — as an ASSET so the
+            // skybox shader survives build stripping
+            ctx.SkyMat = CreateSkyMat("Env_Sky");
 
             // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
@@ -158,6 +161,19 @@ namespace RoomPlanner.EditorTools
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.DisableKeyword("_ALPHATEST_ON");
             mat.renderQueue = 2990;
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>Procedural daylight sky (built-in Skybox/Procedural works under URP).</summary>
+        private static Material CreateSkyMat(string name)
+        {
+            var shader = Shader.Find("Skybox/Procedural");
+            if (shader == null) return null;
+            var mat = new Material(shader);
+            if (mat.HasProperty("_AtmosphereThickness")) mat.SetFloat("_AtmosphereThickness", 0.85f);
+            if (mat.HasProperty("_SkyTint")) mat.SetColor("_SkyTint", new Color(0.55f, 0.65f, 0.78f));
+            if (mat.HasProperty("_GroundColor")) mat.SetColor("_GroundColor", new Color(0.35f, 0.35f, 0.34f));
+            if (mat.HasProperty("_Exposure")) mat.SetFloat("_Exposure", 1.15f);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 

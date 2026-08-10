@@ -53,6 +53,7 @@ namespace RoomPlanner.Import
                         {
                             Along = op.AlongFraction, Width = op.Width,
                             Height = op.Height, Sill = op.SillHeight,
+                            IsDoor = op.IsDoor,
                         });
                     data.Walls.Add(w);
                 }
@@ -150,7 +151,7 @@ namespace RoomPlanner.Import
                         WallIndex = b.Walls.Count - 1,
                         AlongFraction = op.Along, Width = op.Width,
                         Height = op.Height, Sill = op.Sill,
-                        IsDoor = op.Sill < 0.01f,
+                        IsDoor = op.IsDoor,
                     });
             }
             foreach (var f in data.Floors)

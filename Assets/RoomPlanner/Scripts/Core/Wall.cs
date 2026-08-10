@@ -292,7 +292,7 @@ namespace RoomPlanner.Walls
                 float ys = Mathf.Clamp(op.SillHeight, 0f, height - 0.02f);
                 float yh = Mathf.Clamp(op.SillHeight + op.Height, ys + 0.02f, height);
                 if (t1 - t0 < 1e-3f) continue;
-                ops.Add((t0, t1, ys, yh, ys > 0.01f));
+                ops.Add((t0, t1, ys, yh, !op.IsDoor));
             }
             ops.Sort((x, y) => x.t0.CompareTo(y.t0));
             for (int i = ops.Count - 1; i > 0; i--)

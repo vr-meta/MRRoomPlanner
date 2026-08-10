@@ -45,6 +45,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private float level = 0f;         // working floor level Y (storeys); Quest floor ≈ 0
         [SerializeField] private bool scanOn = true;       // show/hide the scanned room mesh (EffectMesh)
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
+        [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -296,8 +297,9 @@ namespace RoomPlanner.Tools
                     cam.clearFlags = CameraClearFlags.SolidColor;
                     cam.backgroundColor = Color.clear;               // passthrough shows through
                 }
-                else if (RenderSettings.skybox != null)
+                else if (skyMat != null)
                 {
+                    RenderSettings.skybox = skyMat;                  // real environment: daylight sky
                     cam.clearFlags = CameraClearFlags.Skybox;
                 }
                 else

@@ -17,7 +17,7 @@ namespace RoomPlanner.Tests
                 NodeA = 0, NodeB = 1, Thickness = 0.15f, Height = 2.7f,
                 SideSign = -1f, Offset = 1, Join = 2,
             };
-            wall.Openings.Add(new ProjectOpening { Along = 0.4f, Width = 0.9f, Height = 2.1f, Sill = 0f });
+            wall.Openings.Add(new ProjectOpening { Along = 0.4f, Width = 0.9f, Height = 2.1f, Sill = 0f, IsDoor = true });
             data.Walls.Add(wall);
             var floor = new ProjectFloor { Level = 0f, Thickness = 0.2f };
             floor.Outline.AddRange(new[]
@@ -41,6 +41,7 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(-1f, w.SideSign, 1e-6);
             Assert.AreEqual(2, w.Join);
             Assert.AreEqual(0.9f, w.Openings[0].Width, 1e-6);
+            Assert.IsTrue(w.Openings[0].IsDoor, "door/window type survives");
             Assert.AreEqual(3, round.Floors[0].Outline.Count);
             Assert.AreEqual(3, round.Floors[0].Holes[0].Points.Count, "nested rings survive");
             Assert.IsTrue(round.Stairs[0].Open);
