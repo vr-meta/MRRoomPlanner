@@ -52,7 +52,10 @@ SetupRig падает с понятной ошибкой, если набор н
 | Ceiling (низ плиты = потолок) | OfficeCeiling003/005; Plaster001/004 | 1.2/1.5 | 0.05–0.10 |
 
 Табов в Paint пять: **Color / Walls / Floors / Tiles / Ceiling**; страницы категорий
-генерируются из одной таблицы `PaintController.TexTabs` (свотчи + Tile W/H + Gloss).
+генерируются из одной таблицы `PaintController.TexTabs` (свотчи + Tile W/H + Rotate
+15°-шагами + Gloss). Поворот — `SurfaceFinish.RotationDeg` → `_UvRot` (cos, sin) в MPB;
+шейдер крутит метрический uv ДО тайл-скейла (иначе неквадратный тайл даст сдвиг),
+угол персистится в формате проекта (`ProjectFinish.RotationDeg`).
 
 **Матовость/глянец (v1.2)**: `SurfaceFinish.Smoothness` (0 = мат, 1 = глянец);
 шейдер `LitVertexAO` получает `_Smoothness` и дешёвый Blinn-Phong блик от main

@@ -77,5 +77,25 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(2f, f.EffectiveTileY, 1e-5f);
             Assert.AreEqual(f.UvScaleOffset().x, f.UvScaleOffset().y, 1e-5f);
         }
+
+        [Test]
+        public void Rotation_KeptAndWrapped()
+        {
+            Assert.AreEqual(45f, SurfaceFinish.OfTexture("t", 1f, 0f, null, 0f, 45f).RotationDeg, 1e-4f);
+            Assert.AreEqual(30f, SurfaceFinish.OfTexture("t", 1f, 0f, null, 0f, 390f).RotationDeg, 1e-4f,
+                "angles wrap into [0..360)");
+            Assert.AreEqual(0f, SurfaceFinish.OfTexture("t", 1f).RotationDeg, "default is unrotated");
+        }
+
+        [Test]
+        public void UvRotation_IsCosSin()
+        {
+            var r0 = SurfaceFinish.OfTexture("t", 1f).UvRotation();
+            Assert.AreEqual(1f, r0.x, 1e-5f);
+            Assert.AreEqual(0f, r0.y, 1e-5f);
+            var r90 = SurfaceFinish.OfTexture("t", 1f, 0f, null, 0f, 90f).UvRotation();
+            Assert.AreEqual(0f, r90.x, 1e-5f);
+            Assert.AreEqual(1f, r90.y, 1e-5f);
+        }
     }
 }

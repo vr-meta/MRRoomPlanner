@@ -22,6 +22,9 @@ Shader "RoomPlanner/LitVertexAO"
         // shader_feature; the uniform branch is coherent and free when off.
         _BumpMap("Normal Map", 2D) = "bump" {}
         _HasBump("Has Normal Map", Float) = 0
+        // Texture rotation as (cos, sin) — applied to the METRIC uv before the tile
+        // scale (rotate laminate/tiles by any angle without shearing non-square tiles).
+        _UvRot("UV Rotation (cos, sin)", Vector) = (1, 0, 0, 0)
     }
     SubShader
     {
@@ -35,6 +38,7 @@ Shader "RoomPlanner/LitVertexAO"
         CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
             half4 _BaseColor;
+            float4 _UvRot;
             float _Cull;
             float _UseUV1;
             float _Smoothness;
@@ -109,7 +113,12 @@ Shader "RoomPlanner/LitVertexAO"
                 o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
-                o.uv = TRANSFORM_TEX(lerp(v.uv, v.uv1, saturate(_UseUV1)), _BaseMap);
+                // rotate in the metric plane FIRST, then tile-scale — the other order
+                // would shear whenever TileW != TileH
+                float2 m = lerp(v.uv, v.uv1, saturate(_UseUV1));
+                m = float2(m.x * _UvRot.x - m.y * _UvRot.y,
+                           m.x * _UvRot.y + m.y * _UvRot.x);
+                o.uv = m * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 o.ao = v.color.r;
                 return o;
             }

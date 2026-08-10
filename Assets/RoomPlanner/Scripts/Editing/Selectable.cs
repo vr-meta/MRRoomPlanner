@@ -27,6 +27,7 @@ namespace RoomPlanner.Editing
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
         private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
         private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
+        private static readonly int UvRotId = Shader.PropertyToID("_UvRot");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -220,6 +221,9 @@ namespace RoomPlanner.Editing
                         _mpb.SetTexture(MainTexId, _finishTexture);
                         _mpb.SetVector(BaseMapStId, _finish.UvScaleOffset());
                         _mpb.SetVector(MainTexStId, _finish.UvScaleOffset());
+                        // turn the texture in the metric plane (rotate laminate etc.);
+                        // (cos,sin), default (1,0) = no rotation
+                        _mpb.SetVector(UvRotId, _finish.UvRotation());
                         // floors keep the blueprint projection in uv0; finish textures
                         // tile over the metric uv1 channel (design/04, T4)
                         if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);

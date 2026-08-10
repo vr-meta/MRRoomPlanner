@@ -86,6 +86,8 @@ namespace RoomPlanner.Tools
         // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
         private readonly float[] _tileW = new float[TexTabs.Length];
         private readonly float[] _tileH = new float[TexTabs.Length];
+        // texture rotation per category tab, degrees (turn laminate/tiles); 15° steps
+        private readonly float[] _rot = new float[TexTabs.Length];
         // gloss override per TAB (index 0 = Color); -1 = auto (catalog / matte paint)
         private readonly float[] _gloss = { -1f, -1f, -1f, -1f, -1f };
         private readonly string[][] _catIds = new string[TexTabs.Length][];
@@ -157,7 +159,11 @@ namespace RoomPlanner.Tools
                     .Stepper($"th-{k}", "Tile H",
                         () => _tileH[c] > 0f ? $"{_tileH[c] * 100f:0} cm" : "= W",
                         () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), -1),
-                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), +1));
+                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), +1))
+                    .Stepper($"rot-{k}", "Rotate",
+                        () => $"{_rot[c]:0}°",
+                        () => _rot[c] = Mathf.Repeat(_rot[c] - 15f, 360f),
+                        () => _rot[c] = Mathf.Repeat(_rot[c] + 15f, 360f));
                 AddGlossStepper(page, $"gl-{k}", c + 1);
             }
             else
@@ -198,7 +204,7 @@ namespace RoomPlanner.Tools
             normal = library.NormalOf(ids[pick]);   // optional relief (design/22)
             // per-axis overrides: 0 = catalog tile; H unset follows W (square)
             float w = _tileW[c] > 0f ? _tileW[c] : tile;
-            finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab));
+            finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab), _rot[c]);
             return true;
         }
 

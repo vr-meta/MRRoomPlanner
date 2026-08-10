@@ -666,8 +666,23 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   `LaminateCatalog`, tile из периода, gloss 0.35); EditMode 370/370, PlayMode 110/110
 - [~] L5. APK собран и установлен (2026-08-12); ждём фидбек шлема: рельеф, стыки,
   цвета, ориентация зелёного канала нормалей (если рельеф «вдавлен» — флип G)
-- [~] L6. Merge main (Openings, персист v2): при restore отделки резолвить и normal
-  map через `FinishLibrary.NormalOf` — проверить точку загрузки проекта
+- [x] L6. Merge main (Openings, персист v2): restore отделки резолвит и normal map
+  (`FinishLibrary.NormalOf` в `ImportController.ApplyFinish`)
+- [~] L7. **Поворот текстур** (фидбек: «развернуть ламинат»): `SurfaceFinish.
+  RotationDeg` (+персист `ProjectFinish.RotationDeg`), `_UvRot` (cos,sin) через MPB,
+  шейдер крутит метрический uv до тайл-скейла, степпер **Rotate** 15° на текстурных
+  табах Paint; тесты (wrap угла, cos/sin, раунд-трип)
+
+## 2u. Генератор плитки — кабанчик и др. (дизайн: `design/23-tile-generator.md`, фидбек 2026-08-12)
+
+- [ ] K1. Core: `LaminatePattern.Grid` + параметр `deckOffset` (½ для кабанчика,
+  ⅓-дефолт ламинату) в `LaminateLayout.Generate`; `TileCatalog` (3 паттерна ×
+  6 цветов, id `tile-<pattern>-<color>`) + тесты (покрытие Grid, пин каталога)
+- [ ] K2. `TileBaker` (Editor, menu + headless): процедурное лицо (глазурь + шум +
+  пер-плиточная вариация), затирка ~1.2 мм, фаска (кабанчик 15 мм, остальные 3 мм)
+  в нормали; 18 diffuse + 3 нормали 1024² в `Textures/TilesBaked/`
+- [ ] K3. Wiring: записи в Tiles через `SetupPaintTool` (gloss 0.75, нормали);
+  SetupRig → тесты → APK → шлем
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
@@ -729,6 +744,10 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
   с веткой — перед батчем скопировать из основного чекаута (`robocopy /E`), иначе
   FinishLibrary соберётся пустой. Первый батч в worktree = полный импорт Library
   (~несколько минут).
+- [x] **Gradle-сборка упала «There is not enough space on the disk»** (2026-08-12):
+  кэш gradle жил в `C:\Users\butsc\.gradle` (15 GB) и добил переполненный C: до нуля.
+  Решение: `GRADLE_USER_HOME=D:\GradleHome` (setx + в сессии сборки), старый
+  `C:\...\.gradle\caches` удалён (C: +15 GB). Всё тяжёлое — только на D:.
 - [x] **Unity Hub (MSIX) забивал C: через свой TEMP** → `ENOSPC`. Решение: ставить
   редакторы **офлайн-инсталляторами** Unity (обычные exe слушаются нашего `TEMP=D:\Temp`),
   а не через Hub. URL берём из release API Unity по changeset.

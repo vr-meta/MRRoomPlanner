@@ -40,6 +40,7 @@ namespace RoomPlanner.Core.Project
         public string TextureId;
         public float TileW, TileH;        // metric tile, metres; TileH 0 = square
         public float Gloss;               // shader smoothness
+        public float RotationDeg;         // texture rotation; 0 in pre-rotation files
     }
 
     [Serializable]
