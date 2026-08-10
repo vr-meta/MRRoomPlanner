@@ -129,7 +129,7 @@ namespace RoomPlanner.Walls
                         _dragOpening.AlongFraction = c / len;
                         walls.RebuildSegment(seg);
                         ShowGhost(seg, c, _dragOpening.Width, _dragOpening.Height,
-                            _dragOpening.SillHeight, UiTokens.Selected);
+                            _dragOpening.SillHeight, UiTokens.Selected, hitPoint);
                     }
                     return;
                 }
@@ -145,7 +145,7 @@ namespace RoomPlanner.Walls
                 // B deletes it. Placement only happens clear of existing openings.
                 var op = seg.Openings[near];
                 ShowGhost(seg, op.AlongFraction * seg.Length, op.Width, op.Height,
-                    op.SillHeight, UiTokens.Selected);
+                    op.SillHeight, UiTokens.Selected, hitPoint);
 
                 if (input.ConfirmPressed())
                 {
@@ -167,7 +167,7 @@ namespace RoomPlanner.Walls
             bool fits = aimed && OpeningMath.CanPlace(seg, along, _width[_tab], sill + _height[_tab]);
             if (aimed)
                 ShowGhost(seg, along, _width[_tab], _height[_tab], sill,
-                    fits ? UiTokens.Selected : UiTokens.Danger);
+                    fits ? UiTokens.Selected : UiTokens.Danger, hitPoint);
             else if (ghost != null) ghost.enabled = false;
 
             if (input.ConfirmPressed())
@@ -237,18 +237,25 @@ namespace RoomPlanner.Walls
             return true;
         }
 
-        /// <summary>Rectangle outline on the wall centreline plane — the future opening
-        /// (mint/red by validity) or an existing one under the aim (mint).</summary>
+        /// <summary>Rectangle outline of an opening — the future one (mint/red by
+        /// validity) or an existing one under the aim (mint). Drawn on the FACE the ray
+        /// hit, nudged 8 mm toward the user: on the centreline plane it sat embedded
+        /// inside Center-offset walls and only peeked past the end caps (headset
+        /// feedback — "frames only visible at wall edges").</summary>
         private void ShowGhost(WallSegment seg, float centerAlong, float width, float height,
-            float sill, Color c)
+            float sill, Color c, Vector3 hitPoint)
         {
             if (ghost == null || seg == null) return;
             Vector3 a = seg.A.Position;
             Vector3 dir = (seg.B.Position - a).normalized;
+            Vector3 toHit = hitPoint - (a + dir * Vector3.Dot(hitPoint - a, dir));
+            toHit.y = 0f;
+            Vector3 lift = toHit.sqrMagnitude > 1e-6f
+                ? toHit + toHit.normalized * 0.008f : Vector3.zero;
             float half = width * 0.5f;
             float baseY = a.y + seg.BaseHeight;
-            Vector3 p0 = a + dir * (centerAlong - half) + Vector3.up * (baseY + sill);
-            Vector3 p1 = a + dir * (centerAlong + half) + Vector3.up * (baseY + sill);
+            Vector3 p0 = a + dir * (centerAlong - half) + lift + Vector3.up * (baseY + sill);
+            Vector3 p1 = a + dir * (centerAlong + half) + lift + Vector3.up * (baseY + sill);
             Vector3 p2 = p1 + Vector3.up * height;
             Vector3 p3 = p0 + Vector3.up * height;
 
