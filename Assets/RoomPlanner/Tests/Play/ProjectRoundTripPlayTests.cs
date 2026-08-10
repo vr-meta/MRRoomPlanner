@@ -4,6 +4,7 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using RoomPlanner.Core;
 using RoomPlanner.Core.Ifc;
 using RoomPlanner.Core.Project;
 using RoomPlanner.Editing;
@@ -187,6 +188,41 @@ namespace RoomPlanner.Tests.Play
             rSel.MoveBy(new Vector3(0.3f, 0f, 0f));
             Assert.AreEqual(endBefore + new Vector3(0.3f, 0f, 0f), rRoute[0].GetPoint(0),
                 "wire ends re-attach through the preserved id");
+        }
+
+        [UnityTest]
+        public IEnumerator TextureFinish_SurvivesTheRoundTrip_EvenWithoutTextureFiles()
+        {
+            // Format v2 (audit B2): v1 stored only Painted+Color — a textured floor came
+            // back flat white after every save/load. The texture id must survive even on
+            // a device where the texture files are not downloaded (visual degrades to the
+            // tint, the DATA stays intact for the next save).
+            var (import, walls, model) = MakeRig();
+            import.BuildScene(SampleBuilding());
+
+            var slab = Object.FindObjectsByType<Floor>(FindObjectsSortMode.None)[0];
+            var fin = SurfaceFinish.OfTexture("oak-01", 2f, 0f);
+            fin.Smoothness = 0.35f;
+            slab.GetComponent<Selectable>().SetFinish(fin, null);
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.IsTrue(data.Floors.Exists(f => f.Finish.TextureId == "oak-01"),
+                "the finish is captured with its texture id");
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var restored = System.Array.Find(
+                Object.FindObjectsByType<Floor>(FindObjectsSortMode.None),
+                f => f.GetComponent<Selectable>().Finish.TextureId == "oak-01");
+            Assert.IsNotNull(restored, "the texture finish must not flatten to white");
+            var rf = restored.GetComponent<Selectable>().Finish;
+            Assert.AreEqual(FinishKind.Texture, rf.Kind);
+            Assert.AreEqual(2f, rf.TileMeters, 1e-4f);
+            Assert.AreEqual(0.35f, rf.Smoothness, 1e-4f, "per-finish gloss survives too");
         }
 
         [UnityTest]

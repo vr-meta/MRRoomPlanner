@@ -24,6 +24,22 @@ namespace RoomPlanner.Core.Project
         public Vector3 Swing, Hinge;   // door swing directions; zero = closed leaf
     }
 
+    /// <summary>
+    /// v2: the FULL surface finish (audit B2). v1 stored only Painted+Color, so a
+    /// textured floor silently degraded to flat white after every save/load.
+    /// Kind 0 = no finish recorded (v1 files) — readers fall back to Painted/Paint.
+    /// JsonUtility never round-trips null class fields, hence the marker-by-Kind.
+    /// </summary>
+    [Serializable]
+    public class ProjectFinish
+    {
+        public int Kind;                  // FinishKind as int
+        public Color Color = Color.white;
+        public string TextureId;
+        public float TileW, TileH;        // metric tile, metres; TileH 0 = square
+        public float Gloss;               // shader smoothness
+    }
+
     [Serializable]
     public class ProjectWall
     {
@@ -32,6 +48,7 @@ namespace RoomPlanner.Core.Project
         public int Offset, Join;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
         public List<ProjectOpening> Openings = new();
     }
 
@@ -49,6 +66,7 @@ namespace RoomPlanner.Core.Project
         public float Level, Thickness;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
     }
 
     [Serializable]
@@ -63,6 +81,7 @@ namespace RoomPlanner.Core.Project
         public int Kind = -1;
         public bool Painted;
         public Color Paint;
+        public ProjectFinish Finish = new();
     }
 
     [Serializable]
@@ -77,6 +96,7 @@ namespace RoomPlanner.Core.Project
         public float Transparency;
         public bool Painted;               // IFC colour or user paint
         public Color Paint;
+        public ProjectFinish Finish = new();
     }
 
     // ---- v2: the electrical layer (audit 2026-08-10, 12 §Р1 / B1). Before this the

@@ -208,7 +208,8 @@ namespace RoomPlanner.Import
                 var sel = view.GetComponent<Selectable>();
                 _created.Add((sel, segments[i].storey));
                 var src = building.Walls[segments[i].wallIndex];
-                if (src.HasPaint && sel != null) sel.SetPaint(src.PaintColor);
+                if (!ApplyFinish(sel, src.Finish) && src.HasPaint && sel != null)
+                    sel.SetPaint(src.PaintColor);
             }
             int wallCount = segments.Count;
 
@@ -221,7 +222,8 @@ namespace RoomPlanner.Import
                 foreach (var hole in slab.Holes)
                     if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
                 var slabSel = f.GetComponent<Selectable>();
-                if (slab.HasPaint && slabSel != null) slabSel.SetPaint(slab.PaintColor);
+                if (!ApplyFinish(slabSel, slab.Finish) && slab.HasPaint && slabSel != null)
+                    slabSel.SetPaint(slab.PaintColor);
                 _created.Add((slabSel, slab.StoreyIndex));
                 importedFloors.Add(f);
                 slabCount++;
@@ -240,7 +242,7 @@ namespace RoomPlanner.Import
                 stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
                     st.Kind);
                 var sel = go.AddComponent<Selectable>();
-                if (st.HasPaint) sel.SetPaint(st.PaintColor);
+                if (!ApplyFinish(sel, st.Finish) && st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
                 importedStairs.Add(stair);
@@ -282,7 +284,7 @@ namespace RoomPlanner.Import
                 var sel = go.AddComponent<Selectable>();
                 // The file's own colour rides the paint machinery: one visual writer,
                 // undo-able, round-trips through the project format.
-                if (mep.HasColor)
+                if (!ApplyFinish(sel, mep.Finish) && mep.HasColor)
                     sel.SetPaint(new Color(mep.Color.r, mep.Color.g, mep.Color.b,
                         1f - Mathf.Clamp01(mep.Transparency)));
                 _created.Add((sel, mep.StoreyIndex));
@@ -300,6 +302,27 @@ namespace RoomPlanner.Import
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
                 + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
+        }
+
+        private FinishLibrary _finishLibrary;
+
+        /// <summary>
+        /// Apply a full v2 surface finish (audit B2); false = nothing recorded, the
+        /// caller falls back to the flat v1 colour. A texture whose files are not on
+        /// this device degrades VISUALLY to the tint but keeps its id — the next save
+        /// still carries the texture instead of flattening it to white.
+        /// </summary>
+        private bool ApplyFinish(Selectable sel, Core.SurfaceFinish finish)
+        {
+            if (sel == null || finish.IsNone) return false;
+            Texture2D tex = null;
+            if (finish.Kind == Core.FinishKind.Texture)
+            {
+                if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+                if (_finishLibrary != null) _finishLibrary.TryGet(finish.TextureId, out tex, out _);
+            }
+            sel.SetFinish(finish, tex);
+            return true;
         }
 
         /// <summary>Material by category; strongly transparent surfaces (glass shower

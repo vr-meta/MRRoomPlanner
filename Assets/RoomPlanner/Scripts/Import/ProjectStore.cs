@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Core.Ifc;
 using RoomPlanner.Core.Project;
 using RoomPlanner.Floors;
@@ -47,6 +48,7 @@ namespace RoomPlanner.Import
                         Join = (int)s.Join,
                         Painted = sel != null && sel.IsPainted,
                         Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
+                        Finish = CaptureFinish(sel),
                     };
                     foreach (var op in s.Openings)
                         w.Openings.Add(new ProjectOpening
@@ -71,6 +73,7 @@ namespace RoomPlanner.Import
                     Outline = new List<Vector3>(f.Outline),
                     Painted = fsel != null && fsel.IsPainted,
                     Paint = fsel != null && fsel.IsPainted ? fsel.Paint : Color.clear,
+                    Finish = CaptureFinish(fsel),
                 };
                 foreach (var hole in f.Holes)
                     pf.Holes.Add(new ProjectRing { Points = new List<Vector3>(hole) });
@@ -89,6 +92,7 @@ namespace RoomPlanner.Import
                     Kind = (int)s.Kind,
                     Painted = ssel != null && ssel.IsPainted,
                     Paint = ssel != null && ssel.IsPainted ? ssel.Paint : Color.clear,
+                    Finish = CaptureFinish(ssel),
                 });
             }
 
@@ -106,6 +110,7 @@ namespace RoomPlanner.Import
                     Storey = m.StoreyIndex,
                     Painted = msel != null && msel.IsPainted,
                     Paint = msel != null && msel.IsPainted ? msel.Paint : Color.clear,
+                    Finish = CaptureFinish(msel),
                 };
                 pm.Vertices.AddRange(mf.sharedMesh.vertices);
                 pm.Triangles.AddRange(mf.sharedMesh.triangles);
@@ -200,6 +205,37 @@ namespace RoomPlanner.Import
             foreach (var w in data.Wires) electric.RestoreWire(w);
         }
 
+        /// <summary>The full surface finish of an object, v2 (audit B2) — v1 kept only a
+        /// flat colour and textured floors came back white after every load.</summary>
+        private static ProjectFinish CaptureFinish(Editing.Selectable sel)
+        {
+            if (sel == null) return new ProjectFinish();
+            var f = sel.Finish;
+            return new ProjectFinish
+            {
+                Kind = (int)f.Kind,
+                Color = f.Color,
+                TextureId = f.TextureId,
+                TileW = f.TileMeters,
+                TileH = f.TileMetersY,
+                Gloss = f.Smoothness,
+            };
+        }
+
+        /// <summary>Project finish → runtime finish; Kind 0 (v1 file) = none recorded.</summary>
+        internal static SurfaceFinish ToFinish(ProjectFinish p) =>
+            p == null || p.Kind == 0
+                ? SurfaceFinish.None
+                : new SurfaceFinish
+                {
+                    Kind = (FinishKind)p.Kind,
+                    Color = p.Color,
+                    TextureId = p.TextureId,
+                    TileMeters = p.TileW,
+                    TileMetersY = p.TileH,
+                    Smoothness = p.Gloss,
+                };
+
         /// <summary>Recreate saved measurements (format v2, audit B3). Public for tests.</summary>
         public static void RestoreMeasurements(ProjectData data)
         {
@@ -232,6 +268,7 @@ namespace RoomPlanner.Import
                     SideSignOverride = w.SideSign,
                     HasPaint = w.Painted,
                     PaintColor = w.Paint,
+                    Finish = ToFinish(w.Finish),
                 };
                 iw.Path.Add(data.Nodes[w.NodeA].Position);
                 iw.Path.Add(data.Nodes[w.NodeB].Position);
@@ -255,6 +292,7 @@ namespace RoomPlanner.Import
                     Thickness = f.Thickness,
                     HasPaint = f.Painted,
                     PaintColor = f.Paint,
+                    Finish = ToFinish(f.Finish),
                 };
                 foreach (var ring in f.Holes)
                     slab.Holes.Add(new List<Vector3>(ring.Points));
@@ -268,6 +306,7 @@ namespace RoomPlanner.Import
                     Kind = s.Kind >= 0 ? (StairKind)s.Kind : (s.Open ? StairKind.Open : StairKind.Solid),
                     HasPaint = s.Painted,
                     PaintColor = s.Paint,
+                    Finish = ToFinish(s.Finish),
                 });
             foreach (var m in data.Plumbing)
                 b.Plumbing.Add(new ImportedMep
@@ -280,6 +319,7 @@ namespace RoomPlanner.Import
                     Transparency = m.Transparency,
                     HasColor = m.Painted,
                     Color = m.Paint,
+                    Finish = ToFinish(m.Finish),
                 });
             return b;
         }
