@@ -63,7 +63,9 @@ namespace RoomPlanner.Tests
                 wall.BuildSegment(s);
 
                 var mesh = go.GetComponent<MeshFilter>().sharedMesh;
-                Assert.AreEqual(8, mesh.vertexCount, "2 cross-sections * 4 verts");
+                // Texture unwrap (2026-08-11): sides, caps, top and bottom carry dedicated
+                // vertices for their own metric UVs — a plain box is 6 faces * 4 verts.
+                Assert.AreEqual(24, mesh.vertexCount, "6 unwrapped faces * 4 verts");
                 Assert.AreSame(s, wall.Segment);
                 Assert.AreEqual(2, wall.Points.Count, "centerline stays inspectable");
                 Assert.AreEqual(Height, mesh.bounds.size.y, 1e-3f);
