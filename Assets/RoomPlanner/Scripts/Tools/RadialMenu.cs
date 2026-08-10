@@ -38,6 +38,7 @@ namespace RoomPlanner.Tools
         private Transform[] _sectors;
         private IconRenderer[] _icons;
         private GameObject _activeStripe;
+        private GameObject _hoverStripe;
         private IconRenderer _hubIcon;
         private TMP_Text _hubLabel;
         private TMP_Text _hubHint;
@@ -239,7 +240,9 @@ namespace RoomPlanner.Tools
             var scrim = GameObject.CreatePrimitive(PrimitiveType.Quad);
             scrim.name = "Scrim";
             scrim.layer = gameObject.layer;
-            Destroy(scrim.GetComponent<Collider>());
+            var scrimCol = scrim.GetComponent<Collider>();
+            if (Application.isPlaying) Destroy(scrimCol);
+            else DestroyImmediate(scrimCol);   // editor screenshot pipeline
             scrim.transform.SetParent(transform, false);
             scrim.transform.localPosition = new Vector3(0f, 0f, 0.003f);
             scrim.transform.localScale =
@@ -265,16 +268,17 @@ namespace RoomPlanner.Tools
                 Vector2 dir = RadialMath.SlotDirection(i);
                 if (_slots != null && i < _slots.Length && _slots[i].Reserved)
                 {
+                    // reserved: a faint small dot — must NOT read as a button (design/20 §1.6)
                     var dot = new GameObject($"Dot{i}") { layer = gameObject.layer };
                     dot.transform.SetParent(transform, false);
                     dot.transform.localPosition = new Vector3(
                         dir.x * UiTokens.RadialIconRadius, dir.y * UiTokens.RadialIconRadius, -0.002f);
-                    var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.006f, 20), "ReservedDot");
+                    var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.004f, 20), "ReservedDot");
                     _ownedMeshes.Add(dotMesh);
                     dot.AddComponent<MeshFilter>().sharedMesh = dotMesh;
                     var dr = dot.AddComponent<MeshRenderer>();
                     dr.sharedMaterial = iconMaterial;
-                    SetTint(dr, WithAlpha(UiTokens.LabelLight, 0.35f));
+                    SetTint(dr, UiTokens.LabelDim);
                 }
                 else
                 {
@@ -298,6 +302,15 @@ namespace RoomPlanner.Tools
             SetTint(stripeR, UiTokens.Selected);
             _activeStripe.SetActive(false);
 
+            // hover rim: the cyan outer-edge arc from the preview (design/20 §6.5)
+            _hoverStripe = new GameObject("HoverStripe") { layer = gameObject.layer };
+            _hoverStripe.transform.SetParent(transform, false);
+            _hoverStripe.AddComponent<MeshFilter>().sharedMesh = _stripeMesh;
+            var hoverR = _hoverStripe.AddComponent<MeshRenderer>();
+            hoverR.sharedMaterial = iconMaterial;
+            SetTint(hoverR, UiTokens.Hover);
+            _hoverStripe.SetActive(false);
+
             // hub
             var hub = new GameObject("Hub") { layer = gameObject.layer };
             hub.transform.SetParent(transform, false);
@@ -311,12 +324,12 @@ namespace RoomPlanner.Tools
 
             var hubIconGo = new GameObject("HubIcon") { layer = gameObject.layer };
             hubIconGo.transform.SetParent(transform, false);
-            hubIconGo.transform.localPosition = new Vector3(0f, 0.012f, -0.003f);
+            hubIconGo.transform.localPosition = new Vector3(0f, 0.013f, -0.003f);
             _hubIcon = hubIconGo.AddComponent<IconRenderer>();
-            _hubIcon.Init("select-cursor", iconMaterial, 0.020f);
+            _hubIcon.Init("select-cursor", iconMaterial, 0.026f);
 
-            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.010f, -0.003f), 0.016f);
-            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.026f, -0.003f), 0.010f);
+            _hubLabel = MakeHubText("HubLabel", new Vector3(0f, -0.014f, -0.003f), 0.016f);
+            _hubHint = MakeHubText("HubHint", new Vector3(0f, -0.031f, -0.003f), 0.009f);
             _hubHint.color = UiTokens.LabelDim;
 
             RefreshStatic();
@@ -334,7 +347,7 @@ namespace RoomPlanner.Tools
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = new Vector2(UiTokens.RadialHubRadius * 2.2f, glyphSize * 1.4f);
             tmp.enableAutoSizing = false;
-            tmp.fontSize = glyphSize;
+            tmp.fontSize = glyphSize * 6.5f;   // TMP world glyph ≈ fontSize × 0.15
             tmp.color = UiTokens.LabelLight;
             return tmp;
         }
@@ -376,6 +389,16 @@ namespace RoomPlanner.Tools
             if (showStripe)
                 _activeStripe.transform.localRotation =
                     Quaternion.Euler(0f, 0f, -_currentToolSlot * RadialMath.SlotSpanDeg);
+
+            bool showHover = hot >= 0 && hot < _slots.Length && !_slots[hot].Reserved;
+            _hoverStripe.SetActive(showHover);
+            if (showHover)
+            {
+                _hoverStripe.transform.localRotation =
+                    Quaternion.Euler(0f, 0f, -hot * RadialMath.SlotSpanDeg);
+                // ride the hovered sector's ×1.06 outward growth
+                _hoverStripe.transform.localScale = Vector3.one * 1.06f;
+            }
 
             // hub: highlighted tool wins, else the current tool (§1.7)
             int show = hot >= 0 && hot < _slots.Length && !_slots[hot].Reserved ? hot : _currentToolSlot;

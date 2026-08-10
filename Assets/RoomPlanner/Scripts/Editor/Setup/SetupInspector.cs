@@ -24,13 +24,14 @@ namespace RoomPlanner.EditorTools
             var panelRoot = new GameObject("Panel");
             panelRoot.transform.SetParent(root.transform, false);
 
-            var bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            bg.name = "Bg";   // collider kept — the panel background must block scene tools
-            bg.transform.SetParent(panelRoot.transform, false);
-            bg.transform.localScale = new Vector3(PanelLayout.Width, 0.20f, 1f);
-            bg.transform.localPosition = new Vector3(0f, -0.10f, 0.006f);
-            bg.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
-            SetupAssets.AddRim(bg, ctx.RimMat);   // child of bg → follows runtime auto-height
+            // rounded panel plate; a BoxCollider blocks scene tools; the rim plate behind
+            // is resized together with the background by InspectorPanel.FitBackground
+            var bg = SetupAssets.MakePlateGo(panelRoot.transform, "Bg",
+                new Vector3(0f, -0.10f, 0.006f), PanelLayout.Width, 0.20f, UiTokens.RadiusL,
+                ctx.PanelMat);
+            bg.AddComponent<BoxCollider>().size = new Vector3(PanelLayout.Width, 0.20f, 0.01f);
+            SetupAssets.MakePlateGo(bg.transform, "Rim", new Vector3(0f, 0f, 0.002f),
+                PanelLayout.Width + 0.006f, 0.206f, UiTokens.RadiusL + 0.003f, ctx.RimMat);
 
             // title bar = grab handle
             var title = new GameObject("Title");
@@ -40,13 +41,8 @@ namespace RoomPlanner.EditorTools
             title.AddComponent<BoxCollider>().size =
                 new Vector3(PanelLayout.Width, UiTokens.TitleBarHeight, 0.04f);
             title.AddComponent<InspectorGrab>();
-            var titleBg = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            titleBg.name = "TitleBg";
-            SetupAssets.RemoveCollider(titleBg);
-            titleBg.transform.SetParent(title.transform, false);
-            titleBg.transform.localScale =
-                new Vector3(PanelLayout.Width - 0.004f, UiTokens.TitleBarHeight, 1f);
-            titleBg.GetComponent<Renderer>().sharedMaterial = ctx.BtnMat;
+            SetupAssets.MakePlateGo(title.transform, "TitleBg", Vector3.zero,
+                PanelLayout.Width - 0.008f, UiTokens.TitleBarHeight, UiTokens.RadiusM, ctx.BtnMat);
             var titleText = SetupAssets.MakeTextChild(title.transform, "TitleText",
                 "Settings (grip to move)", new Vector2(0.24f, 0.020f));
             titleText.rectTransform.localPosition = new Vector3(0f, 0f, -0.006f);

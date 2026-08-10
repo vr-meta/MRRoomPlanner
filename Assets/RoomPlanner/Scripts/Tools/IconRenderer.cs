@@ -48,6 +48,13 @@ namespace RoomPlanner.Tools
             Build();
         }
 
+        /// <summary>Force the mesh build outside play mode (editor screenshot pipeline —
+        /// Awake doesn't run there).</summary>
+        public void RebuildNow()
+        {
+            if (!string.IsNullOrEmpty(iconId)) Build();
+        }
+
         public void SetTint(Color c)
         {
             if (_renderer == null) return;

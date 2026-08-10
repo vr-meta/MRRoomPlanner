@@ -83,6 +83,14 @@ namespace RoomPlanner.Tools
             Apply();
         }
 
+        /// <summary>Apply() can run before Awake (editor renders, InitRuntime) — lazily
+        /// mirror Awake's state so scale never multiplies by zero and MPB never NREs.</summary>
+        private void EnsureInit()
+        {
+            if (_baseScale == Vector3.zero) _baseScale = transform.localScale;
+            _mpb ??= new MaterialPropertyBlock();
+        }
+
         private void Update()
         {
             // let the press flash decay back to the resting state
@@ -139,6 +147,7 @@ namespace RoomPlanner.Tools
 
         private void Apply()
         {
+            EnsureInit();
             bool flashing = _pressedAt > 0f && Time.time - _pressedAt < PressFlash;
             // pressed dips; hover lifts slightly (1.06 — the old 1.12 overlapped neighbours)
             float s = flashing ? 0.97f : _hovered ? 1.06f : 1f;

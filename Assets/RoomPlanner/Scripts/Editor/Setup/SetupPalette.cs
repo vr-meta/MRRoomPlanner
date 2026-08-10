@@ -19,25 +19,26 @@ namespace RoomPlanner.EditorTools
             root.AddComponent<RigMarker>();
             var menu = root.AddComponent<ToolMenu>();
 
-            var panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            panel.name = "Panel";
-            // Keep the quad's collider: the whole strip must block scene tools, or a trigger
-            // pull between buttons places a point on the wall BEHIND the menu.
-            panel.transform.SetParent(root.transform, false);
-            panel.transform.localScale = new Vector3(0.30f, 0.085f, 1f);
-            panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
-            panel.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
-            SetupAssets.AddRim(panel, ctx.RimMat);
+            // Rounded panel plate (design/20 §6.3) + a BoxCollider so the whole strip
+            // blocks scene tools — a trigger pull between buttons must not place a point
+            // on the wall BEHIND the menu. Rim = a slightly larger plate just behind.
+            var panel = SetupAssets.MakePlateGo(root.transform, "Panel",
+                new Vector3(0f, 0f, 0.006f), 0.34f, 0.085f, RoomPlanner.Core.UiTokens.RadiusL,
+                ctx.PanelMat);
+            panel.AddComponent<BoxCollider>().size = new Vector3(0.34f, 0.085f, 0.01f);
+            SetupAssets.MakePlateGo(panel.transform, "Rim", new Vector3(0f, 0f, 0.002f),
+                0.346f, 0.091f, RoomPlanner.Core.UiTokens.RadiusL + 0.003f, ctx.RimMat);
 
-            // ---- snap toggles: icon buttons with the LED (design/20 §2.5) ----
+            // ---- snap toggles: icon buttons with the LED (design/20 §2.5); the LED alone
+            // is the ON indicator — no active-mark strip (it read as "active tool") ----
             var snapSize = new Vector2(0.040f, 0.040f);
             const float stepX = 0.0445f;
-            float x0 = -0.104f;
+            float x0 = -0.128f;
             MenuButton Snap(int i, string name, MenuAction action, string icon, string tooltip)
             {
                 var b = SetupAssets.MakeMenuButton(root.transform, name, null, action,
                     new Vector3(x0 + i * stepX, 0.008f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat,
-                    withActiveMark: true, kind: MenuButtonKind.Toggle,
+                    withActiveMark: false, kind: MenuButtonKind.Toggle,
                     iconId: icon, iconMat: ctx.IconMat);
                 b.Tooltip = tooltip;
                 return b;
@@ -51,20 +52,11 @@ namespace RoomPlanner.EditorTools
             // ---- passive current-tool chip: icon + name + 4 mm layer stripe ----
             var chip = new GameObject("ToolChip");
             chip.transform.SetParent(root.transform, false);
-            chip.transform.localPosition = new Vector3(0.098f, 0.008f, 0f);
-            var chipBg = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            chipBg.name = "Bg";
-            SetupAssets.RemoveCollider(chipBg);
-            chipBg.transform.SetParent(chip.transform, false);
-            chipBg.transform.localScale = new Vector3(0.088f, 0.040f, 1f);
-            chipBg.GetComponent<Renderer>().sharedMaterial = ctx.BtnMat;
-            var stripe = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            stripe.name = "Stripe";
-            SetupAssets.RemoveCollider(stripe);
-            stripe.transform.SetParent(chip.transform, false);
-            stripe.transform.localScale = new Vector3(0.004f, 0.040f, 1f);
-            stripe.transform.localPosition = new Vector3(-0.042f, 0f, -0.001f);
-            stripe.GetComponent<Renderer>().sharedMaterial = ctx.ActiveMat;
+            chip.transform.localPosition = new Vector3(0.117f, 0.008f, 0f);
+            SetupAssets.MakePlateGo(chip.transform, "Bg", Vector3.zero,
+                0.088f, 0.040f, RoomPlanner.Core.UiTokens.RadiusM, ctx.BtnMat);
+            var stripe = SetupAssets.MakePlateGo(chip.transform, "Stripe",
+                new Vector3(-0.042f, 0f, -0.001f), 0.004f, 0.034f, 0.002f, ctx.ActiveMat);
 
             var chipIconGo = new GameObject("Icon");
             chipIconGo.transform.SetParent(chip.transform, false);

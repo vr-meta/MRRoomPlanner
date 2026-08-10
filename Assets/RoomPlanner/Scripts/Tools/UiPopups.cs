@@ -346,9 +346,9 @@ namespace RoomPlanner.Tools
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = size;
             tmp.enableAutoSizing = true;
-            // same factors as InspectorPanel.MakeText — the device-validated regime
-            tmp.fontSizeMin = size.y * 0.80f;
-            tmp.fontSizeMax = size.y * 0.95f;
+            // same factors as InspectorPanel.MakeText (TMP world glyph ≈ fontSize × 0.15)
+            tmp.fontSizeMin = size.y * 2.6f;
+            tmp.fontSizeMax = size.y * 3.3f;
             return tmp;
         }
 

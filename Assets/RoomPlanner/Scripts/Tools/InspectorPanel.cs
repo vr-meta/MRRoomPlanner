@@ -149,14 +149,15 @@ namespace RoomPlanner.Tools
                 int tab = i;
                 var mb = MakeButton(tabsRoot, $"Tab{i}", schema.Tabs[i],
                     new Vector3(x0 + i * w, y, 0f), new Vector2(w - 0.003f, UiTokens.RowHeight),
-                    () => { schema.SelectTab(tab); Bind(schema, selRows); RefreshValues(); },
-                    kind: MenuButtonKind.Radio);
+                    () => { schema.SelectTab(tab); Bind(schema, selRows); RefreshValues(); });
                 // page icons: Electric tabs carry the sub-mode icons (design/20 §6.1)
                 var pageIcon = TabIconFor(schema.Tabs[i]);
                 if (pageIcon != null)
                     AddRowIcon(mb.transform, pageIcon, new Vector3(-w * 0.5f + 0.014f, 0f, -0.004f), 0.012f);
+                // active = dark plate + Selected underline (design/20 §2.12), not inversion
+                var underline = MakeUnderline(mb.transform, w - 0.014f);
                 int captured = i;
-                _refreshers.Add(() => mb.SetActiveTool(schema.ActiveTab() == captured));
+                _refreshers.Add(() => underline.SetActive(schema.ActiveTab() == captured));
             }
         }
 
@@ -258,21 +259,34 @@ namespace RoomPlanner.Tools
             var options = f.ResolveOptions() ?? new string[0];
             int n = Mathf.Max(1, options.Length);
             float w = PanelLayout.ControlWidth / n;
-            var buttons = new MenuButton[n];
+            var underlines = new GameObject[n];
             for (int i = 0; i < n && i < options.Length; i++)
             {
                 int idx = i;
-                buttons[i] = MakeButton(rowsRoot, $"{f.Id}Seg{i}", options[i],
+                var mb = MakeButton(rowsRoot, $"{f.Id}Seg{i}", options[i],
                     new Vector3(PanelLayout.ControlLeft + w * (i + 0.5f), y, 0f),
                     new Vector2(w - 0.002f, UiTokens.RowHeight - 0.004f),
-                    () => f.SetIndex?.Invoke(idx), kind: MenuButtonKind.Radio);
+                    () => f.SetIndex?.Invoke(idx));
+                // selected = Selected underline on a dark plate (design/20 §2.3)
+                underlines[i] = MakeUnderline(mb.transform, w - 0.012f);
             }
             _refreshers.Add(() =>
             {
                 int cur = f.GetIndex?.Invoke() ?? -1;
-                for (int i = 0; i < buttons.Length; i++)
-                    if (buttons[i] != null) buttons[i].SetActiveTool(i == cur);
+                for (int i = 0; i < underlines.Length; i++)
+                    if (underlines[i] != null) underlines[i].SetActive(i == cur);
             });
+        }
+
+        /// <summary>Selected-state underline for tabs/segmented options.</summary>
+        private GameObject MakeUnderline(Transform parent, float width)
+        {
+            var go = MakePlate(parent, "Underline",
+                new Vector3(0f, -UiTokens.RowHeight * 0.5f + 0.004f, -0.003f),
+                width, 0.0025f, 0.00125f, buttonMaterial);
+            Tint(go.GetComponent<Renderer>(), UiTokens.Selected);
+            go.SetActive(false);
+            return go;
         }
 
         private void BuildSelect(SettingField f, float y)
@@ -392,7 +406,7 @@ namespace RoomPlanner.Tools
         {
             var cap = MakeCaption(f.Id + "Hdr", f.Caption.ToUpperInvariant(), y);
             cap.color = UiTokens.LabelDim;
-            cap.fontSizeMax = UiTokens.RowHeight * 0.55f;
+            cap.fontSizeMax = UiTokens.RowHeight * 1.8f;   // ≈0.8° caps (TMP ×0.15 rule)
             var line = MakePlate(rowsRoot, f.Id + "Rule",
                 new Vector3(PanelLayout.ContentWidth * 0.20f, y, 0f),
                 PanelLayout.ContentWidth * 0.55f, 0.001f, 0.0005f, insetMaterial);
@@ -504,11 +518,11 @@ namespace RoomPlanner.Tools
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = new Vector2(size.x, size.y);
             tmp.enableAutoSizing = true;
-            // readability floor ≥ ~0.9° at 65 cm (UX v2 P1.5) — auto-sizing is only a clamp.
-            // 0.80–0.95 × cell height mirrors the DEVICE-VALIDATED v1 regime (headset
-            // feedback 2026-08-10); review finding 3 → verify on device again
-            tmp.fontSizeMin = size.y * 0.80f;
-            tmp.fontSizeMax = size.y * 0.95f;
+            // TMP world glyph ≈ fontSize × 0.15 (measured on the ui-shots renders):
+            // ×2.6–3.3 of the cell height lands row text at ~1.1–1.3° at 0.65 m —
+            // the readable regime; the previous ×0.8–0.95 rendered ~4× too small
+            tmp.fontSizeMin = size.y * 2.6f;
+            tmp.fontSizeMax = size.y * 3.3f;
             return tmp;
         }
 
@@ -528,14 +542,33 @@ namespace RoomPlanner.Tools
 
         // ---- background / placement ----
 
-        /// <summary>Stretch the background to the content — an oversized empty quad both
-        /// looks broken and BLOCKS scene tools with its collider (UX v2 P0.4).</summary>
+        /// <summary>Stretch the background to the content — an oversized empty panel both
+        /// looks broken and BLOCKS scene tools with its collider (UX v2 P0.4). A rounded
+        /// plate is REBUILT at the new size (scaling would distort the corner radius);
+        /// the rim plate and the collider follow. Plain-transform fallback for tests.</summary>
         private void FitBackground(int rows, bool hasTabs)
         {
             if (background == null) return;
             float h = PanelLayout.PanelHeight(rows, hasTabs);
-            var ls = background.localScale;
-            background.localScale = new Vector3(ls.x, h, ls.z);
+
+            var plate = background.GetComponent<RoundedPlate>();
+            if (plate != null)
+            {
+                plate.Resize(PanelLayout.Width, h);
+                var col = background.GetComponent<BoxCollider>();
+                if (col != null) col.size = new Vector3(PanelLayout.Width, h, 0.01f);
+                var rim = background.Find("Rim");
+                if (rim != null)
+                {
+                    var rimPlate = rim.GetComponent<RoundedPlate>();
+                    if (rimPlate != null) rimPlate.Resize(PanelLayout.Width + 0.006f, h + 0.006f);
+                }
+            }
+            else
+            {
+                var ls = background.localScale;
+                background.localScale = new Vector3(ls.x, h, ls.z);
+            }
             var lp = background.localPosition;
             background.localPosition = new Vector3(lp.x, -h * 0.5f, lp.z);
         }
