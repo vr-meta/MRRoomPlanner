@@ -384,7 +384,10 @@ namespace RoomPlanner.Import
                     Width = op.Width,
                     Height = op.Height,
                     SillHeight = op.Sill,
-                    IsDoor = op.IsDoor,
+                    // Explicit kind when the source carries one (v2 files, hand-placed
+                    // garage doors); the IFC path still speaks bool IsDoor.
+                    Kind = op.Kind >= 0 ? (OpeningKind)op.Kind
+                        : (op.IsDoor ? OpeningKind.Door : OpeningKind.Window),
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
                 });

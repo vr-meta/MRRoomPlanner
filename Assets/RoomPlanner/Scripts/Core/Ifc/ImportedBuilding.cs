@@ -63,6 +63,8 @@ namespace RoomPlanner.Core.Ifc
         public float Width, Height;    // metres
         public float Sill;             // bottom above the wall base, 0 for doors
         public bool IsDoor;
+        /// <summary>OpeningKind as int; -1 = derive from IsDoor (IFC path, v1 files).</summary>
+        public int Kind = -1;
         /// <summary>World-horizontal direction the door leaf swings toward (IFC door style
         /// + placement axes); zero = unknown, rendered closed.</summary>
         public Vector3 SwingDir;

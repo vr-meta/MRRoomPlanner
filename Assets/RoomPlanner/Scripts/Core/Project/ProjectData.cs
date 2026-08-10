@@ -21,6 +21,8 @@ namespace RoomPlanner.Core.Project
     {
         public float Along, Width, Height, Sill;
         public bool IsDoor;
+        /// <summary>OpeningKind as int; -1 = pre-Garage file, fall back to IsDoor.</summary>
+        public int Kind = -1;
         public Vector3 Swing, Hinge;   // door swing directions; zero = closed leaf
     }
 

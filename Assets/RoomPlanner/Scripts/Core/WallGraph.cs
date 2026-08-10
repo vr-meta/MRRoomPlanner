@@ -8,6 +8,11 @@ namespace RoomPlanner.Walls
     /// Parametric, never a boolean cut — the wall mesh is panelised around it (Phase D,
     /// docs/design/03-openings.md). Defined here so segments can carry them from the start.
     /// </summary>
+    /// <summary>What fills the opening (audit F1): windows get glass + sill board,
+    /// doors a swing leaf, garage doors a sectional closed leaf full-width from the
+    /// floor. Window = 0 so default-constructed openings keep the old behaviour.</summary>
+    public enum OpeningKind { Window = 0, Door = 1, Garage = 2 }
+
     public class WallOpening
     {
         public int Id;
@@ -15,9 +20,21 @@ namespace RoomPlanner.Walls
         public float Width = 0.9f;
         public float Height = 2.1f;
         public float SillHeight;             // 0 for doors AND floor-to-ceiling windows
-        /// <summary>Doors get a leaf, windows get glass. Comes from the IFC type — a sill
-        /// heuristic fails on panoramic windows, which also start at the floor.</summary>
-        public bool IsDoor;
+        public OpeningKind Kind = OpeningKind.Window;
+
+        /// <summary>Legacy alias over <see cref="Kind"/>: every pre-Garage writer (IFC
+        /// importer, v1 project files) speaks bool. Garage counts as a door — it is a
+        /// pass-through opening, not glass. A sill heuristic would not work instead:
+        /// panoramic windows also start at the floor.</summary>
+        public bool IsDoor
+        {
+            get => Kind != OpeningKind.Window;
+            set
+            {
+                if (value) { if (Kind == OpeningKind.Window) Kind = OpeningKind.Door; }
+                else Kind = OpeningKind.Window;
+            }
+        }
         /// <summary>World-horizontal direction the door leaf opens toward. Zero = closed
         /// leaf (hand-drawn doors, unknown swing).</summary>
         public Vector3 SwingDir;

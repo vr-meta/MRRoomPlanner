@@ -55,6 +55,36 @@ namespace RoomPlanner.Tests.Play
             view.GetComponent<MeshCollider>().Raycast(ray, out hit, 20f);
 
         [UnityTest]
+        public IEnumerator GarageDoor_SectionalLeaf_BlocksFullWidth_WithRealSeams()
+        {
+            // 2.5 m garage door centred at 2 m (audit F1): a closed sectional leaf —
+            // four stacked panels of ALTERNATING thickness, so neighbouring panels are
+            // hit at different depths (the seams are geometry, not a texture).
+            var (view, _) = MakeWall(new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 2.5f, Height = 2.1f, SillHeight = 0f,
+                Kind = OpeningKind.Garage,
+            });
+            yield return null;
+
+            // panels stack from y=0; leaf zone is ~2.04 m tall → panel ≈ 0.51 m
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 0.25f, -2f), Vector3.forward), out var p0),
+                "panel 0 blocks the doorway");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 0.76f, -2f), Vector3.forward), out var p1),
+                "panel 1 blocks the doorway");
+            Assert.Greater(p1.point.z - p0.point.z, 0.004f,
+                "odd panels are thinner — the step between sections is real geometry");
+
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(1f, 1f, -2f), Vector3.forward), out _),
+                "the leaf spans the full 2.5 m width, not just a door-sized strip");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(0.4f, 1f, -2f), Vector3.forward), out var pier),
+                "the pier beside the garage door is solid");
+            Assert.AreEqual(-0.1f, pier.point.z, 1e-3f, "the pier is hit at the wall FACE");
+            Assert.IsTrue(HitsWall(view, new Ray(new Vector3(2f, 2.5f, -2f), Vector3.forward), out _),
+                "the header above the garage door stays solid");
+        }
+
+        [UnityTest]
         public IEnumerator DoorwayCarriesFrameAndLeaf_PiersAndHeaderAreSolid()
         {
             // 1 m door centred at 2 m: opening span x ∈ [1.5, 2.5], up to y = 2.1.
