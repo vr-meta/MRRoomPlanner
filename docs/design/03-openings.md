@@ -46,8 +46,40 @@ class WallOpening {
 - Валидация (`Core/OpeningMath`): простенок до соседнего проёма/торца ≥ 5 см,
   верх проёма ≤ высоты стены − 5 см (перемычка), ширина ≥ 30 см.
 
-## Осознанно отложено (v2)
+## Открывающиеся двери и ворота (v2, issue #50, 2026-08-12)
 
-Per-instance параметры и ручки проёма (нужен дочерний Selectable), интерактивное
-открывание двери/ворот (Toggle Open), перенос на другую стену, вставка glTF-моделей,
-привязка к `DOOR_FRAME`/`WINDOW_FRAME` из MRUK.
+Полотно двери и панели ворот — **не часть меша стены**, а дочерние объекты-виды,
+двигающиеся трансформами (ноль пересборок меша в кадре, правило 12 §4):
+
+```csharp
+// Core (RoomPlanner.Walls):
+class WallOpening { …; float OpenFraction; }   // 0 закрыто … 1 открыто; персист v3
+static class OpeningPose                        // чистая математика, юнит-тесты
+{
+    float DoorYawDeg(fraction)  => fraction * 100°;        // импортные 75° = 0.75
+    PanelPose GaragePanel(h, panels, i, fraction);         // рельс: вверх по откосу,
+}                                                          // потом горизонтально под потолок
+class OpeningLeafView : MonoBehaviour           // дочерний GO "Leaf#id" у стены
+// полотно/панели box-мешами в локальном фрейме (X вдоль, Y вверх, Z поперёк),
+// MeshCollider для пика, SetFraction(f, animate) — ease без аллокаций в Update.
+```
+
+- `Wall.SyncLeafViews` после триангуляции: дети по Id проёма, меш пересобирается
+  только при смене габаритов (драг узлов стены НЕ пересоздаёт полотна), слой = слой
+  стены. Двери/ворота; окна без полотна. Рама остаётся в столярке меша стены.
+- **Выбор двери** (явный запрос): на leaf-ребёнке — `Selectable`
+  (`SelectableKind.Door`) + `OpeningParameters : ISettingsProvider` (паттерн
+  StairParameters): Numeric Width/Height (валидация `CanPlace(ignore:self)`,
+  `OpeningEditCommand` undo), Segmented Hinge L/R и Swing In/Out (двери),
+  **Slider «Open %»** (0–100, БЕЗ undo — это view-действие, не правка сцены),
+  Action Delete (→ `DeleteOpeningCommand`). Навешивает `WallGraphRenderer`.
+- **Триггер по выбранной двери** (Select) — toggle: анимация к 0 ↔ последний
+  Open %. B на выбранной двери — удаление проёма (не hide полотна).
+- Персист: `ProjectOpening.Open` (v3). Легаси (v2/IFC): swing задан → 0.75
+  (прежний вид «импортные двери открыты на 75°» сохраняется).
+
+## Осознанно отложено (v3)
+
+Открывание окон (створки тем же механизмом), перенос проёма на другую стену,
+вставка glTF-моделей, привязка к `DOOR_FRAME`/`WINDOW_FRAME` из MRUK, ручки-гизмо
+на полотне.

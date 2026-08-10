@@ -74,7 +74,29 @@ namespace RoomPlanner.Walls
         public void RebuildSegment(WallSegment s)
         {
             var view = ViewOf(s);
-            if (view != null) view.BuildSegment(s);
+            if (view == null) return;
+            view.BuildSegment(s);
+            DressLeaves(view, s);
+        }
+
+        /// <summary>Give every door/garage leaf child its selection adapter (issue #50):
+        /// a Selectable (SelectableKind.Door) plus the per-door settings page. Idempotent
+        /// and allocation-free once dressed — rebuilds run per frame during node drags.</summary>
+        private void DressLeaves(Wall view, WallSegment s)
+        {
+            var wallSel = view.GetComponent<Selectable>();
+            foreach (var leaf in view.Leaves)
+            {
+                if (leaf == null) continue;
+                var pars = leaf.GetComponent<OpeningParameters>();
+                if (pars == null)
+                {
+                    // provider BEFORE Selectable — Selectable.Awake caches ISettingsProvider
+                    pars = leaf.gameObject.AddComponent<OpeningParameters>();
+                    leaf.gameObject.AddComponent<Selectable>();
+                }
+                pars.Configure(this, s, wallSel);
+            }
         }
 
         /// <summary>Rebuild every wall meeting at this node — they share the joint.</summary>
@@ -109,6 +131,7 @@ namespace RoomPlanner.Walls
             view.GeometryChanged = moved => RebuildNeighbourhood(moved);
 
             view.BuildSegment(s);
+            DressLeaves(view, s);
             var sel = view.GetComponent<Selectable>();
             if (sceneModel != null) sceneModel.Register(sel);
             // Delete = hide must also pull the segment out of its neighbours' joints and

@@ -407,6 +407,7 @@ namespace RoomPlanner.Import
                         : (op.IsDoor ? OpeningKind.Door : OpeningKind.Window),
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
+                    OpenFraction = Mathf.Clamp01(op.OpenFraction),
                 });
                 count++;
             }

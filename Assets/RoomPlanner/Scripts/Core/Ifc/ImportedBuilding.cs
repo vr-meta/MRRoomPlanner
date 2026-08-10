@@ -74,6 +74,9 @@ namespace RoomPlanner.Core.Ifc
         /// <summary>World-horizontal direction along the wall from the hinge jamb toward
         /// the free edge of the leaf; zero = unknown.</summary>
         public Vector3 HingeDir;
+        /// <summary>Leaf openness 0..1 (issue #50). IFC doors with known swing arrive
+        /// at 0.75 — the historical "imported doors stand open" look.</summary>
+        public float OpenFraction;
     }
 
     /// <summary>A stair flight as PARAMETERS (design/18 I9) â€” meshed by our Stair module.</summary>

@@ -24,6 +24,9 @@ namespace RoomPlanner.Core.Project
         /// <summary>OpeningKind as int; -1 = pre-Garage file, fall back to IsDoor.</summary>
         public int Kind = -1;
         public Vector3 Swing, Hinge;   // door swing directions; zero = closed leaf
+        /// <summary>Leaf openness 0..1 (v3, issue #50). Pre-v3 readers derive 0.75
+        /// from a non-zero Swing (the old "imported doors stand open" look).</summary>
+        public float Open;
     }
 
     /// <summary>

@@ -667,6 +667,26 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   доки (`design/04`, аудит 06 §Р1/Б5). Хвост: замер draw calls на Quest (в #34);
   проверка в шлеме — Apply Side/Whole, Danger-ретикл
 
+## 2u. Открывающиеся двери и ворота (issue #50, `design/03` §«Открывающиеся», ветка `worktree-audit-fixes`)
+
+- [x] **D1** — Core: `WallOpening.OpenFraction`; `OpeningPose` (угол распашной,
+  путь секционной панели по рельсу верт→гориз); +тесты `OpeningPoseTests`
+- [x] **D2** — Core: `OpeningLeafView` (box-меши полотна/панелей в дочернем GO,
+  BoxCollider'ы, SetFraction с ease без аллокаций); `Wall.SyncLeafViews` (дети по Id,
+  пересборка только при смене габаритов); полотно/панели ИЗ меша стены убраны
+  (рама — в столярке); +Play-тесты `OpeningLeafPlayTests`
+- [x] **D3** — Выбор: `SelectableKind.Door`, `Selectable` на leaf (Describe, без
+  Move), `OpeningParameters` (W/H Numeric + `OpeningEditCommand` с валидацией,
+  Hinge/Swing Segmented + `OpeningSwingCommand`, **Open % Slider** без undo,
+  Delete destructive); wiring в `WallGraphRenderer.DressLeaves`
+- [x] **D4** — Select: триггер по выбранной двери = toggle (0 ↔ последний %),
+  B = `DeleteOpeningCommand`; Openings-тул целится сквозь полотно в стену
+- [x] **D5** — Персист v3: `ProjectOpening.Open`; легаси/IFC swing → 0.75
+  (прежний вид); round-trip-тест
+- [x] **D6** — Полный прогон (EditMode 407/407, PlayMode 134/134) + доки
+  (`design/03`, `design/10` Select) + PR (Closes #50). Хвост: проверка в шлеме —
+  выбор двери, toggle, Open %, ворота
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

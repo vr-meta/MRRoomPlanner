@@ -224,11 +224,14 @@ namespace RoomPlanner.Walls
         {
             seg = null; target = null; along = 0f; hitPoint = default;
             if (!sceneModel.TryPick(pointer.GetRay(), out var picked, out hitPoint)) return false;
-            if (picked is not Selectable s || s.Kind != SelectableKind.Wall) return false;
-            var view = s.GetComponent<Wall>();
+            if (picked is not Selectable s) return false;
+            Wall view = null;
+            if (s.Kind == SelectableKind.Wall) view = s.GetComponent<Wall>();
+            // a door leaf sits IN the doorway — aiming at it still means its wall (#50)
+            else if (s.Kind == SelectableKind.Door) view = s.GetComponentInParent<Wall>();
             if (view == null || view.Segment == null) return false;
             seg = view.Segment;
-            target = s;
+            target = s.Kind == SelectableKind.Wall ? s : view.GetComponent<Selectable>();
             Vector3 a = seg.A.Position;
             Vector3 dir = seg.B.Position - a; dir.y = 0f;
             float len = dir.magnitude;

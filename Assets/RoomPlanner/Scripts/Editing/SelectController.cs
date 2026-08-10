@@ -177,7 +177,12 @@ namespace RoomPlanner.Editing
             // --- Delete (B) ---
             if (input.ClearPressed() && HasSelection)
             {
-                sceneModel.History.Execute(new DeleteCommand(_selected));
+                // A selected door deletes its OPENING (undo restores it in the wall);
+                // hiding just the leaf child would orphan the doorway (issue #50).
+                ICommand del = null;
+                if (_selected is Selectable dsel && dsel.Kind == SelectableKind.Door)
+                    del = dsel.GetComponent<RoomPlanner.Walls.OpeningParameters>()?.BuildDeleteCommand();
+                sceneModel.History.Execute(del ?? new DeleteCommand(_selected));
                 Deselect();
                 return;
             }
@@ -191,13 +196,27 @@ namespace RoomPlanner.Editing
                 if (handle != null) BeginHandleDrag(handle, ray);
                 else if (over)
                 {
+                    bool again = _selected == picked;
                     Select(picked);
-                    // Arm instead of dragging (#46): jitter during the click used to move
-                    // the object every single time and cost an undo.
-                    _armed = picked;
-                    _armedAt = Time.time;
-                    _armedPlaneY = picked.WorldBounds.center.y;
-                    _armedStartValid = MeasureMath.RayPlaneY(ray, _armedPlaneY, out _armedStart);
+                    if (picked is Selectable ps && ps.Kind == SelectableKind.Door)
+                    {
+                        // Doors don't arm a drag — the second trigger on a selected
+                        // door swings it open/closed instead (issue #50).
+                        if (again && ps.LeafView != null)
+                        {
+                            ps.LeafView.Toggle();
+                            input.Pulse(0.4f, 0.02f);
+                        }
+                    }
+                    else
+                    {
+                        // Arm instead of dragging (#46): jitter during the click used to
+                        // move the object every single time and cost an undo.
+                        _armed = picked;
+                        _armedAt = Time.time;
+                        _armedPlaneY = picked.WorldBounds.center.y;
+                        _armedStartValid = MeasureMath.RayPlaneY(ray, _armedPlaneY, out _armedStart);
+                    }
                 }
                 else
                 {

@@ -39,6 +39,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Stairs.Stair _stair;
         private RoomPlanner.Electrical.ElectricFixture _fixture;
         private RoomPlanner.Electrical.WireRoute _route;
+        private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -75,7 +76,9 @@ namespace RoomPlanner.Editing
             _stair = GetComponent<RoomPlanner.Stairs.Stair>();
             _fixture = GetComponent<RoomPlanner.Electrical.ElectricFixture>();
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
+            _leafView = GetComponent<OpeningLeafView>();
             if (_wall != null) _kind = SelectableKind.Wall;
+            else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
             else if (_stair != null) _kind = SelectableKind.Stair;
             else if (_fixture != null) _kind = SelectableKind.Fixture;
@@ -237,13 +240,15 @@ namespace RoomPlanner.Editing
                     continue;
                 }
 
-                bool needBlock = tint || (i == 0 && hasFinish);
+                // a leaf view's "body" is every panel renderer, not just the first
+                bool body = i == 0 || _leafView != null;
+                bool needBlock = tint || (body && hasFinish);
                 bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
                 {
-                    var finish = i == 0 ? _finish : SurfaceFinish.None;
-                    FillBlock(finish, i == 0 ? _finishTexture : null, tint, stateColor, t, _ownColors[i]);
+                    var finish = body ? _finish : SurfaceFinish.None;
+                    FillBlock(finish, body ? _finishTexture : null, tint, stateColor, t, _ownColors[i]);
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
@@ -309,6 +314,7 @@ namespace RoomPlanner.Editing
         public void MoveBy(Vector3 delta)
         {
             Resolve();
+            if (_leafView != null) return;   // doors move with the Openings tool, not Select
             if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
@@ -340,6 +346,9 @@ namespace RoomPlanner.Editing
         internal RoomPlanner.Electrical.ElectricFixture Fixture { get { Resolve(); return _fixture; } }
         internal RoomPlanner.Electrical.WireRoute Route { get { Resolve(); return _route; } }
 
+        /// <summary>The door/garage leaf this Selectable wraps (trigger toggle, issue #50).</summary>
+        internal OpeningLeafView LeafView { get { Resolve(); return _leafView; } }
+
         /// <summary>Per-instance rows come from a provider component, if one is present.</summary>
         public RoomPlanner.Core.SettingsSchema GetSettings()
         {
@@ -354,6 +363,13 @@ namespace RoomPlanner.Editing
             {
                 case SelectableKind.Wall:
                     return $"Length {WallLength() * 100f:0} cm";
+                case SelectableKind.Door:
+                {
+                    var op = _leafView != null ? _leafView.Opening : null;
+                    if (op == null) return "Door";
+                    string kind = op.Kind == RoomPlanner.Walls.OpeningKind.Garage ? "Garage door" : "Door";
+                    return $"{kind} {op.Width * 100f:0}×{op.Height * 100f:0} cm · open {op.OpenFraction * 100f:0}%";
+                }
                 case SelectableKind.Stair:
                     return _stair != null
                         ? $"{_stair.Risers} steps, {_stair.TotalHeight * 100f:0} cm up"

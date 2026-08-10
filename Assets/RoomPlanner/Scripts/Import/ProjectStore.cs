@@ -61,6 +61,7 @@ namespace RoomPlanner.Import
                             IsDoor = op.IsDoor,
                             Kind = (int)op.Kind,
                             Swing = op.SwingDir, Hinge = op.HingeDir,
+                            Open = op.OpenFraction,
                         });
                     data.Walls.Add(w);
                 }
@@ -292,6 +293,9 @@ namespace RoomPlanner.Import
                         IsDoor = op.IsDoor,
                         Kind = op.Kind,
                         SwingDir = op.Swing, HingeDir = op.Hinge,
+                        // v2 files rendered swing-known doors open at 75° — keep that look
+                        OpenFraction = data.Version >= 3 ? op.Open
+                            : (op.Swing.sqrMagnitude > 1e-6f ? 0.75f : 0f),
                     });
             }
             foreach (var f in data.Floors)

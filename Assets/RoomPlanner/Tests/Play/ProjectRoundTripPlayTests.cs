@@ -226,6 +226,44 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator DoorOpenFraction_SurvivesTheRoundTrip_AndV2DerivesFromSwing()
+        {
+            // Issue #50: how far a door stands open is part of the scene; v2 files
+            // (no Open field) keep the old "swing-known doors stand at 75°" look.
+            var (import, walls, _) = MakeRig();
+            import.BuildScene(SampleBuilding());
+            yield return null;
+
+            var seg = walls.Graph.Segments[0];
+            var door = seg.Openings.Find(o => o.IsDoor);
+            Assert.IsNotNull(door);
+            door.OpenFraction = 0.4f;
+
+            var data = ProjectStore.Capture(walls, null);
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var rDoor = walls.Graph.Segments[0].Openings.Find(o => o.IsDoor);
+            Assert.AreEqual(0.4f, rDoor.OpenFraction, 1e-4f, "Open % survives the round-trip");
+
+            // v2 file: strip Open → swing-known doors derive 0.75, swingless stay closed
+            data.Version = 2;
+            foreach (var w in data.Walls)
+                foreach (var o in w.Openings) o.Open = 0f;
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(ProjectData.FromJson(data.ToJson()), import, null);
+            yield return null;
+
+            rDoor = walls.Graph.Segments[0].Openings.Find(o => o.IsDoor && o.SwingDir.sqrMagnitude > 1e-6f);
+            Assert.IsNotNull(rDoor, "the sample door carries swing data");
+            Assert.AreEqual(0.75f, rDoor.OpenFraction, 1e-4f, "v2 look preserved");
+        }
+
+        [UnityTest]
         public IEnumerator PerSideWallFinish_SurvivesTheRoundTrip_AndV2ReadsAsWhole()
         {
             // Format v3 (issue #34): walls carry a finish PAIR — wallpaper inside,

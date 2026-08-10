@@ -745,6 +745,8 @@ namespace RoomPlanner.Core.Ifc
                     IsDoor = isDoor,
                     SwingDir = swingDir,
                     HingeDir = hingeDir,
+                    // swing known → the door stands open (the pre-#50 imported look)
+                    OpenFraction = swingDir.sqrMagnitude > 1e-6f ? 0.75f : 0f,
                 });
             }
         }
