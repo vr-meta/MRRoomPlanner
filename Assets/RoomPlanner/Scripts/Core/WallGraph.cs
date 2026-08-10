@@ -74,6 +74,14 @@ namespace RoomPlanner.Walls
         public WallJoin Join = WallJoin.Miter;
 
         /// <summary>
+        /// A deleted-but-undoable wall: it stays in the graph (undo restores it with its
+        /// identity) but must not shape its neighbours' joints, snap, or count toward a
+        /// node's live degree (audit 02 §Б3 — hidden walls kept mitring their corners).
+        /// Set by the view layer on hide/show, never persisted (hidden walls are not saved).
+        /// </summary>
+        public bool Suppressed;
+
+        /// <summary>
         /// Which side of the centerline the thickness grows on: +1 = along the A→B right
         /// normal, -1 = the other way.
         ///

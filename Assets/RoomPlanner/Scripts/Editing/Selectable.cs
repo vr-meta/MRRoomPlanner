@@ -225,10 +225,15 @@ namespace RoomPlanner.Editing
             }
         }
 
+        /// <summary>Owners that must react to hide/show (e.g. WallGraphRenderer pulls a
+        /// hidden wall out of its neighbours' joints — audit 02 §Б3).</summary>
+        public event System.Action<bool> HiddenChanged;
+
         public void SetHidden(bool hidden)
         {
             if (hidden == !gameObject.activeSelf) return;
             gameObject.SetActive(!hidden);
+            HiddenChanged?.Invoke(hidden);
         }
 
         public void MoveBy(Vector3 delta)

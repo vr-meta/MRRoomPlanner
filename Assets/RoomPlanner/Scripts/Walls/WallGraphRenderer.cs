@@ -109,7 +109,18 @@ namespace RoomPlanner.Walls
             view.GeometryChanged = moved => RebuildNeighbourhood(moved);
 
             view.BuildSegment(s);
-            if (sceneModel != null) sceneModel.Register(view.GetComponent<Selectable>());
+            var sel = view.GetComponent<Selectable>();
+            if (sceneModel != null) sceneModel.Register(sel);
+            // Delete = hide must also pull the segment out of its neighbours' joints and
+            // put it back on undo (audit 02 §Б3): mark it suppressed in the graph and
+            // rebuild everything sharing either node.
+            if (sel != null)
+                sel.HiddenChanged += hidden =>
+                {
+                    s.Suppressed = hidden;
+                    RebuildAround(s.A);
+                    RebuildAround(s.B);
+                };
             return view;
         }
 

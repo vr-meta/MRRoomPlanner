@@ -58,6 +58,38 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator HiddenWall_LeavesItsNeighboursJoint_AndReturnsOnUndo()
+        {
+            // Audit 02 §Б3: a deleted (hidden) wall stayed in the graph and kept mitring
+            // its neighbour's corner — the joint outlived the wall.
+            var (r, model) = MakeRig();
+            var s1 = Draw(r, P(0, 0), P(4, 0));
+            var s2 = Draw(r, P(4, 0), P(4, 3));    // L-corner at (4,0)
+            r.RebuildNeighbourhood(s2);            // the controller does this after each commit
+            yield return null;
+
+            var v1 = r.ViewOf(s1);
+            var mitred = new List<Vector3>(v1.GetComponent<MeshFilter>().sharedMesh.vertices);
+
+            var sel2 = r.ViewOf(s2).GetComponent<Selectable>();
+            model.History.Execute(new DeleteCommand(sel2));
+            yield return null;
+
+            Assert.IsTrue(s2.Suppressed, "hide marks the segment suppressed in the graph");
+            var capped = new List<Vector3>(v1.GetComponent<MeshFilter>().sharedMesh.vertices);
+            CollectionAssert.AreNotEqual(mitred, capped,
+                "the survivor's end must become a flat cap, not keep the ghost miter");
+
+            model.History.Undo();
+            yield return null;
+
+            Assert.IsFalse(s2.Suppressed, "undo un-suppresses");
+            CollectionAssert.AreEqual(mitred,
+                new List<Vector3>(v1.GetComponent<MeshFilter>().sharedMesh.vertices),
+                "the miter is back exactly as it was");
+        }
+
+        [UnityTest]
         public IEnumerator Sync_CreatesOneViewPerSegment_AndRegistersIt()
         {
             var (r, model) = MakeRig();
