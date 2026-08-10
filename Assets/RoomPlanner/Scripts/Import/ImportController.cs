@@ -201,6 +201,14 @@ namespace RoomPlanner.Import
             int openingCount = AttachOpenings(building, wallSegments);
             walls.Sync();                                      // one view per new segment
             foreach (var n in touched) walls.RebuildAround(n); // joints need all neighbours
+            // T-heal (design/24): imported partitions merely TOUCH long walls mid-span;
+            // splitting there closes room rings and scopes per-side paint to one room.
+            // Tail halves born from the splits count as imported too — a repeated Load
+            // must replace them together with everything else.
+            int beforeHeal = graph.Segments.Count;
+            walls.HealTJunctions();
+            for (int i = beforeHeal; i < graph.Segments.Count; i++)
+                _importedSegments.Add(graph.Segments[i]);
             for (int i = 0; i < segments.Count; i++)
             {
                 var view = walls.ViewOf(segments[i].seg);

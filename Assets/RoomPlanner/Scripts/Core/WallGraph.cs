@@ -280,7 +280,30 @@ namespace RoomPlanner.Walls
 
             var mid = new WallNode(_nextNodeId++, onSeg);
             _nodes.Add(mid);
+            SplitWith(s, mid, onSeg);
+            return mid;
+        }
 
+        /// <summary>
+        /// Split s at an EXISTING node sitting on its centreline mid-span — the T-heal
+        /// step (design/24): an imported partition ends on a node that merely touches
+        /// the long wall; joining them is what closes room rings. False when the node
+        /// is off the line, at an endpoint, or already attached.
+        /// </summary>
+        public bool SplitSegmentWith(WallSegment s, WallNode junction, float tolerance = DefaultTolerance)
+        {
+            if (s == null || junction == null || s.Has(junction)) return false;
+            Vector3 onSeg = ClosestPointOnSegment(s.A.Position, s.B.Position, junction.Position);
+            Vector3 flat = junction.Position - onSeg; flat.y = 0f;
+            if (flat.sqrMagnitude > tolerance * tolerance) return false;
+            if ((onSeg - s.A.Position).sqrMagnitude <= tolerance * tolerance) return false;
+            if ((onSeg - s.B.Position).sqrMagnitude <= tolerance * tolerance) return false;
+            SplitWith(s, junction, onSeg);
+            return true;
+        }
+
+        private void SplitWith(WallSegment s, WallNode mid, Vector3 onSeg)
+        {
             var far = s.B;
             float t = Mathf.Clamp01((onSeg - s.A.Position).magnitude
                 / Mathf.Max(1e-6f, (far.Position - s.A.Position).magnitude));
@@ -319,8 +342,6 @@ namespace RoomPlanner.Walls
                     }
                 }
             }
-
-            return mid;
         }
 
         /// <summary>Remove a segment and drop any node left with nothing attached.</summary>

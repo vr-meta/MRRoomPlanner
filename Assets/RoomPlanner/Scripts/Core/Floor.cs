@@ -123,29 +123,41 @@ namespace RoomPlanner.Floors
         /// </summary>
         public bool AddHole(IReadOnlyList<Vector3> hole)
         {
-            var ring = Polygon.Clean(hole);
-            if (ring.Count < 3 || !Polygon.IsSimple(ring)) return false;
-            for (int i = 0; i < ring.Count; i++)
-                ring[i] = new Vector3(ring[i].x, Level, ring[i].z);
-            foreach (var p in ring)
-                if (!Polygon.Contains(_outline, p)) return false;
-            // A ring crossing (or swallowing) an existing hole leaves the bridge builder
-            // with no valid seam — refuse up front instead of finding out mid-rebuild.
-            foreach (var h in _holes)
-                if (Polygon.RingsOverlap(ring, h)) return false;
-
-            // Dry-run the bridged triangulation BEFORE committing. The old code committed
-            // first and checked `_holes.Count == holes.Count` after — a tautology (the list
-            // is filled before triangulation), so a failed seam cleared the mesh, dropped
-            // the collider and still reported success (audit 2026-08-10, 04 §Б1).
-            var trial = new List<List<Vector3>>(_holes) { ring };
-            if (Polygon.TriangulateWithHoles(_outline, trial, out _).Count == 0) return false;
+            var ring = ValidateHole(hole);
+            if (ring == null) return false;
 
             var holes = HolesCopy();
             holes.Add(ring);
             BuildOutline(OutlineCopy(), holes, Level, _thickness,
                 _planScale, _planRotationDeg, _planOriginX, _planOriginZ);
             return true;
+        }
+
+        /// <summary>Dry-run AddHole's validation without committing (Paint room asks
+        /// before building the undo command, design/24).</summary>
+        public bool CanAddHole(IReadOnlyList<Vector3> hole) => ValidateHole(hole) != null;
+
+        /// <summary>The cleaned, level-snapped ring if the hole is legal, else null.</summary>
+        private List<Vector3> ValidateHole(IReadOnlyList<Vector3> hole)
+        {
+            var ring = Polygon.Clean(hole);
+            if (ring.Count < 3 || !Polygon.IsSimple(ring)) return null;
+            for (int i = 0; i < ring.Count; i++)
+                ring[i] = new Vector3(ring[i].x, Level, ring[i].z);
+            foreach (var p in ring)
+                if (!Polygon.Contains(_outline, p)) return null;
+            // A ring crossing (or swallowing) an existing hole leaves the bridge builder
+            // with no valid seam — refuse up front instead of finding out mid-rebuild.
+            foreach (var h in _holes)
+                if (Polygon.RingsOverlap(ring, h)) return null;
+
+            // Dry-run the bridged triangulation BEFORE committing. The old code committed
+            // first and checked `_holes.Count == holes.Count` after — a tautology (the list
+            // is filled before triangulation), so a failed seam cleared the mesh, dropped
+            // the collider and still reported success (audit 2026-08-10, 04 §Б1).
+            var trial = new List<List<Vector3>>(_holes) { ring };
+            if (Polygon.TriangulateWithHoles(_outline, trial, out _).Count == 0) return null;
+            return ring;
         }
 
         /// <summary>Remove a hole by index (undo of AddHole).</summary>

@@ -88,6 +88,10 @@ namespace RoomPlanner.Tools
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private Transform reticle;   // visible aim point (device feedback 2026-08-10)
         [SerializeField] private FinishLibrary library;   // texture catalog (design/04 «Текстуры v1»)
+        // Paint room (design/24, issue #52): rooms come from the wall graph, the
+        // carved sub-slab from the floor controller
+        [SerializeField] private WallGraphRenderer walls;
+        [SerializeField] private RoomPlanner.Floors.FloorController floors;
 
         private static readonly (string Name, Color Color)[] Presets =
         {
@@ -114,9 +118,10 @@ namespace RoomPlanner.Tools
 
         private int _preset;
         private int _tab;          // 0 Color · 1.. = TexTabs categories
-        // 0 = one wall side (the default — headset feedback 2026-08-10), 1 = whole object
+        // 0 = the part under the cursor (wall side / room of a slab — the default),
+        // 1 = whole object (headset feedback 2026-08-10 + design/24)
         private int _scope;
-        private static readonly string[] ApplyOptions = { "Side", "Whole" };
+        private static readonly string[] ApplyOptions = { "Part", "Whole" };
         private readonly int[] _pick = new int[TexTabs.Length];
         // tile-size overrides in metres, both axes; 0 = the texture's own catalog tile
         // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
@@ -212,8 +217,9 @@ namespace RoomPlanner.Tools
             return page;
         }
 
-        /// <summary>One shared paint scope (issue #34): Side = the wall face the ray
-        /// hit, Whole = the entire object. Non-walls always paint whole.</summary>
+        /// <summary>One shared paint scope (issues #34/#52): Part = the wall face the
+        /// ray hit / the ROOM of the slab under the cursor; Whole = the entire object.
+        /// Objects without parts always paint whole.</summary>
         private void AddApplyScope(SettingsSchema page, string id) =>
             page.Segmented(id, "Apply", ApplyOptions,
                 () => _scope, i => _scope = Mathf.Clamp(i, 0, 1));
@@ -353,20 +359,62 @@ namespace RoomPlanner.Tools
                 }
                 else
                 {
-                    // Apply: Side (default) paints the wall face the ray hit; Whole
-                    // and non-walls keep the object-wide behaviour (issue #34).
+                    // Apply: Part (default) paints the wall face the ray hit (issue #34)
+                    // or the ROOM of the slab under the cursor (issue #52); Whole and
+                    // part-less objects keep the object-wide behaviour.
                     var wallView = _scope == 0 && _hover.Kind == SelectableKind.Wall
                         ? _hover.GetComponent<Wall>() : null;
-                    var cmd = wallView != null
-                        ? new PaintCommand(_hover, finish, texture, wallView.SideOf(point), normal)
-                        : new PaintCommand(_hover, finish, texture, normal);
-                    sceneModel.History.Execute(cmd);
+                    if (wallView != null)
+                    {
+                        sceneModel.History.Execute(new PaintCommand(
+                            _hover, finish, texture, wallView.SideOf(point), normal));
+                    }
+                    else if (!(_scope == 0 && _hover.Kind == SelectableKind.Floor
+                               && TryRoomPaint(_hover, point, finish, texture, normal)))
+                    {
+                        sceneModel.History.Execute(new PaintCommand(_hover, finish, texture, normal));
+                    }
                     input.Pulse(0.5f, 0.02f);
                 }
             }
 
             if (input.ClearPressed() && manager != null)
                 manager.ActivateTool("select");
+        }
+
+        /// <summary>
+        /// Paint room (design/24, issue #52): the slab under the cursor is carved along
+        /// the room ring found in the wall graph and the nested sub-slab takes the
+        /// finish — one undo entry. False = no room / carve impossible → the caller
+        /// falls back to whole-slab paint.
+        /// </summary>
+        private bool TryRoomPaint(Selectable sel, Vector3 point,
+            SurfaceFinish finish, Texture2D texture, Texture2D normal)
+        {
+            if (walls == null || floors == null) return false;
+            var floor = sel.GetComponent<RoomPlanner.Floors.Floor>();
+            if (floor == null) return false;
+
+            walls.HealTJunctions();   // imported T-touches must split before the face walk
+            var rooms = RoomFinder.FindRooms(walls.Graph);
+            RoomRing room = null;
+            foreach (var r in rooms)
+                if (Mathf.Abs(r.Level - floor.Level) < 1.5f && r.ContainsXZ(point))
+                {
+                    room = r;
+                    break;
+                }
+            if (room == null) return false;
+
+            // the slab already IS this room (an earlier carve) — plain paint suffices
+            if (Mathf.Abs(floor.Area - room.Area) < room.Area * 0.1f) return false;
+
+            var ring = RoomFinder.Inset(room.Polygon, 0.02f);
+            if (!floor.CanAddHole(ring)) return false;
+
+            sceneModel.History.Execute(new PaintRoomCommand(
+                floors, floor, sel, ring, finish, texture, normal));
+            return true;
         }
 
         // ---- Danger cursor for the tab-target filter (audit 06 §Б5) ----

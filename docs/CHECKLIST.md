@@ -727,6 +727,29 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 - [~] K3. Wiring: записи в Tiles через `SetupPaintTool` (gloss 0.75, нормали) [x];
   EditMode 422/422, PlayMode 124/124; APK → шлем — ждёт команды
 
+## 2x. Комнаты из графа + покраска по комнатам (issue #52, `design/24-rooms.md`, ветка `worktree-audit-fixes`)
+
+Фидбек 2026-08-12: одна плита на этаж — в каждой комнате нужен свой пол; у стен
+та же беда по длине (коридорная стена из IFC — одна на несколько комнат).
+
+- [x] **RM1** — Core: `WallGraph.SplitSegmentWith` (сплит существующим узлом) +
+  `RoomFinder.SplitTJunctions` (T-heal, идемпотентно, проёмы переезжают); +тесты
+- [x] **RM2** — Core: `RoomFinder.FindRooms` (face-walk: максимальный CCW-поворот
+  от обратного ребра → ограниченные грани CCW-положительные, внешняя отрицательная;
+  уровни, спуры, suppressed сливает комнаты), `RoomRing.ContainsXZ`, `Inset`
+  (митровый, ~2 см); +тесты `RoomFinderTests` ×9
+- [x] **RM3** — Floor: `CanAddHole` (сухая валидация); `PaintRoomCommand` (дыра по
+  инсет-кольцу + показ под-плиты + финиш = один undo, под-плита переживает
+  undo/redo скрытием)
+- [x] **RM4** — Paint: Apply **`Part|Whole`**; wiring walls/floors
+  (`SetupPaintTool` → SetupRig); плита+Part → комната под прицелом; под-плита ≈
+  кольцо (10 % площади) → красится целиком; фолбэк — вся плита;
+  +Play-тесты `PaintRoomPlayTests` ×4 (соседняя комната, undo одной записью)
+- [x] **RM5** — Import: T-heal после BuildScene (хвосты сплитов — в
+  `_importedSegments`); полный прогон (EditMode 440/440, PlayMode 138/138) + доки
+  (`design/24`, `design/10`, аудит 06 §Р2) + PR (Closes #52). Хвост: проверка в
+  шлеме — комнаты на импортированном здании, стены после T-heal
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

@@ -24,6 +24,13 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
             so.FindProperty("library").objectReferenceValue = ctx.Finishes;
+            // Paint room (design/24, issue #52): rooms come from the wall graph, the
+            // carved sub-slab from the floor controller — both live on the rig already
+            // (SetupWallTool/SetupFloorTool run before this).
+            so.FindProperty("walls").objectReferenceValue =
+                ctx.Rig.GetComponent<RoomPlanner.Walls.WallGraphRenderer>();
+            so.FindProperty("floors").objectReferenceValue =
+                ctx.Rig.GetComponent<RoomPlanner.Floors.FloorController>();
             so.ApplyModifiedProperties();
         }
 

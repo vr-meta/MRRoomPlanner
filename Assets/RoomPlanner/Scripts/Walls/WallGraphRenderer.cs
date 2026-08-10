@@ -114,6 +114,23 @@ namespace RoomPlanner.Walls
             RebuildAround(s.B);
         }
 
+        /// <summary>
+        /// T-heal (design/24, issue #52): split segments at nodes touching their
+        /// centreline mid-span, then materialise the new halves. Idempotent — a clean
+        /// graph costs one scan and rebuilds nothing. Called before room queries and
+        /// after imports.
+        /// </summary>
+        public int HealTJunctions()
+        {
+            int splits = RoomFinder.SplitTJunctions(Graph);
+            if (splits > 0)
+            {
+                Sync();                                    // views for the new tail halves
+                foreach (var s in Graph.Segments) RebuildSegment(s);   // joints changed
+            }
+            return splits;
+        }
+
         // ---- lifetime ----
 
         private Wall CreateView(WallSegment s)
