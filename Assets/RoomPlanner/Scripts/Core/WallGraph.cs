@@ -252,6 +252,9 @@ namespace RoomPlanner.Walls
             _nodes.Add(mid);
 
             var far = s.B;
+            float t = Mathf.Clamp01((onSeg - s.A.Position).magnitude
+                / Mathf.Max(1e-6f, (far.Position - s.A.Position).magnitude));
+
             // s becomes A--mid
             far.segments.Remove(s);
             s.B = mid;
@@ -263,6 +266,29 @@ namespace RoomPlanner.Walls
             _segments.Add(tail);
             mid.segments.Add(tail);
             far.segments.Add(tail);
+
+            // Openings ride the split with their WORLD position preserved: fractions were
+            // relative to the old A→far span, so both halves rescale them (audit 02 §Б1 —
+            // a T-junction through a walled window used to leave every opening on the A
+            // half at a stale fraction). One straddling the cut keeps its centre's side;
+            // the mesh sanitiser clamps it clear of the new joint.
+            if (s.Openings.Count > 0 && t > 1e-4f && t < 1f - 1e-4f)
+            {
+                for (int i = s.Openings.Count - 1; i >= 0; i--)
+                {
+                    var o = s.Openings[i];
+                    if (o.AlongFraction <= t)
+                    {
+                        o.AlongFraction /= t;
+                    }
+                    else
+                    {
+                        s.Openings.RemoveAt(i);
+                        o.AlongFraction = (o.AlongFraction - t) / (1f - t);
+                        tail.Openings.Add(o);
+                    }
+                }
+            }
 
             return mid;
         }
