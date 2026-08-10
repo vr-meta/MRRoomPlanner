@@ -340,13 +340,28 @@ namespace RoomPlanner.Editing
                     if (model != null)
                     {
                         var items = model.Items;
+                        // An end attached to a DELETED fixture must not bill a connection
+                        // allowance (audit 08 §Б3): resolve ids against live fixtures
+                        // instead of trusting string non-emptiness (WireRoute.Connections).
+                        var liveFixtures = new System.Collections.Generic.HashSet<string>();
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            var item = items[i];
+                            if (item == null || !item.IsAlive || item.IsHidden) continue;
+                            if (item is Selectable f && f.Kind == SelectableKind.Fixture
+                                && !string.IsNullOrEmpty(f.Id))
+                                liveFixtures.Add(f.Id);
+                        }
                         for (int i = 0; i < items.Count; i++)
                         {
                             var item = items[i];
                             if (item == null || !item.IsAlive || item.IsHidden) continue;
                             if (item is not Selectable s || s.Kind != SelectableKind.Wire || s._route == null) continue;
                             var r = s._route;
-                            entries.Add(new RoomPlanner.Electrical.RouteBomEntry(r.Cable, r.Length, r.Connections));
+                            int liveEnds =
+                                (!string.IsNullOrEmpty(r.StartFixtureId) && liveFixtures.Contains(r.StartFixtureId) ? 1 : 0)
+                                + (!string.IsNullOrEmpty(r.EndFixtureId) && liveFixtures.Contains(r.EndFixtureId) ? 1 : 0);
+                            entries.Add(new RoomPlanner.Electrical.RouteBomEntry(r.Cable, r.Length, liveEnds));
                             total++;
                             if (!string.IsNullOrEmpty(Id) && (r.StartFixtureId == Id || r.EndFixtureId == Id)) routed++;
                         }

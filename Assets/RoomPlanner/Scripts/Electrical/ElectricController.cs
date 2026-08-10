@@ -233,10 +233,24 @@ namespace RoomPlanner.Electrical
         {
             if (fixturePrefab == null || sceneModel == null) return;
 
-            if (_mode == SubMode.Panel && FindPanel() != null)
+            if (_mode == SubMode.Panel)
             {
-                input.Pulse(0.2f, 0.01f);   // one panel per scene in v1
-                return;
+                if (FindPanel() != null)
+                {
+                    input.Pulse(0.2f, 0.01f);   // one panel per scene in v1
+                    return;
+                }
+                // A DELETED panel is only hidden (undo-able). Placing a replacement used
+                // to leave it resurrectable — undo after the new placement produced TWO
+                // panels (audit 08 §Б2). The replacement makes the deletion permanent:
+                // Unregister purges the old panel's commands, so undo stays consistent.
+                var hiddenPanel = FindHiddenPanel();
+                if (hiddenPanel != null)
+                {
+                    var hiddenSel = hiddenPanel.GetComponent<Selectable>();
+                    if (hiddenSel != null && sceneModel != null) sceneModel.Unregister(hiddenSel);
+                    Destroy(hiddenPanel.gameObject);
+                }
             }
             if (OverlapsExistingFixture(place)) { input.Pulse(0.2f, 0.01f); return; }
 
@@ -282,6 +296,21 @@ namespace RoomPlanner.Electrical
             {
                 var item = items[i];
                 if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is Selectable s && s.Fixture != null && s.Fixture.Kind == FixtureKind.Panel)
+                    return s.Fixture;
+            }
+            return null;
+        }
+
+        /// <summary>A deleted-but-undoable panel (hidden in the model), if any.</summary>
+        private ElectricFixture FindHiddenPanel()
+        {
+            if (sceneModel == null) return null;
+            var items = sceneModel.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || !item.IsHidden) continue;
                 if (item is Selectable s && s.Fixture != null && s.Fixture.Kind == FixtureKind.Panel)
                     return s.Fixture;
             }
