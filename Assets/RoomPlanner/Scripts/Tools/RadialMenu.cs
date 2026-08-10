@@ -60,6 +60,11 @@ namespace RoomPlanner.Tools
 
         public bool IsOpen => _open;
 
+        /// <summary>Pointer-ray hit on the wheel's plane this frame — ToolManager parks the
+        /// reticle here so cursor picking reads like everywhere else.</summary>
+        public bool HasRayPoint { get; private set; }
+        public Vector3 RayPoint { get; private set; }
+
         /// <summary>Fired with the picked slot's ToolIndex; ToolManager subscribes.</summary>
         public System.Action<int> OnPicked;
 
@@ -200,14 +205,22 @@ namespace RoomPlanner.Tools
             return -1;
         }
 
-        /// <summary>Sector under the pointer ray, −1 if none. Hub reported separately.</summary>
+        /// <summary>Sector under the pointer ray, −1 if none. Hub reported separately;
+        /// the plane hit is published for the reticle.</summary>
         private int RaySlot(Ray ray, out bool overHub)
         {
             overHub = false;
+            HasRayPoint = false;
             var plane = new Plane(-transform.forward, transform.position);
             if (!plane.Raycast(ray, out float dist)) return -1;
-            Vector3 local = transform.InverseTransformPoint(ray.GetPoint(dist));
+            Vector3 world = ray.GetPoint(dist);
+            Vector3 local = transform.InverseTransformPoint(world);
             float r = new Vector2(local.x, local.y).magnitude;
+            if (r <= UiTokens.RadialScrimRadius)
+            {
+                HasRayPoint = true;
+                RayPoint = world - transform.forward * 0.01f;   // float in front of the wheel
+            }
             if (r <= UiTokens.RadialHubRadius) { overHub = true; return -1; }
             if (r < UiTokens.RadialInnerRadius || r > UiTokens.RadialOuterRadius * 1.1f) return -1;
             float angle = RadialMath.AngleDeg(new Vector2(local.x, local.y));

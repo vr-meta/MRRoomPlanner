@@ -158,6 +158,11 @@ namespace RoomPlanner.Tools
         private float _uiDebounceUntil;
         private int _prevTool = -1;   // R3 = previous tool (16 P2.3)
 
+        // A button: tap (release < AHoldSeconds) = teleport, hold = tool radial
+        private const float AHoldSeconds = 0.35f;
+        private float _aPressedAt;
+        private bool _aConsumed;
+
         // slider drag capture (design/20 §2.2)
         private SliderWidget _slider;
         private float _sliderX;
@@ -188,18 +193,30 @@ namespace RoomPlanner.Tools
 
             Ray ray = pointer.GetRay();
 
-            // ---- tool radial (L3) captures ALL input while open (design/20 §1) ----
+            // ---- tool radial captures ALL input while open (design/20 §1) ----
+            // Invocation (device feedback 2026-08-10): HOLD A ~0.35 s (stick clicks felt
+            // awkward); a short A tap stays teleport (fires on release). L3 still works.
             var cam = Camera.main != null ? Camera.main.transform : null;
+            bool teleportTap = false;
+            if (input.TeleportPressed()) { _aPressedAt = Time.time; _aConsumed = false; }
+            if (_aPressedAt > 0f && !input.TeleportHeld())
+            {
+                teleportTap = !_aConsumed && Time.time - _aPressedAt < AHoldSeconds;
+                _aPressedAt = 0f;
+            }
             if (radial != null)
             {
-                if (input.RadialPressed())
+                bool holdFired = _aPressedAt > 0f && !_aConsumed && !radial.IsOpen
+                    && Time.time - _aPressedAt >= AHoldSeconds;
+                if (input.RadialPressed() || holdFired)
                 {
-                    if (radial.IsOpen) radial.Close();
+                    if (radial.IsOpen && !holdFired) radial.Close();
                     else if (cam != null)
                     {
                         radial.Open(cam, _active);
                         input.PulseLeft(0.3f, 0.012f);
                     }
+                    if (holdFired) _aConsumed = true;
                 }
                 bool captures = radial.Tick(input.LeftThumbstick(), ray,
                     input.ConfirmPressed(), input.ClearPressed(), cam, input);
@@ -209,7 +226,13 @@ namespace RoomPlanner.Tools
                     ITool blocked = ActiveTool();
                     if (blocked != null) blocked.Tick(true);
                     if (menu != null) menu.Highlight(null);
-                    if (reticle != null) reticle.gameObject.SetActive(false);
+                    // the pointer stays VISIBLE on the wheel — picking by cursor + trigger
+                    // must read like everywhere else (device feedback 2026-08-10)
+                    if (reticle != null)
+                    {
+                        reticle.gameObject.SetActive(radial.HasRayPoint);
+                        if (radial.HasRayPoint) reticle.position = radial.RayPoint;
+                    }
                     return;
                 }
                 if (_radialWasCapturing)
@@ -314,9 +337,10 @@ namespace RoomPlanner.Tools
             }
             _grabbing = false;
 
-            // Global teleport (A): bring the aimed slab spot under your feet — the model
-            // moves, never the camera (passthrough; design/18 I6). Works from any tool.
-            if (!overMenu && !debounced && sceneModel != null && input.TeleportPressed()
+            // Global teleport (A TAP, fires on release — the hold opens the radial): bring
+            // the aimed slab spot under your feet — the model moves, never the camera
+            // (passthrough; design/18 I6). Works from any tool.
+            if (!overMenu && !debounced && sceneModel != null && teleportTap
                 && (select == null || !select.IsDragging))
             {
                 // Slabs AND stair treads are teleport targets — aiming a step is how you

@@ -57,13 +57,23 @@ namespace RoomPlanner.Measure
             return OVRInput.GetDown(OVRInput.Button.Four);
         }
 
-        /// <summary>Teleport to the aimed floor spot — A (Button.One, right hand). Editor: T.</summary>
+        /// <summary>A just pressed (Button.One, right hand). Editor: T. Short press =
+        /// teleport, 0.35 s hold = tool radial — ToolManager owns the timing.</summary>
         public bool TeleportPressed()
         {
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.T)) return true;
 #endif
             return OVRInput.GetDown(OVRInput.Button.One);
+        }
+
+        /// <summary>A still held — the hold-vs-tap discriminator for the radial.</summary>
+        public bool TeleportHeld()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKey(KeyCode.T)) return true;
+#endif
+            return OVRInput.Get(OVRInput.Button.One);
         }
 
         /// <summary>Axis snap (vertical / horizontal) — GRIP held (either hand).</summary>
