@@ -54,10 +54,11 @@ namespace RoomPlanner.EditorTools
             ctx.JoineryMat = CreateSurfaceMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f), null);
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
-            // plumbing fixtures wear their MEP layer color (design/07); double-sided —
-            // fixture Breps arrive with arbitrary winding quality. Plain lit: imported
+            // plumbing FIXTURES are white porcelain (feedback 2026-08-10) — the blue
+            // LayerPlumbing color stays reserved for pipes/routes when they arrive.
+            // Double-sided (fixture Breps have arbitrary winding); plain lit: imported
             // meshes carry no vertex colors for the AO shader.
-            ctx.PlumbingMat = CreatePlainLitMat("MEP_Plumbing", UiColors.LayerPlumbing);
+            ctx.PlumbingMat = CreatePlainLitMat("MEP_Plumbing", new Color(0.95f, 0.96f, 0.97f));
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
