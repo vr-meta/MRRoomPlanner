@@ -66,8 +66,19 @@ namespace RoomPlanner.Measure
         public string PaletteLabel => "Meas";
         public string IconId => "tape-measure";
 
-        /// <summary>Measure has no settings panel.</summary>
-        public SettingsSchema GetSettings() => null;
+        private int _mode;   // 0 Hands (Layout-style tape at the controller) · 1 Ray (aim far)
+        private SettingsSchema _settings;
+
+        public SettingsSchema GetSettings()
+        {
+            _settings ??= new SettingsSchema()
+                .Segmented("mmode", "Mode", new[] { "Hands", "Ray" },
+                    () => _mode, i => _mode = Mathf.Clamp(i, 0, 1))
+                .Readout("mhint", "How to", () => _mode == 0
+                    ? "tip at your hand · Trigger = pin"
+                    : "aim · Trigger = place · stick = depth");
+            return _settings;
+        }
 
         public void OnActivate() { }
 
@@ -96,7 +107,16 @@ namespace RoomPlanner.Measure
             DedupeMarkers();
 
             Ray ray = pointer.GetRay();
-            _hasHit = raycaster.TryRaycast(ray, out _currentHit, out _currentNormal, out var hitObj);
+
+            // hands mode (device feedback 2026-08-10, Layout-style): the tape lives at
+            // your fingertips — points are pinned by the CONTROLLER position, not the ray
+            if (_mode == 0)
+            {
+                TickHands(ray);
+                return;
+            }
+
+            _hasHit = raycaster.TryRaycastSurface(ray, out _currentHit, out _currentNormal, out var hitObj);
             var plusHit = (_hasHit && hitObj != null) ? hitObj.GetComponentInParent<MeasureContinueButton>() : null;
             var handleHit = (_hasHit && hitObj != null) ? hitObj.GetComponentInParent<MeasurePointHandle>() : null;
 
@@ -180,6 +200,78 @@ namespace RoomPlanner.Measure
 
             if (_pendingStart.HasValue && _preview != null)
                 _preview.Set(_pendingStart.Value, target);
+        }
+
+        // ---- hands mode: tape at the fingertips (design/01 v2) ----
+
+        private const float TipOffset = 0.07f;        // "tape tip" just ahead of the controller
+        private const float SurfaceMagnet = 0.06f;    // pull the tip onto a nearby surface/corner
+        private readonly Collider[] _nearby = new Collider[8];
+
+        private void TickHands(Ray ray)
+        {
+            HidePlus();
+            UpdateHover(null, null);
+
+            Vector3 tip = ray.origin + ray.direction * TipOffset;
+            Vector3 target = tip;
+
+            bool corners = manager == null || manager.SnapCorner;
+            if (corners && TrySnapToEndpoint(tip, out var sp, null)) target = sp;
+            else if (TrySnapToNearbySurface(tip, out var sfc)) target = sfc;
+            if (manager != null && manager.SnapGrid)
+                target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
+            if (_pendingStart.HasValue && input.SnapHeld())
+                target = SnapToAxis(_pendingStart.Value, target);
+
+            // the reticle IS the tape tip — always visible in hands mode
+            if (reticle != null)
+            {
+                reticle.gameObject.SetActive(true);
+                reticle.position = target;
+            }
+
+            if (input.ClearPressed())
+            {
+                ClearLast();   // cancel the stretched tape, or Esc back to Select
+                return;
+            }
+
+            if (input.ConfirmPressed())
+                PlacePoint(target);   // pin A, walk, pin B — same chain machinery
+
+            if (_pendingStart.HasValue && _preview != null)
+                _preview.Set(_pendingStart.Value, target);   // live tape with the size badge
+        }
+
+        /// <summary>Closest point on any nearby surface (scan or own geometry) within the
+        /// magnet radius — the tip clicks onto walls and corners instead of hovering in
+        /// the air 3 cm away. NonAlloc per frame (coding rule 4).</summary>
+        private bool TrySnapToNearbySurface(Vector3 tip, out Vector3 snapped)
+        {
+            snapped = tip;
+            int mask = ~(1 << 2);   // everything except the menu layer
+            int n = Physics.OverlapSphereNonAlloc(tip, SurfaceMagnet, _nearby, mask,
+                QueryTriggerInteraction.Ignore);
+            float best = SurfaceMagnet;
+            bool found = false;
+            for (int i = 0; i < n; i++)
+            {
+                var col = _nearby[i];
+                if (col == null) continue;
+                var sel = col.GetComponentInParent<RoomPlanner.Editing.Selectable>();
+                if (sel != null && sel.Kind == RoomPlanner.Editing.SelectableKind.Measurement)
+                    continue;   // measurement markers have their own endpoint magnet
+                Vector3 p = col.ClosestPoint(tip);
+                float d = Vector3.Distance(tip, p);
+                if (d < best)
+                {
+                    best = d;
+                    snapped = p;
+                    found = true;
+                }
+            }
+            return found;
         }
 
         private void DoDrag()

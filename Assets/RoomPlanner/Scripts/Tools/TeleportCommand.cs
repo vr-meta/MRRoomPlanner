@@ -22,12 +22,14 @@ namespace RoomPlanner.Tools
         private readonly List<RoomPlanner.Import.MepView> _mep;
         private readonly List<RoomPlanner.Electrical.ElectricFixture> _fixtures;
         private readonly List<RoomPlanner.Electrical.WireRoute> _routes;
+        private readonly List<RoomPlanner.Measure.Measurement> _measurements;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
             List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null,
             List<RoomPlanner.Electrical.ElectricFixture> fixtures = null,
-            List<RoomPlanner.Electrical.WireRoute> routes = null)
+            List<RoomPlanner.Electrical.WireRoute> routes = null,
+            List<RoomPlanner.Measure.Measurement> measurements = null)
         {
             _walls = walls;
             _floors = floors;
@@ -35,6 +37,7 @@ namespace RoomPlanner.Tools
             _mep = mep;
             _fixtures = fixtures;
             _routes = routes;
+            _measurements = measurements;
             _delta = delta;
         }
 
@@ -70,6 +73,22 @@ namespace RoomPlanner.Tools
             if (_routes != null)
                 foreach (var r in _routes)
                     if (r != null) r.MoveBy(d);
+            // Measurements are anchored to the model's geometry (a measured wall keeps
+            // its tape) — left behind they visually "travel with the user" (headset
+            // feedback 2026-08-10).
+            if (_measurements != null)
+                foreach (var m in _measurements)
+                    if (m != null) m.Set(m.PointA + d, m.PointB + d);
+        }
+
+        /// <summary>Every measurement, hidden ones included — same rule as slabs.</summary>
+        public static List<RoomPlanner.Measure.Measurement> CollectMeasurements()
+        {
+            var list = new List<RoomPlanner.Measure.Measurement>();
+            foreach (var m in Object.FindObjectsByType<RoomPlanner.Measure.Measurement>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+                list.Add(m);
+            return list;
         }
 
         /// <summary>

@@ -357,7 +357,8 @@ namespace RoomPlanner.Tools
                         TeleportCommand.CollectStairs(),
                         TeleportCommand.CollectMep(),
                         TeleportCommand.CollectFixtures(),
-                        TeleportCommand.CollectRoutes()));
+                        TeleportCommand.CollectRoutes(),
+                        TeleportCommand.CollectMeasurements()));
                     UpdateGroundLevel();
                     input.Pulse(0.4f, 0.02f);
                 }

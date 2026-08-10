@@ -88,7 +88,9 @@ namespace RoomPlanner.Walls
             PlaceMode place = manager != null ? manager.Place : PlaceMode.Surface;
 
             Vector3 cursor;
-            bool onSurface = raycaster.TryRaycast(ray, out var hit, out _, out _) && place == PlaceMode.Surface;
+            // TryRaycastSurface: own walls/slabs count as surfaces too (device feedback
+            // 2026-08-10 — points sailed past own geometry, esp. in the scan-less mode)
+            bool onSurface = raycaster.TryRaycastSurface(ray, out var hit, out _, out _) && place == PlaceMode.Surface;
             if (onSurface)
             {
                 _cursorDistance = Vector3.Distance(ray.origin, hit);
