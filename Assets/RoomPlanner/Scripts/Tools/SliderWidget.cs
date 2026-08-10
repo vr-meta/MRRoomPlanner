@@ -28,8 +28,16 @@ namespace RoomPlanner.Tools
         public SettingField Field => _field;
         public bool IsDragging => _dragging;
 
+        // The fill gets its OWN mesh, rebuilt at the true width. The plate meshes from
+        // the panel cache are SHARED between rows — mutating one would resize every
+        // plate of that size, and x-scaling it stretched the rounded ends into ovals
+        // (headset feedback 2026-08-11).
+        private Mesh _ownFillMesh;
+        private float _fillH, _fillR, _fillWidthNow = -1f;
+
         public void Init(SettingField field, Transform fill, Renderer fillRenderer,
-            Transform knob, TMP_Text valueLabel, float trackWidth)
+            Transform knob, TMP_Text valueLabel, float trackWidth,
+            float fillHeight = 0.006f, float fillRadius = 0.003f)
         {
             _field = field;
             _fill = fill;
@@ -37,7 +45,21 @@ namespace RoomPlanner.Tools
             _knob = knob;
             _valueLabel = valueLabel;
             _trackWidth = trackWidth;
+            _fillH = fillHeight;
+            _fillR = fillRadius;
+            var mf = fill != null ? fill.GetComponent<MeshFilter>() : null;
+            if (mf != null)
+            {
+                _ownFillMesh = new Mesh { name = "SliderFill", hideFlags = HideFlags.DontSave };
+                mf.sharedMesh = _ownFillMesh;
+                _fill.localScale = Vector3.one;
+            }
             Refresh();
+        }
+
+        private void OnDestroy()
+        {
+            if (_ownFillMesh != null) Destroy(_ownFillMesh);
         }
 
         /// <summary>Local x (relative to the track's LEFT edge) → previewed value.</summary>
@@ -67,19 +89,33 @@ namespace RoomPlanner.Tools
             Refresh();
         }
 
-        /// <summary>The fill plate mesh is built this wide; localScale multiplies it,
-        /// so the target metric width must be divided by it (review finding 2).</summary>
-        public const float FillBaseWidth = 0.01f;
+        /// <summary>Rebuild a pill/rounded-rect mesh at the TRUE width — never scale it:
+        /// scaling stretched the rounded caps into ovals (headset feedback 2026-08-11).
+        /// Shared with the inspector's progress bars.</summary>
+        public static void RebuildPill(Mesh mesh, float w, float h, float r)
+        {
+            var data = UiMeshes.RoundedRect(w, h, Mathf.Min(r, Mathf.Min(w, h) * 0.5f));
+            mesh.Clear();
+            mesh.SetVertices(data.Vertices);
+            mesh.SetTriangles(data.Triangles, 0);
+            var normals = new Vector3[data.Vertices.Length];
+            for (int i = 0; i < normals.Length; i++) normals[i] = Vector3.back;
+            mesh.SetNormals(normals);
+            mesh.RecalculateBounds();
+        }
 
         public void Refresh()
         {
             if (_field == null) return;
             float t = PanelLayout.SliderT(_field.GetNumber(), _field.Min, _field.Max);
-            if (_fill != null)
+            if (_fill != null && _ownFillMesh != null)
             {
-                var s = _fill.localScale;
-                _fill.localScale = new Vector3(
-                    Mathf.Max(1e-4f, t * _trackWidth) / FillBaseWidth, s.y, s.z);
+                float w = Mathf.Max(0.002f, t * _trackWidth);
+                if (Mathf.Abs(w - _fillWidthNow) > 0.0003f)
+                {
+                    _fillWidthNow = w;
+                    RebuildPill(_ownFillMesh, w, _fillH, _fillR);
+                }
                 var p = _fill.localPosition;
                 _fill.localPosition = new Vector3(t * _trackWidth * 0.5f, p.y, p.z);
             }
