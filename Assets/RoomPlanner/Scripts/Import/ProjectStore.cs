@@ -148,6 +148,14 @@ namespace RoomPlanner.Import
                         pw.Points.AddRange(route.Points);
                         data.Wires.Add(pw);
                     }
+                    else if (s.Kind == Editing.SelectableKind.Measurement)
+                    {
+                        // Kind falls back to Measurement for unknown components (MEP views
+                        // among them) — the component check keeps them out of this section.
+                        var meas = s.GetComponent<Measure.Measurement>();
+                        if (meas != null)
+                            data.Measures.Add(new ProjectMeasure { A = meas.PointA, B = meas.PointB });
+                    }
                 }
             }
 
@@ -168,6 +176,7 @@ namespace RoomPlanner.Import
             import.ClearScene();
             import.BuildScene(ToBuilding(data));
             RestoreElectrical(data);
+            RestoreMeasurements(data);
             if (blueprint != null)
                 blueprint.SetPlacement(data.PlanScale, data.PlanRotationDeg,
                     data.PlanOffsetX, data.PlanOffsetZ);
@@ -189,6 +198,19 @@ namespace RoomPlanner.Import
             }
             foreach (var f in data.Fixtures) electric.RestoreFixture(f);
             foreach (var w in data.Wires) electric.RestoreWire(w);
+        }
+
+        /// <summary>Recreate saved measurements (format v2, audit B3). Public for tests.</summary>
+        public static void RestoreMeasurements(ProjectData data)
+        {
+            if (data.Measures.Count == 0) return;
+            var measure = Object.FindFirstObjectByType<Measure.MeasureController>();
+            if (measure == null)
+            {
+                Debug.LogWarning("[Project] file carries measurements but the rig has no MeasureController");
+                return;
+            }
+            foreach (var m in data.Measures) measure.RestoreMeasurement(m.A, m.B);
         }
 
         /// <summary>Project → the import pipeline's input model.</summary>

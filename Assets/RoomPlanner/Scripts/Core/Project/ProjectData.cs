@@ -103,6 +103,14 @@ namespace RoomPlanner.Core.Project
         public string StartId, EndId;     // attached fixture ids; null/empty = free end
     }
 
+    /// <summary>v2: a tape measurement — two world points is its whole state (audit B3;
+    /// they used to be neither saved nor cleared, haunting the next loaded project).</summary>
+    [Serializable]
+    public class ProjectMeasure
+    {
+        public Vector3 A, B;
+    }
+
     [Serializable]
     public class ProjectData
     {
@@ -118,6 +126,7 @@ namespace RoomPlanner.Core.Project
         public List<ProjectMep> Plumbing = new();
         public List<ProjectFixture> Fixtures = new();
         public List<ProjectWire> Wires = new();
+        public List<ProjectMeasure> Measures = new();
 
         // blueprint placement travels with the project — the plan image is a file next to it
         public float PlanScale = 5f;

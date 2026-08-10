@@ -471,6 +471,33 @@ namespace RoomPlanner.Measure
             }
         }
 
+        /// <summary>
+        /// Recreate a saved measurement (project format v2, audit B3). Prefab when wired,
+        /// bare component otherwise — Measurement.Set null-guards its visuals, so restore
+        /// never depends on rig wiring. No CreateCommand: loading is not a user edit.
+        /// </summary>
+        public void RestoreMeasurement(Vector3 a, Vector3 b)
+        {
+            Measurement m;
+            if (measurementPrefab != null)
+            {
+                m = Instantiate(measurementPrefab, transform);
+            }
+            else
+            {
+                var go = new GameObject("Measurement (restored)");
+                go.transform.SetParent(transform, false);
+                m = go.AddComponent<Measurement>();
+                go.AddComponent<Selectable>();
+            }
+            m.Set(a, b);
+            _measurements.Add(m);
+            var model = sceneModel != null ? sceneModel : Editing.SceneModel.Instance;
+            if (model != null) model.Register(m.GetComponent<Selectable>());
+            m.SetInteractable(true);
+            TrimMeasurements();
+        }
+
         /// <summary>Alive AND visible (not hidden by a DeleteCommand) — hidden objects must not
         /// snap, dedupe or count toward the cap as if they were still on the scene.</summary>
         private static bool IsLive(Measurement m) => m != null && m.gameObject.activeSelf;

@@ -190,6 +190,38 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator Measurements_SurviveTheRoundTrip_AndClearScene()
+        {
+            // Format v2 (audit B3): measurements were neither saved nor cleared — after a
+            // load, yesterday's tapes haunted the freshly restored scene in wrong places.
+            var (import, walls, model) = MakeRig();
+            var mc = Track(new GameObject("Measure")).AddComponent<RoomPlanner.Measure.MeasureController>();
+            SetField(mc, "sceneModel", model);
+
+            import.BuildScene(SampleBuilding());
+            mc.RestoreMeasurement(new Vector3(0f, 1f, 0f), new Vector3(2f, 1f, 0f));
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Measures.Count, "the tape is captured");
+            Assert.AreEqual(new Vector3(2f, 1f, 0f), data.Measures[0].B);
+
+            string json = data.ToJson();
+            import.ClearScene();
+            yield return null;
+            Assert.AreEqual(0,
+                Object.FindObjectsByType<RoomPlanner.Measure.Measurement>(FindObjectsSortMode.None).Length,
+                "clear destroys measurements too — no more haunting");
+
+            ProjectStore.Apply(ProjectData.FromJson(json), import, null);
+            yield return null;
+
+            var restored = Object.FindObjectsByType<RoomPlanner.Measure.Measurement>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, restored.Length);
+            Assert.AreEqual(new Vector3(0f, 1f, 0f), restored[0].PointA);
+            Assert.AreEqual(new Vector3(2f, 1f, 0f), restored[0].PointB);
+        }
+
+        [UnityTest]
         public IEnumerator CaptureJsonApply_RestoresTheScene()
         {
             var (import, walls, model) = MakeRig();

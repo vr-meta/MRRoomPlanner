@@ -434,7 +434,8 @@ namespace RoomPlanner.Import
             if (sceneModel != null)
                 foreach (var item in new List<ISelectable>(sceneModel.Items))
                     if (item is Selectable s && s.IsAlive
-                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire
+                            || s.GetComponent<Measure.Measurement>() != null))
                         Destroy(s.gameObject);
             _created.Clear();
             _importedSegments.Clear();

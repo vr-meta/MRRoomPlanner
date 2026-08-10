@@ -42,7 +42,8 @@ namespace RoomPlanner.Import
                 // an empty scene must not wipe yesterday's work (e.g. pause on the permission dialog)
                 if (data.Walls.Count == 0 && data.Floors.Count == 0
                     && data.Stairs.Count == 0 && data.Plumbing.Count == 0
-                    && data.Fixtures.Count == 0 && data.Wires.Count == 0) return;
+                    && data.Fixtures.Count == 0 && data.Wires.Count == 0
+                    && data.Measures.Count == 0) return;
                 ProjectFileIO.WriteAtomic(path, data.ToJson());
                 Debug.Log($"[Project] saved {data.Walls.Count}w {data.Floors.Count}f "
                     + $"{data.Stairs.Count}st {data.Plumbing.Count}p → {path}");
