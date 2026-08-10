@@ -21,6 +21,19 @@ namespace RoomPlanner.Tests
             new Vector3(x1, 0, z1), new Vector3(x0, 0, z1),
         };
 
+        [Test]
+        public void SeamThroughAHoleVertex_IsRejected_AndBridgesElsewhere()
+        {
+            // Hole (2,2)-(3,3) in a 6×6 square: the nearest visible bridge target from
+            // (3,3) is outline corner (0,0), but that seam runs exactly through hole
+            // corner (2,2) — SegmentsCross (strict) never saw it, the spliced ring
+            // pinched itself and ear clipping deadlocked (audit 2026-08-10, 04 §Б1).
+            var tris = Polygon.TriangulateWithHoles(
+                Rect(0, 0, 6, 6), new List<List<Vector3>> { Rect(2, 2, 3, 3) }, out var merged);
+            Assert.Greater(tris.Count, 0, "must triangulate via a different seam");
+            Assert.AreEqual(35f, TriArea(merged, tris), 1e-2f, "area = 36 − 1");
+        }
+
         private static float TriArea(List<Vector3> pts, List<int> tris)
         {
             float sum = 0f;

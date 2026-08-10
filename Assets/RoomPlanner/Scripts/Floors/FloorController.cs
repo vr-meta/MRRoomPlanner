@@ -119,7 +119,14 @@ namespace RoomPlanner.Floors
                 // a stairwell, not a second floor floating inside the first. No extra mode or
                 // button: it is what the gesture already means.
                 var host = FindEnclosingSlab(_pts, level);
-                if (host == null || !host.AddHole(_pts)) CreateFloor(_pts, level);
+                if (host != null)
+                {
+                    // A refused hole (crosses another hole, unbridgeable seam) must NOT fall
+                    // back to stacking a duplicate slab inside the host. Keep the drawn ring
+                    // alive so the user fixes a corner instead of redrawing everything.
+                    if (!host.AddHole(_pts)) { input.Pulse(0.2f, 0.01f); return; }
+                }
+                else CreateFloor(_pts, level);
             }
             CancelOutline();
         }

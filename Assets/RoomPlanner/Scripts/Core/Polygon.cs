@@ -111,6 +111,23 @@ namespace RoomPlanner.Core
         }
 
         /// <summary>
+        /// True when two rings overlap in the ground plane: any edges cross, or either ring
+        /// has a vertex inside the other (full containment counts as overlap). Used to refuse
+        /// hole-vs-hole intersections before the bridge builder trips over them.
+        /// </summary>
+        public static bool RingsOverlap(IReadOnlyList<Vector3> a, IReadOnlyList<Vector3> b)
+        {
+            if (a == null || b == null || a.Count < 3 || b.Count < 3) return false;
+            for (int i = 0; i < a.Count; i++)
+                for (int j = 0; j < b.Count; j++)
+                    if (SegmentsCross(a[i], a[(i + 1) % a.Count], b[j], b[(j + 1) % b.Count]))
+                        return true;
+            foreach (var p in a) if (Contains(b, p)) return true;
+            foreach (var p in b) if (Contains(a, p)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// Triangulate a simple polygon by ear clipping. Returns index triples into the given
         /// list, wound counter-clockwise in XZ. Empty list if the outline is unusable.
         /// </summary>
@@ -309,9 +326,27 @@ namespace RoomPlanner.Core
             for (int i = 0; i < hole.Count; i++)
                 if (SegmentsCross(a, b, hole[i], hole[(i + 1) % hole.Count])) return false;
 
+            // SegmentsCross is strict, so a seam passing exactly THROUGH a vertex slips
+            // past the edge test — but it glues the spliced ring to itself at that vertex
+            // and ear clipping deadlocks on the pinch. Found on a square slab whose hole
+            // corner sits on the outline's diagonal (audit 2026-08-10, 04 §Б1).
+            foreach (var v in ring)
+                if (!Same(v, a) && !Same(v, b) && PointOnSegment(v, a, b)) return false;
+            foreach (var v in hole)
+                if (!Same(v, a) && !Same(v, b) && PointOnSegment(v, a, b)) return false;
+
             // and it must run through solid material, not across the hole's own interior
             Vector3 mid = (a + b) * 0.5f;
             return Contains(ring, mid) && !Contains(hole, mid);
+        }
+
+        /// <summary>Point lies on the segment (within Eps), endpoints included.</summary>
+        private static bool PointOnSegment(Vector3 p, Vector3 a, Vector3 b)
+        {
+            if (Mathf.Abs(Cross2(a, b, p)) > Eps) return false;              // off the line
+            float dx = b.x - a.x, dz = b.z - a.z;
+            float t = ((p.x - a.x) * dx + (p.z - a.z) * dz);                 // projection * len²
+            return t >= -Eps && t <= dx * dx + dz * dz + Eps;
         }
 
         // ---- internals ----
