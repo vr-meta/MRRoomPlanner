@@ -30,6 +30,8 @@ namespace RoomPlanner.Editing
         private Floor _floor;
         private Measurement _measurement;
         private RoomPlanner.Stairs.Stair _stair;
+        private RoomPlanner.Electrical.ElectricFixture _fixture;
+        private RoomPlanner.Electrical.WireRoute _route;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -64,9 +66,13 @@ namespace RoomPlanner.Editing
             _floor = GetComponent<Floor>();
             _measurement = GetComponent<Measurement>();
             _stair = GetComponent<RoomPlanner.Stairs.Stair>();
+            _fixture = GetComponent<RoomPlanner.Electrical.ElectricFixture>();
+            _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
             if (_wall != null) _kind = SelectableKind.Wall;
             else if (_floor != null) _kind = SelectableKind.Floor;
             else if (_stair != null) _kind = SelectableKind.Stair;
+            else if (_fixture != null) _kind = SelectableKind.Fixture;
+            else if (_route != null) _kind = SelectableKind.Wire;
             else _kind = SelectableKind.Measurement;
             _settingsProvider = GetComponent<ISettingsProvider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
@@ -149,8 +155,33 @@ namespace RoomPlanner.Editing
             if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
+            else if (_fixture != null) MoveFixture(delta);
+            else if (_route != null) _route.MoveBy(delta);
             else if (_measurement != null) _measurement.MoveBy(delta);
         }
+
+        /// <summary>Moving a fixture drags the wire ends logically attached to it — the
+        /// route↔fixture link is by SceneModel id, so we resolve peers through the registry
+        /// (the same no-wiring pattern walls use to find floor slabs).</summary>
+        private void MoveFixture(Vector3 delta)
+        {
+            _fixture.MoveBy(delta);
+            var model = SceneModel.Instance;
+            if (model == null || string.IsNullOrEmpty(Id)) return;
+            var items = model.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive) continue;
+                if (item is Selectable s && s.Kind == SelectableKind.Wire && s._route != null)
+                    s._route.TryMoveAttachedEnd(Id, delta);
+            }
+        }
+
+        /// <summary>Typed accessors for electrical tooling (terminal snap, BOM) — cached in
+        /// Resolve so per-frame loops never call GetComponent.</summary>
+        internal RoomPlanner.Electrical.ElectricFixture Fixture { get { Resolve(); return _fixture; } }
+        internal RoomPlanner.Electrical.WireRoute Route { get { Resolve(); return _route; } }
 
         /// <summary>Per-instance rows come from a provider component, if one is present.</summary>
         public RoomPlanner.Core.SettingsSchema GetSettings()
@@ -178,8 +209,51 @@ namespace RoomPlanner.Editing
                         return $"{_floor.Area:0.0} m², {_floor.Outline.Count} corners";
                     }
                     return "Floor";
+                case SelectableKind.Fixture:
+                    return DescribeFixture();
+                case SelectableKind.Wire:
+                    return _route != null
+                        ? $"{RoomPlanner.Electrical.Cable.Label(_route.Cable)} · {RoomPlanner.Electrical.ElectricalBom.FormatMeters(_route.Length)}"
+                        : "Wire";
                 default:
                     return _measurement != null ? $"{_measurement.Distance * 100f:0} cm" : "Measurement";
+            }
+        }
+
+        /// <summary>The panel's description IS the cable BOM (docs/design/19-electrical.md):
+        /// live routes are collected from the registry, so the summary is always current.
+        /// Selection-time only — the allocation here never runs per frame.</summary>
+        private string DescribeFixture()
+        {
+            if (_fixture == null) return "Fixture";
+            switch (_fixture.Kind)
+            {
+                case RoomPlanner.Electrical.FixtureKind.Outlet:
+                    return $"Outlet ×{_fixture.Posts}, h {_fixture.HeightAboveLevel * 100f:0} cm";
+                case RoomPlanner.Electrical.FixtureKind.Switch:
+                    return $"Switch ×{_fixture.Keys}, h {_fixture.HeightAboveLevel * 100f:0} cm";
+                default:
+                {
+                    var model = SceneModel.Instance;
+                    var entries = new System.Collections.Generic.List<RoomPlanner.Electrical.RouteBomEntry>();
+                    int routed = 0, total = 0;
+                    if (model != null)
+                    {
+                        var items = model.Items;
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            var item = items[i];
+                            if (item == null || !item.IsAlive || item.IsHidden) continue;
+                            if (item is not Selectable s || s.Kind != SelectableKind.Wire || s._route == null) continue;
+                            var r = s._route;
+                            entries.Add(new RoomPlanner.Electrical.RouteBomEntry(r.Cable, r.Length, r.Connections));
+                            total++;
+                            if (!string.IsNullOrEmpty(Id) && (r.StartFixtureId == Id || r.EndFixtureId == Id)) routed++;
+                        }
+                    }
+                    return RoomPlanner.Electrical.ElectricalBom.Describe(
+                        entries, _fixture.ReservePercent, unrouted: total - routed);
+                }
             }
         }
 

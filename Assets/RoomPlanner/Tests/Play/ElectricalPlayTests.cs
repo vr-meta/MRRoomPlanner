@@ -1,0 +1,264 @@
+using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
+using UnityEngine;
+using RoomPlanner.Core;
+using RoomPlanner.Editing;
+using RoomPlanner.Electrical;
+
+namespace RoomPlanner.Tests.Play
+{
+    /// <summary>
+    /// PlayMode coverage for the Electric tool (design/19-electrical.md): sub-mode schemas,
+    /// fixture/wire selection adapters, the fixture→wire attachment following moves, the
+    /// panel BOM summary and the undoable parameter commands.
+    /// </summary>
+    public class ElectricalPlayTests
+    {
+        private readonly List<GameObject> _spawned = new();
+        private SceneModel _model;
+
+        [SetUp]
+        public void SetUp()
+        {
+            var go = new GameObject("SceneModelTest");
+            _spawned.Add(go);
+            _model = go.AddComponent<SceneModel>();
+        }
+
+        [TearDown]
+        public void Cleanup()
+        {
+            foreach (var go in _spawned) if (go != null) Object.Destroy(go);
+            _spawned.Clear();
+        }
+
+        private ElectricFixture MakeFixture(FixtureKind kind, int posts = 1, int keys = 1)
+        {
+            var go = new GameObject($"Fixture-{kind}");
+            _spawned.Add(go);
+            go.AddComponent<MeshFilter>();
+            go.AddComponent<MeshRenderer>();
+            var fx = go.AddComponent<ElectricFixture>();
+            fx.Build(kind, posts, keys);
+            go.AddComponent<ElectricFixtureParameters>();
+            go.AddComponent<Selectable>();          // last: Resolve must see the fixture
+            _model.Register(go.GetComponent<Selectable>());
+            return fx;
+        }
+
+        private WireRoute MakeRoute(CableType cable, params Vector3[] pts)
+        {
+            var go = new GameObject("Route");
+            _spawned.Add(go);
+            go.AddComponent<MeshFilter>();
+            go.AddComponent<MeshRenderer>();
+            var route = go.AddComponent<WireRoute>();
+            route.Build(new List<Vector3>(pts), cable);
+            go.AddComponent<WireRouteParameters>();
+            go.AddComponent<RouteHandles>();
+            go.AddComponent<Selectable>();
+            _model.Register(go.GetComponent<Selectable>());
+            return route;
+        }
+
+        private static string IdOf(Component c) => c.GetComponent<Selectable>().Id;
+
+        // ---- sub-mode schemas ----
+
+        [Test]
+        public void ElectricSchemas_OnePerMode_CycleRebinds()
+        {
+            var go = new GameObject("Electric");
+            _spawned.Add(go);
+            var tool = go.AddComponent<ElectricController>();
+
+            var outlet = tool.GetSettings();
+            Assert.AreSame(outlet, tool.GetSettings(), "same mode → same schema instance");
+            CollectionAssert.AreEqual(new[] { "mode", "posts", "oh" },
+                outlet.Fields.Select(f => f.Id).ToArray());
+            Assert.AreEqual("Outlet", outlet.Fields[0].Value());
+
+            outlet.Fields[0].Increase();   // Mode row → Switch
+            var sw = tool.GetSettings();
+            Assert.AreNotSame(outlet, sw, "a different instance forces the inspector to re-bind");
+            CollectionAssert.AreEqual(new[] { "mode", "keys", "sh" },
+                sw.Fields.Select(f => f.Id).ToArray());
+
+            sw.Fields[0].Increase();       // → Wire
+            CollectionAssert.AreEqual(new[] { "mode", "cable", "routing", "coff" },
+                tool.GetSettings().Fields.Select(f => f.Id).ToArray());
+
+            tool.GetSettings().Fields[0].Increase();   // → Panel
+            CollectionAssert.AreEqual(new[] { "mode", "res" },
+                tool.GetSettings().Fields.Select(f => f.Id).ToArray());
+
+            tool.GetSettings().Fields[0].Increase();   // wraps → Outlet
+            Assert.AreSame(outlet, tool.GetSettings());
+        }
+
+        [Test]
+        public void ElectricTool_IdAndLabel_ForRegistryAndPalette()
+        {
+            var go = new GameObject("Electric");
+            _spawned.Add(go);
+            var tool = go.AddComponent<ElectricController>();
+            Assert.AreEqual("electric", tool.Id);
+            Assert.AreEqual("Elec", tool.PaletteLabel);
+        }
+
+        // ---- selection adapters ----
+
+        [Test]
+        public void Selectable_ResolvesElectricalKinds()
+        {
+            var fx = MakeFixture(FixtureKind.Outlet, posts: 2);
+            var route = MakeRoute(CableType.C3x25, new Vector3(0f, 0.3f, 0f), new Vector3(0f, 2.3f, 0f));
+
+            Assert.AreEqual(SelectableKind.Fixture, fx.GetComponent<Selectable>().Kind);
+            Assert.AreEqual(SelectableKind.Wire, route.GetComponent<Selectable>().Kind);
+            StringAssert.Contains("Outlet ×2", fx.GetComponent<Selectable>().Describe());
+            StringAssert.Contains("3x2.5", route.GetComponent<Selectable>().Describe());
+        }
+
+        [Test]
+        public void MovingFixture_DragsAttachedWireEnds()
+        {
+            var fx = MakeFixture(FixtureKind.Switch);
+            var attached = MakeRoute(CableType.C3x15,
+                fx.TerminalWorld, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+            var free = MakeRoute(CableType.C3x25,
+                new Vector3(5f, 0.3f, 0f), new Vector3(5f, 2.3f, 0f));
+            attached.StartFixtureId = IdOf(fx);
+
+            Vector3 start = attached.GetPoint(0);
+            Vector3 freeStart = free.GetPoint(0);
+            var delta = new Vector3(0.4f, 0f, 0.2f);
+            fx.GetComponent<Selectable>().MoveBy(delta);
+
+            Assert.AreEqual(start + delta, attached.GetPoint(0), "attached end follows the fixture");
+            Assert.AreEqual(new Vector3(2f, 2.3f, 0f), attached.GetPoint(2), "far end stays put");
+            Assert.AreEqual(freeStart, free.GetPoint(0), "unrelated routes must not move");
+            Assert.AreEqual(delta, fx.transform.position, "the fixture itself moved");
+        }
+
+        [Test]
+        public void PanelDescribe_SummarizesBomAndUnroutedRuns()
+        {
+            var panel = MakeFixture(FixtureKind.Panel);
+            var routed = MakeRoute(CableType.C3x15, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+            routed.EndFixtureId = IdOf(panel);
+            MakeRoute(CableType.C3x25, new Vector3(0f, 0.3f, 5f), new Vector3(0f, 2.3f, 5f));   // never reaches the panel
+
+            string s = panel.GetComponent<Selectable>().Describe();
+            StringAssert.Contains("3x1.5", s);
+            StringAssert.Contains("3x2.5", s);
+            StringAssert.Contains("Total — ", s);
+            StringAssert.Contains($"(+{panel.ReservePercent}%)", s);
+            StringAssert.Contains("unrouted: 1", s);
+        }
+
+        [Test]
+        public void PanelDescribe_SkipsHiddenRoutes()
+        {
+            var panel = MakeFixture(FixtureKind.Panel);
+            var route = MakeRoute(CableType.C3x15, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+
+            route.GetComponent<Selectable>().SetHidden(true);   // deleted = hidden, not destroyed
+            string s = panel.GetComponent<Selectable>().Describe();
+            StringAssert.Contains("Total — 0.0 m", s, "hidden is not alive for the BOM (rule 2.4)");
+        }
+
+        // ---- undoable commands ----
+
+        [Test]
+        public void FixtureParamCommand_Posts_UndoRedo()
+        {
+            var fx = MakeFixture(FixtureKind.Outlet, posts: 2);
+            var p = fx.GetComponent<ElectricFixtureParameters>();
+
+            _model.History.Execute(FixtureParamCommand.ForPosts(p, 3));
+            Assert.AreEqual(3, fx.Posts);
+            _model.History.Undo();
+            Assert.AreEqual(2, fx.Posts);
+            _model.History.Redo();
+            Assert.AreEqual(3, fx.Posts);
+        }
+
+        [Test]
+        public void FixtureParamCommand_Height_MovesAttachedEndBothWays()
+        {
+            var fx = MakeFixture(FixtureKind.Outlet);
+            var route = MakeRoute(CableType.C3x25, fx.TerminalWorld, new Vector3(1f, 2.3f, 0f));
+            route.StartFixtureId = IdOf(fx);
+            var p = fx.GetComponent<ElectricFixtureParameters>();
+            float startY = fx.transform.position.y;
+            float endY = route.GetPoint(0).y;
+
+            _model.History.Execute(FixtureParamCommand.ForHeight(p, startY + 0.1f));
+            Assert.AreEqual(startY + 0.1f, fx.transform.position.y, 1e-4);
+            Assert.AreEqual(endY + 0.1f, route.GetPoint(0).y, 1e-4, "attached end rode along");
+
+            _model.History.Undo();
+            Assert.AreEqual(startY, fx.transform.position.y, 1e-4);
+            Assert.AreEqual(endY, route.GetPoint(0).y, 1e-4, "undo drags it back too");
+        }
+
+        [Test]
+        public void RouteCableCommand_UndoRestoresType()
+        {
+            var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+            var p = route.GetComponent<WireRouteParameters>();
+
+            _model.History.Execute(new RouteCableCommand(p, route.Cable, Cable.Next(route.Cable)));
+            Assert.AreEqual(CableType.C3x15, route.Cable);
+            _model.History.Undo();
+            Assert.AreEqual(CableType.C3x25, route.Cable);
+        }
+
+        [Test]
+        public void RouteHandles_CommitIsOneUndoableGesture()
+        {
+            var route = MakeRoute(CableType.C3x25,
+                new Vector3(0f, 0.3f, 0f), new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+            var handles = route.GetComponent<RouteHandles>();
+            Assert.AreEqual(3, handles.HandleCount);
+
+            Vector3 from = handles.GetHandlePosition(1);
+            var to = new Vector3(0.5f, 2.3f, 0f);
+            handles.PreviewHandle(1, new Vector3(0.2f, 2.3f, 0f));   // preview frames
+            var cmd = handles.CommitHandle(1, from, to);
+            Assert.IsNotNull(cmd);
+            _model.History.Record(cmd);
+
+            Assert.AreEqual(to, route.GetPoint(1));
+            _model.History.Undo();
+            Assert.AreEqual(from, route.GetPoint(1));
+        }
+
+        [Test]
+        public void RouteHandles_ClickWithoutDrag_ProducesNoCommand()
+        {
+            var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+            var handles = route.GetComponent<RouteHandles>();
+            Vector3 p = handles.GetHandlePosition(0);
+            Assert.IsNull(handles.CommitHandle(0, p, p), "a click must not pollute history");
+        }
+
+        [Test]
+        public void PerInstanceSchemas_ExposeExpectedRows()
+        {
+            var outlet = MakeFixture(FixtureKind.Outlet);
+            var panel = MakeFixture(FixtureKind.Panel);
+            panel.transform.position = new Vector3(3f, 1.5f, 0f);   // out of the clearance zone
+            var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
+
+            CollectionAssert.AreEqual(new[] { "fposts", "fh" },
+                outlet.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
+            CollectionAssert.AreEqual(new[] { "fres" },
+                panel.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
+            CollectionAssert.AreEqual(new[] { "rcable" },
+                route.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
+        }
+    }
+}

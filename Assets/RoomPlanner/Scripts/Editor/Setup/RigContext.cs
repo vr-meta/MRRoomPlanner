@@ -31,12 +31,14 @@ namespace RoomPlanner.EditorTools
         public FloorController FloorTool;
         public BlueprintController Blueprint;
         public RoomPlanner.Import.ImportController Import;
+        public RoomPlanner.Electrical.ElectricController Electric;
 
         // shared assets
         public Material LineMat, MarkerMat, ReticleMat, ContMat, BadgeMat;
         public Material WallMat, WallEdgeMat, FloorMat;
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
         public Material GroundMat, GlassMat, StairMat;
+        public Material WireMat, FixtureMat;
     }
 }
 #endif

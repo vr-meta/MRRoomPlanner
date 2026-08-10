@@ -49,6 +49,11 @@ namespace RoomPlanner.EditorTools
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
 
+            // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
+            // hole on passthrough; fixtures near-white, so they read as trade plastic.
+            ctx.WireMat = CreateMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
+            ctx.FixtureMat = CreateMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
             ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);

@@ -1,0 +1,478 @@
+using System.Collections.Generic;
+using UnityEngine;
+using RoomPlanner.Core;
+using RoomPlanner.Measure;
+using RoomPlanner.Tools;
+using RoomPlanner.Editing;
+
+namespace RoomPlanner.Electrical
+{
+    /// <summary>
+    /// Electric tool (docs/design/19-electrical.md): one palette button, four sub-modes
+    /// cycled in the inspector — Outlet / Switch / Wire / Panel.
+    ///
+    /// Fixtures go on wall faces with the mounting height snapped to the sub-mode preset
+    /// (grip = free vertical for the odd counter-top outlet). Wires are drawn point by
+    /// point on walls and the ceiling; Ortho mode inserts vertical/horizontal elbows at
+    /// the run height (an offset below the ceiling). Ends within reach of a fixture
+    /// terminal attach logically — clicking the panel finishes the run into it.
+    /// </summary>
+    public class ElectricController : MonoBehaviour, ITool
+    {
+        [SerializeField] private PointerProvider pointer;
+        [SerializeField] private MeasureInput input;
+        [SerializeField] private SceneRaycaster raycaster;
+        [SerializeField] private Transform reticle;
+        [SerializeField] private ElectricFixture fixturePrefab;
+        [SerializeField] private WireRoute wirePrefab;
+        [SerializeField] private LineRenderer previewLine;
+        [SerializeField] private ToolManager manager;
+        [SerializeField] private SceneModel sceneModel;
+
+        public enum SubMode { Outlet, Switch, Wire, Panel }
+
+        // ---- tool defaults (the inspector rows edit these; instances copy them on creation) ----
+        private SubMode _mode = SubMode.Outlet;
+        private int _posts = 2;
+        private int _keys = 1;
+        private float _outletHeight = ElectricalDefaults.OutletHeight;
+        private float _switchHeight = ElectricalDefaults.SwitchHeight;
+        private CableType _cable = CableType.C3x25;
+        private bool _ortho = true;
+        private float _ceilingOff = ElectricalDefaults.CeilingOffset;
+        private int _reserve = ElectricalDefaults.DefaultReservePercent;
+
+        // ---- wire-drawing state ----
+        private readonly List<Vector3> _pts = new();
+        private readonly List<Vector3> _orthoScratch = new();
+        private readonly List<Vector3> _previewPts = new();
+        private string _startFixtureId;
+        private float _nextPlaceAllowed;
+
+        // ---- per-frame caches (rule 4.1: no allocations in Tick) ----
+        private readonly RaycastHit[] _ownHits = new RaycastHit[16];
+        private const int SelectableLayer = 6;
+
+        private ElectricFixture _ghost;          // placement preview, never registered
+        private SubMode _ghostMode = (SubMode)(-1);
+        private int _ghostPosts = -1, _ghostKeys = -1;
+
+        private SettingsSchema[] _schemas;       // one per sub-mode; switching re-binds the panel
+
+        public string Id => "electric";
+        public string PaletteLabel => "Elec";
+
+        // ---- ITool ----
+
+        public SettingsSchema GetSettings()
+        {
+            _schemas ??= BuildSchemas();
+            return _schemas[(int)_mode];
+        }
+
+        public void OnActivate() { }
+
+        public void OnDeactivate()
+        {
+            FinishOrCancelRoute();
+            if (reticle != null) reticle.gameObject.SetActive(false);
+            if (previewLine != null) previewLine.enabled = false;
+            if (_ghost != null) _ghost.gameObject.SetActive(false);
+        }
+
+        public void Tick(bool blocked)
+        {
+            if (pointer == null || input == null || raycaster == null) return;
+            if (blocked)
+            {
+                if (reticle != null) reticle.gameObject.SetActive(false);
+                if (previewLine != null) previewLine.enabled = false;
+                if (_ghost != null) _ghost.gameObject.SetActive(false);
+                return;
+            }
+
+            Ray ray = pointer.GetRay();
+            bool hasHit = TryHitSurface(ray, out Vector3 point, out Vector3 normal, out ElectricFixture hitFixture);
+
+            if (_mode == SubMode.Wire) TickWire(hasHit, point, normal, hitFixture);
+            else TickFixture(hasHit, point, normal);
+        }
+
+        // ---- surface query: scanned room + own selectables (walls/fixtures live on layer 6,
+        // which the shared SceneRaycaster deliberately skips), nearest of the two wins ----
+
+        private bool TryHitSurface(Ray ray, out Vector3 point, out Vector3 normal, out ElectricFixture hitFixture)
+        {
+            point = default; normal = default; hitFixture = null;
+
+            bool haveScan = raycaster.TryRaycast(ray, out Vector3 sp, out Vector3 sn, out _);
+            float scanDist = haveScan ? Vector3.Distance(ray.origin, sp) : float.MaxValue;
+
+            float ownDist = float.MaxValue;
+            Vector3 op = default, on = default;
+            ElectricFixture of = null;
+            int n = Physics.RaycastNonAlloc(ray, _ownHits, 10f, 1 << SelectableLayer, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var h = _ownHits[i];
+                if (h.collider == null || h.distance >= ownDist) continue;
+                var go = h.collider.gameObject;
+                if (!go.activeInHierarchy) continue;                       // hidden ≠ alive (rule 2.4)
+                // only registered scene objects count as mounting surfaces — layer 6 also
+                // carries loose edit-handle spheres, and a handle must not host an outlet
+                var sel = h.collider.GetComponentInParent<Selectable>();
+                if (sel == null) continue;
+                if (sel.Kind == SelectableKind.Wire) continue;             // wires are not a surface
+                var fx = sel.Fixture;
+                if (fx != null && _ghost != null && fx == _ghost) continue; // never hit our own preview
+                ownDist = h.distance; op = h.point; on = h.normal; of = fx;
+            }
+
+            if (!haveScan && ownDist == float.MaxValue) return false;
+            if (ownDist < scanDist) { point = op; normal = on; hitFixture = of; }
+            else { point = sp; normal = sn; }
+            return true;
+        }
+
+        private static bool IsWall(Vector3 n) => Mathf.Abs(n.y) < 0.3f;
+        private static bool IsCeiling(Vector3 n) => n.y < -0.7f;
+
+        private float CeilingY() => manager != null ? manager.Level + manager.WallHeight : 2.7f;
+        private float RunY() => CeilingY() - _ceilingOff;
+        private float Level() => manager != null ? manager.Level : 0f;
+
+        // ---- fixtures (Outlet / Switch / Panel) ----
+
+        private float PresetHeight() => _mode switch
+        {
+            SubMode.Outlet => _outletHeight,
+            SubMode.Switch => _switchHeight,
+            _ => ElectricalDefaults.PanelHeight,
+        };
+
+        private FixtureKind ModeKind() => _mode switch
+        {
+            SubMode.Outlet => FixtureKind.Outlet,
+            SubMode.Switch => FixtureKind.Switch,
+            _ => FixtureKind.Panel,
+        };
+
+        private void TickFixture(bool hasHit, Vector3 point, Vector3 normal)
+        {
+            if (previewLine != null) previewLine.enabled = false;
+
+            bool valid = hasHit && IsWall(normal);
+            if (!valid)
+            {
+                // no air fixtures, ever: a miss shows no ghost and a click places nothing
+                if (reticle != null) reticle.gameObject.SetActive(false);
+                if (_ghost != null) _ghost.gameObject.SetActive(false);
+                if (input.ConfirmPressed()) input.Pulse(0.2f, 0.01f);   // refusal tick
+                if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
+                return;
+            }
+
+            // height locks to the sub-mode preset — a hand tremor of ±3–5 cm at ray distance
+            // must not decide mounting heights; grip frees the vertical for odd cases
+            Vector3 place = point;
+            if (!input.SnapHeld()) place.y = Level() + PresetHeight();
+
+            Vector3 outward = new Vector3(normal.x, 0f, normal.z);
+            if (outward.sqrMagnitude < 1e-6f) outward = Vector3.forward;
+            Quaternion rot = Quaternion.LookRotation(outward.normalized);
+            place += outward.normalized * 0.002f;   // keep the back plate off the wall plane
+
+            if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = place; }
+            UpdateGhost(place, rot);
+
+            if (input.ConfirmPressed() && Time.time >= _nextPlaceAllowed)
+            {
+                _nextPlaceAllowed = Time.time + ElectricalDefaults.PlaceDebounceSeconds;
+                TryPlaceFixture(place, rot);
+            }
+            if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
+        }
+
+        private void UpdateGhost(Vector3 place, Quaternion rot)
+        {
+            if (fixturePrefab == null) return;
+            if (_ghost == null)
+            {
+                _ghost = Instantiate(fixturePrefab, transform);
+                _ghost.name = "FixturePreview";
+                _ghost.gameObject.SetActive(true);
+            }
+            if (_ghostMode != _mode || _ghostPosts != _posts || _ghostKeys != _keys)
+            {
+                _ghost.Build(ModeKind(), _posts, _keys);
+                var col = _ghost.GetComponent<MeshCollider>();
+                if (col != null) col.enabled = false;   // a preview must not catch rays
+                _ghostMode = _mode; _ghostPosts = _posts; _ghostKeys = _keys;
+            }
+            _ghost.gameObject.SetActive(true);
+            _ghost.transform.SetPositionAndRotation(place, rot);
+        }
+
+        private void TryPlaceFixture(Vector3 place, Quaternion rot)
+        {
+            if (fixturePrefab == null || sceneModel == null) return;
+
+            if (_mode == SubMode.Panel && FindPanel() != null)
+            {
+                input.Pulse(0.2f, 0.01f);   // one panel per scene in v1
+                return;
+            }
+            if (OverlapsExistingFixture(place)) { input.Pulse(0.2f, 0.01f); return; }
+
+            var fx = Instantiate(fixturePrefab, transform);
+            if (!fx.gameObject.activeSelf) fx.gameObject.SetActive(true);
+            fx.Build(ModeKind(), _posts, _keys);
+            fx.transform.SetPositionAndRotation(place, rot);
+            fx.BaseLevel = Level();   // heights stay storey-relative on upper floors
+            if (_mode == SubMode.Panel) fx.ReservePercent = _reserve;
+            sceneModel.Register(fx.GetComponent<Selectable>());
+            input.Pulse(0.6f, 0.02f);
+        }
+
+        private bool OverlapsExistingFixture(Vector3 place)
+        {
+            if (sceneModel == null) return false;
+            var items = sceneModel.Items;
+            float newHalf = HalfWidth(ModeKind(), _posts);
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is not Selectable s || s.Fixture == null) continue;
+                float minGap = newHalf + s.Fixture.BlockWidth * 0.5f + ElectricalDefaults.FixtureClearance;
+                if (Vector3.Distance(s.Fixture.transform.position, place) < minGap) return true;
+            }
+            return false;
+        }
+
+        private static float HalfWidth(FixtureKind kind, int posts) => kind switch
+        {
+            FixtureKind.Outlet => posts * ElectricalDefaults.PostModule * 0.5f,
+            FixtureKind.Switch => ElectricalDefaults.PostModule * 0.5f,
+            _ => ElectricalDefaults.PanelBoxWidth * 0.5f,
+        };
+
+        private ElectricFixture FindPanel()
+        {
+            if (sceneModel == null) return null;
+            var items = sceneModel.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is Selectable s && s.Fixture != null && s.Fixture.Kind == FixtureKind.Panel)
+                    return s.Fixture;
+            }
+            return null;
+        }
+
+        // ---- wires ----
+
+        private void TickWire(bool hasHit, Vector3 point, Vector3 normal, ElectricFixture hitFixture)
+        {
+            if (_ghost != null) _ghost.gameObject.SetActive(false);
+
+            // terminal magnet: within reach of a fixture's cable entry the cursor jumps to it
+            ElectricFixture terminal = FindNearestTerminal(hasHit ? point : Vector3.zero, hasHit);
+            if (hitFixture != null) terminal = hitFixture;
+
+            bool valid = hasHit && (terminal != null || IsWall(normal) || IsCeiling(normal));
+            Vector3 cursor = terminal != null ? terminal.TerminalWorld : point;
+
+            if (reticle != null)
+            {
+                reticle.gameObject.SetActive(valid);
+                if (valid) reticle.position = cursor;
+            }
+            DrawWirePreview(cursor, valid);
+
+            if (valid && input.ConfirmPressed() && Time.time >= _nextPlaceAllowed)
+            {
+                _nextPlaceAllowed = Time.time + ElectricalDefaults.PlaceDebounceSeconds;
+                AddWirePoint(cursor, terminal);
+            }
+            else if (!valid && input.ConfirmPressed())
+            {
+                input.Pulse(0.2f, 0.01f);   // no point in the air / on the floor
+            }
+
+            if (input.ClearPressed())
+            {
+                // B finishes a viable run first; Esc-to-Select only fires on an empty run —
+                // an accidental B must not throw away a half-drawn circuit (UX report, h4)
+                if (_pts.Count >= 2) FinishRoute(null);
+                else if (_pts.Count == 1) CancelRoute();
+                else if (manager != null) manager.ActivateTool("select");
+            }
+        }
+
+        private ElectricFixture FindNearestTerminal(Vector3 nearPoint, bool hasHit)
+        {
+            if (!hasHit || sceneModel == null) return null;
+            ElectricFixture best = null;
+            float bestDist = ElectricalDefaults.TerminalSnapRadius;
+            var items = sceneModel.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is not Selectable s || s.Fixture == null) continue;
+                float d = Vector3.Distance(s.Fixture.TerminalWorld, nearPoint);
+                if (d < bestDist) { bestDist = d; best = s.Fixture; }
+            }
+            return best;
+        }
+
+        private void AddWirePoint(Vector3 cursor, ElectricFixture terminal)
+        {
+            if (_pts.Count == 0)
+            {
+                _pts.Add(cursor);
+                if (terminal != null)
+                {
+                    _startFixtureId = FixtureId(terminal);
+                    // circuit default follows the fixture it starts from: switches feed
+                    // lighting 1.5 mm², outlets 2.5 mm² — the Cable row can still override
+                    _cable = Cable.DefaultFor(terminal.Kind);
+                }
+                input.Pulse(0.6f, 0.02f);
+                return;
+            }
+
+            Vector3 last = _pts[_pts.Count - 1];
+            if (Vector3.Distance(cursor, last) < ElectricalDefaults.MinPointStep)
+            {
+                input.Pulse(0.2f, 0.01f);   // double click — ignored, not garbage geometry
+                return;
+            }
+
+            if (_ortho)
+            {
+                WireMath.OrthoWaypoints(last, cursor, RunY(), _orthoScratch);
+                _pts.AddRange(_orthoScratch);
+            }
+            _pts.Add(cursor);
+            input.Pulse(0.6f, 0.02f);
+
+            // the panel is where circuits end — reaching it finishes the run by itself
+            if (terminal != null) FinishRoute(terminal);
+        }
+
+        private void FinishRoute(ElectricFixture endTerminal)
+        {
+            if (_pts.Count >= 2 && wirePrefab != null && sceneModel != null)
+            {
+                var route = Instantiate(wirePrefab, transform);
+                if (!route.gameObject.activeSelf) route.gameObject.SetActive(true);
+                if (route.Build(_pts, _cable))
+                {
+                    route.StartFixtureId = _startFixtureId;
+                    route.EndFixtureId = endTerminal != null ? FixtureId(endTerminal) : null;
+                    sceneModel.Register(route.GetComponent<Selectable>());
+                    input.Pulse(0.6f, 0.03f);
+                }
+                else
+                {
+                    Destroy(route.gameObject);   // degenerate after cleanup — refuse silently
+                }
+            }
+            CancelRoute();
+        }
+
+        private void CancelRoute()
+        {
+            _pts.Clear();
+            _startFixtureId = null;
+            if (previewLine != null) previewLine.enabled = false;
+        }
+
+        /// <summary>A run of two or more points survives any exit (mode switch, tool switch)
+        /// as a real route — accidental deactivation must not eat drawn work.</summary>
+        private void FinishOrCancelRoute()
+        {
+            if (_pts.Count >= 2) FinishRoute(null);
+            else CancelRoute();
+        }
+
+        private void DrawWirePreview(Vector3 cursor, bool valid)
+        {
+            if (previewLine == null) return;
+            if (_pts.Count == 0) { previewLine.enabled = false; return; }
+
+            _previewPts.Clear();
+            _previewPts.AddRange(_pts);
+            if (valid)
+            {
+                Vector3 last = _pts[_pts.Count - 1];
+                if (_ortho)
+                {
+                    WireMath.OrthoWaypoints(last, cursor, RunY(), _orthoScratch);
+                    _previewPts.AddRange(_orthoScratch);
+                }
+                _previewPts.Add(cursor);
+            }
+            previewLine.enabled = true;
+            previewLine.positionCount = _previewPts.Count;
+            for (int i = 0; i < _previewPts.Count; i++) previewLine.SetPosition(i, _previewPts[i]);
+        }
+
+        private static string FixtureId(ElectricFixture fx)
+        {
+            var sel = fx.GetComponent<Selectable>();
+            return sel != null ? sel.Id : null;
+        }
+
+        // ---- settings schemas (one per sub-mode; the Mode row is shared) ----
+
+        private SettingsSchema[] BuildSchemas()
+        {
+            var s = new SettingsSchema[4];
+            s[(int)SubMode.Outlet] = WithModeRow()
+                .Stepper("posts", "Posts", () => $"{_posts}",
+                    () => _posts = Mathf.Max(1, _posts - 1),
+                    () => _posts = Mathf.Min(ElectricalDefaults.MaxPosts, _posts + 1))
+                .Stepper("oh", "Height", () => $"{_outletHeight * 100f:0} cm",
+                    () => _outletHeight = AdjustHeight(_outletHeight, -1, ElectricalDefaults.MinOutletHeight),
+                    () => _outletHeight = AdjustHeight(_outletHeight, +1, ElectricalDefaults.MinOutletHeight));
+            s[(int)SubMode.Switch] = WithModeRow()
+                .Stepper("keys", "Keys", () => $"{_keys}",
+                    () => _keys = Mathf.Max(1, _keys - 1),
+                    () => _keys = Mathf.Min(ElectricalDefaults.MaxKeys, _keys + 1))
+                .Stepper("sh", "Height", () => $"{_switchHeight * 100f:0} cm",
+                    () => _switchHeight = AdjustHeight(_switchHeight, -1, ElectricalDefaults.MinSwitchHeight),
+                    () => _switchHeight = AdjustHeight(_switchHeight, +1, ElectricalDefaults.MinSwitchHeight));
+            s[(int)SubMode.Wire] = WithModeRow()
+                .Cycle("cable", "Cable", () => Cable.Label(_cable), () => _cable = Cable.Next(_cable))
+                .Cycle("routing", "Route", () => _ortho ? "Ortho" : "Free", () => _ortho = !_ortho)
+                .Stepper("coff", "Ceiling off", () => $"{_ceilingOff * 100f:0} cm",
+                    () => _ceilingOff = Mathf.Clamp(_ceilingOff - ElectricalDefaults.CeilingOffsetStep,
+                        ElectricalDefaults.MinCeilingOffset, ElectricalDefaults.MaxCeilingOffset),
+                    () => _ceilingOff = Mathf.Clamp(_ceilingOff + ElectricalDefaults.CeilingOffsetStep,
+                        ElectricalDefaults.MinCeilingOffset, ElectricalDefaults.MaxCeilingOffset));
+            s[(int)SubMode.Panel] = WithModeRow()
+                .Stepper("res", "Reserve", () => $"{_reserve} %",
+                    () => _reserve = Mathf.Max(0, _reserve - ElectricalDefaults.ReserveStep),
+                    () => _reserve = Mathf.Min(ElectricalDefaults.MaxReservePercent,
+                        _reserve + ElectricalDefaults.ReserveStep));
+            return s;
+        }
+
+        private SettingsSchema WithModeRow() =>
+            new SettingsSchema().Cycle("mode", "Mode", () => _mode.ToString(), NextMode);
+
+        private void NextMode()
+        {
+            FinishOrCancelRoute();               // switching modes never eats a drawn run
+            _mode = (SubMode)(((int)_mode + 1) % 4);
+            // a different schema instance comes back from GetSettings() → the panel re-binds
+        }
+
+        private static float AdjustHeight(float value, int dir, float min) =>
+            Mathf.Clamp(value + dir * ElectricalDefaults.HeightStep, min, ElectricalDefaults.MaxMountHeight);
+    }
+}

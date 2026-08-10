@@ -269,6 +269,49 @@
     каждый кадр, нельзя; вариант — сдвиг trackingSpace, безопасен в virtual-режиме
     Scan off; в passthrough рвёт инвариант «мир = реальная комната» — решить в дизайне)
 
+## 2k. Электрика v1 (дизайн: `design/19-electrical.md`, ветка `worktree-electrical`)
+
+Первый MEP-слой из `07-mep-layers.md`: розетки/выключатели (белые), провода (графит
+#1A1A1A) по стенам/потолку, щиток со сметой метража по типам кабеля.
+
+- [x] **E1 — Core: типы и математика проводов**: `ElectricalTypes` (FixtureKind,
+  CableType+лейблы, пресеты высот/размеров), `WireMath` (OrthoWaypoints: вертикаль →
+  горизонталь на высоте прокладки → вертикаль, схлопывание колен <1 см, вертикальная
+  пара без «крюка»; PolylineLength; BuildTube — 8-гранная трубка Ø15 мм по сегментам с
+  крышками, winding наружу) + 13 EditMode-тестов (`WireMathTests`, включая объём призмы
+  как тест нормалей)
+- [x] **E2 — Core: `WireRoute`** (вью трассы: меш+MeshCollider, CableType,
+  Start/EndFixtureId, Length, Connections, MoveBy, MovePoint c отложенным пере-куком
+  коллайдера для драга, TryMoveAttachedEnd; `OnDestroy` освобождает меш) + 10 тестов
+  (`WireRouteGeometryTests`)
+- [x] **E3 — Core: `ElectricFixture`** (розетка Posts 1–5 / выключатель Keys 1–3 /
+  щиток 300×400×80, процедурный меш из боксов, TerminalLocal/World, MoveBy = чистый
+  transform) + `ElectricalBom` (Σ по CableType + 0.15 м × подключение + Reserve %,
+  формат сметы) + 18 тестов (`ElectricFixtureGeometryTests`, `ElectricalBomTests`)
+- [x] **E4 — интеграция в Editing**: `SelectableKind.Fixture/Wire`,
+  `Selectable.Resolve/Describe/MoveBy` (перемещение фикстуры тянет привязанные концы
+  трасс через реестр SceneModel; Describe щитка = живая смета + unrouted),
+  `RouteHandles : IHandleProvider` + `RouteBendMoveCommand`, `ElectricFixtureParameters`
+  (Posts/Keys/Height/Reserve, before/after-команды) / `WireRouteParameters` (Cable)
+- [x] **E5 — `ElectricController : ITool`** («electric»/«Elec»): суб-режимы
+  Outlet/Switch/Wire/Panel (Cycle, схема на режим → ребинд панели), постановка фикстур
+  лучом с пресет-высотой от Level (грип = свободная вертикаль), поверхность = скан +
+  свои стены (слой 6, RaycastNonAlloc), классификация по нормали, ghost-превью,
+  зазор фикстур 5 см, рисование трасс (Ortho/Free, дебаунс 250 мс, мин. шаг 3 см,
+  снап к терминалам 10 см, клик по щитку = финиш, B = финиш/отмена/Esc), авто-финиш
+  при смене режима/инструмента, дефолт кабеля от стартовой фикстуры, один щиток на сцену
+- [x] **E6 — Setup + регистрация**: `SetupElectricTool` (префабы ElectricFixture/
+  WireRoute, материалы Electric_Wire #1A1A1A / Electric_Fixture white), `RigContext`,
+  строка в `MeasureSetup` + `FindProperty("electric")`, реестр `ToolManager` (7-й
+  инструмент), `SetupPalette` (панель 0.29→0.34 под 7 кнопок) + 11 PlayMode-тестов
+  (`ElectricalPlayTests`: схемы режимов, kinds, привязка концов, смета щитка,
+  undo/redo команд, ручки)
+- [x] **E7 — доки**: `10-controls.md` (палитра 7 кнопок + инспектор Elec),
+  `07-mep-layers.md` (ссылка на v1), `19-electrical.md` — соответствует реализации
+- [ ] **E8 — прогон тестов headless + SetupRig + проверка на устройстве** (по решению
+  пользователя 2026-08-10: код и тесты написаны, прогон и сборка — отдельным заходом;
+  состав рига изменился → перед Play-тестами обязателен SetupRig)
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._
@@ -310,7 +353,8 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
 - [ ] **Blueprint** — подложка чертежа + калибровка
 - [ ] **AI Placement** — расстановка мебели через Claude + glTF-каталог (`05-ai-placement.md`)
 - [ ] **Project I/O** — формат проекта + экспорт glTF (`06-project-format.md`)
-- [ ] **MEP + слои** — электрика / отопление / сантехника (`07-mep-layers.md`)
+- [~] **MEP + слои** — электрика / отопление / сантехника (`07-mep-layers.md`):
+  электрика v1 сделана (см. 2k, `19-electrical.md`); отопление/сантехника — не начаты
 - [ ] **Interop** — IFC (round-trip Revit/ArchiCAD), DWG, glTF (`08-interop.md`)
 
 ---
