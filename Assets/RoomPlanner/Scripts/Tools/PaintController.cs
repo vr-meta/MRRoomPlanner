@@ -63,18 +63,31 @@ namespace RoomPlanner.Tools
             ("Mint", new Color(0.66f, 0.81f, 0.75f)),
         };
 
+        /// <summary>Texture tabs 1..N map onto these catalog categories (v1.2 «много
+        /// материалов»): Tiles suit walls AND floors, Ceiling paints a slab whose
+        /// underside is the storey-below ceiling.</summary>
+        private static readonly (string cat, string swatchLabel, string hint)[] TexTabs =
+        {
+            ("Walls", "Material", "aim a wall · Trigger = apply"),
+            ("Floors", "Material", "aim a floor · Trigger = apply"),
+            ("Tiles", "Tile", "walls & floors · Trigger = apply"),
+            ("Ceiling", "Material", "aim a slab · Trigger = apply"),
+        };
+
         private int _preset;
-        private int _tab;          // 0 Color · 1 Walls · 2 Floors
-        private int _wallTex;      // index into the Walls texture ids
-        private int _floorTex;     // index into the Floors texture ids
+        private int _tab;          // 0 Color · 1.. = TexTabs categories
+        private readonly int[] _pick = new int[TexTabs.Length];
         // tile-size overrides in metres, both axes; 0 = the texture's own catalog tile
         // (headset feedback 2026-08-11: repeats need to be adjustable per axis)
-        private float _wallTileW, _wallTileH;
-        private float _floorTileW, _floorTileH;
-        private string[] _wallIds = System.Array.Empty<string>();
-        private string[] _floorIds = System.Array.Empty<string>();
+        private readonly float[] _tileW = new float[TexTabs.Length];
+        private readonly float[] _tileH = new float[TexTabs.Length];
+        // gloss override per TAB (index 0 = Color); -1 = auto (catalog / matte paint)
+        private readonly float[] _gloss = { -1f, -1f, -1f, -1f, -1f };
+        private readonly string[][] _catIds = new string[TexTabs.Length][];
         private Selectable _hover;
         private SettingsSchema _settings;
+
+        private const float ColorAutoGloss = 0.10f;   // satin paint default
 
         public string Id => "paint";
         public string PaletteLabel => "Pnt";
@@ -95,59 +108,68 @@ namespace RoomPlanner.Tools
             }
             if (_settings == null)
             {
-                _wallIds = library != null ? library.IdsOf("Walls").ToArray()
-                    : System.Array.Empty<string>();
-                _floorIds = library != null ? library.IdsOf("Floors").ToArray()
-                    : System.Array.Empty<string>();
-
                 var colorPage = new SettingsSchema()
                     .Readout("how", "How to", () => "aim wall/floor · Trigger = paint")
                     .Swatch("color", "Color", _palette, () => _preset,
                         i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
-                    .Readout("cname", "Preset", () => Presets[_preset].Name)
-                    .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered);
+                    .Readout("cname", "Preset", () => Presets[_preset].Name);
+                AddGlossStepper(colorPage, "cg", 0);
+                colorPage.Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered);
                 // NOTE: the Shading toggles moved to the Rendering page (snap-strip gear).
 
-                var wallsPage = new SettingsSchema()
-                    .Readout("howw", "How to", () => "aim a wall · Trigger = apply");
-                if (_wallIds.Length > 0)
-                    wallsPage.TextureSwatch("wtex", "Wallpaper", _wallIds,
-                            () => _wallTex, i => _wallTex = Mathf.Clamp(i, 0, _wallIds.Length - 1))
-                        .Stepper("wtw", "Tile width",
-                            () => TileLabel(_wallTileW, LibraryTile(1)),
-                            () => _wallTileW = StepTile(_wallTileW, LibraryTile(1), -1),
-                            () => _wallTileW = StepTile(_wallTileW, LibraryTile(1), +1))
-                        .Stepper("wth", "Tile height",
-                            () => _wallTileH > 0f ? $"{_wallTileH * 100f:0} cm" : "= width",
-                            () => _wallTileH = StepTile(_wallTileH, EffectiveTileW(1), -1),
-                            () => _wallTileH = StepTile(_wallTileH, EffectiveTileW(1), +1));
-                else
-                    wallsPage.Readout("nonew", "Textures", () => "run Download Textures");
-                wallsPage.Action("clearw", "Original look (unpaint aimed)", "eraser", ClearHovered);
+                var tabNames = new string[TexTabs.Length + 1];
+                var pages = new SettingsSchema[TexTabs.Length + 1];
+                tabNames[0] = "Color";
+                pages[0] = colorPage;
+                for (int c = 0; c < TexTabs.Length; c++)
+                {
+                    _catIds[c] = library != null ? library.IdsOf(TexTabs[c].cat).ToArray()
+                        : System.Array.Empty<string>();
+                    tabNames[c + 1] = TexTabs[c].cat;
+                    pages[c + 1] = BuildTexturePage(c);
+                }
 
-                var floorsPage = new SettingsSchema()
-                    .Readout("howf", "How to", () => "aim a floor · Trigger = apply");
-                if (_floorIds.Length > 0)
-                    floorsPage.TextureSwatch("ftex", "Wood", _floorIds,
-                            () => _floorTex, i => _floorTex = Mathf.Clamp(i, 0, _floorIds.Length - 1))
-                        .Stepper("ftw", "Tile X",
-                            () => TileLabel(_floorTileW, LibraryTile(2)),
-                            () => _floorTileW = StepTile(_floorTileW, LibraryTile(2), -1),
-                            () => _floorTileW = StepTile(_floorTileW, LibraryTile(2), +1))
-                        .Stepper("fth", "Tile Z",
-                            () => _floorTileH > 0f ? $"{_floorTileH * 100f:0} cm" : "= X",
-                            () => _floorTileH = StepTile(_floorTileH, EffectiveTileW(2), -1),
-                            () => _floorTileH = StepTile(_floorTileH, EffectiveTileW(2), +1));
-                else
-                    floorsPage.Readout("nonef", "Textures", () => "run Download Textures");
-                floorsPage.Action("clearf", "Original look (unpaint aimed)", "eraser", ClearHovered);
-
-                _settings = SettingsSchema.Tabbed(
-                    new[] { "Color", "Walls", "Floors" },
-                    () => _tab, i => _tab = Mathf.Clamp(i, 0, 2),
-                    colorPage, wallsPage, floorsPage);
+                _settings = SettingsSchema.Tabbed(tabNames,
+                    () => _tab, i => _tab = Mathf.Clamp(i, 0, TexTabs.Length), pages);
             }
             return _settings;
+        }
+
+        /// <summary>One texture tab: swatch grid + tile W/H steppers + gloss stepper.</summary>
+        private SettingsSchema BuildTexturePage(int c)
+        {
+            string k = TexTabs[c].cat.ToLowerInvariant();
+            var page = new SettingsSchema()
+                .Readout($"how-{k}", "How to", () => TexTabs[c].hint);
+            if (_catIds[c].Length > 0)
+            {
+                page.TextureSwatch($"tex-{k}", TexTabs[c].swatchLabel, _catIds[c],
+                        () => _pick[c], i => _pick[c] = Mathf.Clamp(i, 0, _catIds[c].Length - 1))
+                    .Stepper($"tw-{k}", "Tile W",
+                        () => TileLabel(_tileW[c], LibraryTile(c)),
+                        () => _tileW[c] = StepTile(_tileW[c], LibraryTile(c), -1),
+                        () => _tileW[c] = StepTile(_tileW[c], LibraryTile(c), +1))
+                    .Stepper($"th-{k}", "Tile H",
+                        () => _tileH[c] > 0f ? $"{_tileH[c] * 100f:0} cm" : "= W",
+                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), -1),
+                        () => _tileH[c] = StepTile(_tileH[c], EffectiveTileW(c), +1));
+                AddGlossStepper(page, $"gl-{k}", c + 1);
+            }
+            else
+                page.Readout($"none-{k}", "Textures", () => "run Download Textures");
+            page.Action($"clear-{k}", "Original look (unpaint aimed)", "eraser", ClearHovered);
+            return page;
+        }
+
+        /// <summary>Gloss stepper on every tab (design/04 v1.2): auto = catalog gloss
+        /// (satin for paint), steps of 10 %.</summary>
+        private void AddGlossStepper(SettingsSchema page, string id, int tab)
+        {
+            page.Stepper(id, "Gloss",
+                () => _gloss[tab] >= 0f ? $"{_gloss[tab] * 100f:0}%"
+                                        : $"auto ({AutoGloss(tab) * 100f:0}%)",
+                () => _gloss[tab] = Mathf.Clamp01((_gloss[tab] >= 0f ? _gloss[tab] : AutoGloss(tab)) - 0.1f),
+                () => _gloss[tab] = Mathf.Clamp01((_gloss[tab] >= 0f ? _gloss[tab] : AutoGloss(tab)) + 0.1f));
         }
 
         /// <summary>The finish the trigger applies, decided by the active tab; false if
@@ -156,36 +178,45 @@ namespace RoomPlanner.Tools
         {
             finish = SurfaceFinish.None;
             texture = null;
-            string[] ids = _tab == 1 ? _wallIds : _tab == 2 ? _floorIds : null;
             if (_tab == 0)
             {
-                finish = SurfaceFinish.OfColor(CurrentColor);
+                finish = SurfaceFinish.OfColor(CurrentColor, GlossFor(0));
                 return true;
             }
+            int c = _tab - 1;
+            var ids = _catIds[c];
             if (ids == null || ids.Length == 0 || library == null) return false;
-            int pick = Mathf.Clamp(_tab == 1 ? _wallTex : _floorTex, 0, ids.Length - 1);
+            int pick = Mathf.Clamp(_pick[c], 0, ids.Length - 1);
             if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
             // per-axis overrides: 0 = catalog tile; H unset follows W (square)
-            float w = _tab == 1 ? _wallTileW : _floorTileW;
-            float h = _tab == 1 ? _wallTileH : _floorTileH;
-            finish = SurfaceFinish.OfTexture(ids[pick], w > 0f ? w : tile, h);
+            float w = _tileW[c] > 0f ? _tileW[c] : tile;
+            finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab));
             return true;
         }
 
-        /// <summary>The catalog tile of the texture currently picked on a tab (1 Walls, 2 Floors).</summary>
-        private float LibraryTile(int tab)
+        /// <summary>Catalog gloss of the picked texture (tab ≥ 1) or the satin paint default.</summary>
+        private float AutoGloss(int tab)
         {
-            string[] ids = tab == 1 ? _wallIds : _floorIds;
-            if (ids.Length == 0 || library == null) return 1f;
-            int pick = Mathf.Clamp(tab == 1 ? _wallTex : _floorTex, 0, ids.Length - 1);
+            if (tab == 0) return ColorAutoGloss;
+            int c = tab - 1;
+            var ids = _catIds[c];
+            if (ids == null || ids.Length == 0 || library == null) return 0f;
+            int pick = Mathf.Clamp(_pick[c], 0, ids.Length - 1);
+            return library.TryGet(ids[pick], out _, out _, out float g) ? g : 0f;
+        }
+
+        private float GlossFor(int tab) => _gloss[tab] >= 0f ? _gloss[tab] : AutoGloss(tab);
+
+        /// <summary>The catalog tile of the texture picked on category page c.</summary>
+        private float LibraryTile(int c)
+        {
+            var ids = _catIds[c];
+            if (ids == null || ids.Length == 0 || library == null) return 1f;
+            int pick = Mathf.Clamp(_pick[c], 0, ids.Length - 1);
             return library.TryGet(ids[pick], out _, out float tile) ? tile : 1f;
         }
 
-        private float EffectiveTileW(int tab)
-        {
-            float over = tab == 1 ? _wallTileW : _floorTileW;
-            return over > 0f ? over : LibraryTile(tab);
-        }
+        private float EffectiveTileW(int c) => _tileW[c] > 0f ? _tileW[c] : LibraryTile(c);
 
         /// <summary>±25 cm per step from the current (or fallback) size, 25–800 cm.</summary>
         private static float StepTile(float current, float fallback, int dir)

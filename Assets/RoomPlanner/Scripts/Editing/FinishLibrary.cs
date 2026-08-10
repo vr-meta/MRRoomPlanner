@@ -15,20 +15,26 @@ namespace RoomPlanner.Editing
         [SerializeField] private string[] ids;
         [SerializeField] private Texture2D[] textures;
         [SerializeField] private float[] tileMeters;
-        [SerializeField] private string[] categories;   // "Walls" / "Floors"
+        [SerializeField] private float[] gloss;         // catalog smoothness 0..1 (v1.2)
+        [SerializeField] private string[] categories;   // "Walls" / "Floors" / "Tiles" / "Ceiling"
 
         public int Count => ids != null ? ids.Length : 0;
 
         public bool TryGet(string id, out Texture2D texture, out float tile)
+            => TryGet(id, out texture, out tile, out _);
+
+        public bool TryGet(string id, out Texture2D texture, out float tile, out float smoothness)
         {
             texture = null;
             tile = 1f;
+            smoothness = 0f;
             if (ids == null || string.IsNullOrEmpty(id)) return false;
             for (int i = 0; i < ids.Length; i++)
                 if (ids[i] == id)
                 {
                     texture = textures != null && i < textures.Length ? textures[i] : null;
                     tile = tileMeters != null && i < tileMeters.Length ? tileMeters[i] : 1f;
+                    smoothness = gloss != null && i < gloss.Length ? gloss[i] : 0f;
                     return texture != null;
                 }
             return false;

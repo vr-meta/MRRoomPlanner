@@ -36,13 +36,34 @@
 `Assets/RoomPlanner/Textures/` (в `.gitignore`); повторный запуск — идемпотентен,
 SetupRig падает с понятной ошибкой, если набор не скачан.
 
-**Курируемый набор** (1K JPG, только Color-карта в v1):
+**Курируемый набор** (v1.2: **2K JPG**, только Color-карта; смена качества —
+маркер `.quality` в `Textures/`, при апдейте набор перекачивается):
 
-| Категория | AssetId | tile, м |
-|---|---|---|
-| Обои (стены) | Wallpaper001A, Wallpaper001C, Wallpaper002A, Wallpaper002B | 1.0 |
-| Крашеная стена | PaintedPlaster001, PaintedPlaster006, PaintedPlaster010, PaintedPlaster017 | 1.5 |
-| Пол (паркет/ламинат) | WoodFloor051 (ёлочка), WoodFloor040, WoodFloor007, WoodFloor064 | 2.0 |
+| Категория (таб Paint) | AssetId | tile, м | gloss |
+|---|---|---|---|
+| Walls: обои | Wallpaper001A/001B/001C/002A/002B/002C | 1.0 | 0.05 |
+| Walls: крашеная штукатурка | PaintedPlaster001/002/006/009/010/016/017 | 1.5 | 0.12 |
+| Walls: кирпич, бетон | Bricks059, Bricks066; Concrete034 | 1.2/2.0 | 0.10/0.15 |
+| Floors: дерево | WoodFloor051 (ёлочка), 040, 007, 064, 043; Planks012 | 2.0 | 0.30–0.35 |
+| Floors: камень | Marble006, Marble012 | 1.5 | 0.70 |
+| Floors: ковролин | Carpet004, Carpet008 | 2.0 | 0.00 |
+| Tiles (стены И пол) | Tiles012/032/038/050/074/077/101 | 1.0–1.2 | 0.65 |
+| Ceiling (низ плиты = потолок) | OfficeCeiling003/005; Plaster001/004 | 1.2/1.5 | 0.05–0.10 |
+
+Табов в Paint пять: **Color / Walls / Floors / Tiles / Ceiling**; страницы категорий
+генерируются из одной таблицы `PaintController.TexTabs` (свотчи + Tile W/H + Gloss).
+
+**Матовость/глянец (v1.2)**: `SurfaceFinish.Smoothness` (0 = мат, 1 = глянец);
+шейдер `LitVertexAO` получает `_Smoothness` и дешёвый Blinn-Phong блик от main
+light (0 = прежний вид). Дефолт — из каталога (колонка gloss), в Paint — степпер
+Gloss (auto/0–100 %, шаг 10 %) на каждом табе, включая Color (глянцевая краска).
+
+**Тени (v1.2, страница Rendering)**: URP asset — main light shadows 2048/soft/25 м
+(Setup настраивает `URP-Asset.asset`); солнце `shadowStrength 0.75` — пятна света
+через окна читаются на полу/стенах; **стекло не отбрасывает тень** (свет проходит;
+`ShadowCaster` у Wall_Glass выключен). Тумблер **Sun shadows** — на gear-странице
+Rendering (2K shadow map на Quest не бесплатна). Тонировка света стеклом по
+альфе — осознанно отложена (нужен dithered-caster).
 
 **Модель отделки** — расширение краски, та же машинерия `Selectable`:
 

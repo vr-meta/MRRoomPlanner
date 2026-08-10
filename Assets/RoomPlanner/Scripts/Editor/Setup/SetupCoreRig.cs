@@ -34,7 +34,8 @@ namespace RoomPlanner.EditorTools
             var rig = new GameObject("MeasureRig");
             rig.AddComponent<RigMarker>();
             ctx.Rig = rig;
-            EnsureLighting(rig);
+            ctx.Sun = EnsureLighting(rig);
+            EnsureShadowQuality();
             ctx.Ssao = EnsureSsaoFeature();
             ctx.Raycaster = rig.AddComponent<SceneRaycaster>();
             ctx.Pointer = rig.AddComponent<PointerProvider>();
@@ -110,7 +111,7 @@ namespace RoomPlanner.EditorTools
         /// in passthrough the "sky" is the user's real room, so pitch-black shadows read
         /// as holes, not shading.
         /// </summary>
-        private static void EnsureLighting(GameObject rig)
+        private static Light EnsureLighting(GameObject rig)
         {
             foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (l.type == LightType.Directional) Object.DestroyImmediate(l.gameObject);
@@ -123,7 +124,9 @@ namespace RoomPlanner.EditorTools
             light.color = new Color(1f, 0.97f, 0.92f);   // warm daylight
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.55f;                // soft interior shading, not noir
+            // 0.75: sun patches through the windows actually read on the floor
+            // (feedback 2026-08-11) while shadows stay lifted by the ambient, not noir
+            light.shadowStrength = 0.75f;
 
             // A weak cool shadowless fill from the opposite side — the poor man's bounce
             // light: walls facing away from the sun still read as surfaces, not voids.
@@ -142,6 +145,30 @@ namespace RoomPlanner.EditorTools
             RenderSettings.ambientSkyColor = new Color(0.58f, 0.62f, 0.70f);
             RenderSettings.ambientEquatorColor = new Color(0.47f, 0.48f, 0.50f);
             RenderSettings.ambientGroundColor = new Color(0.32f, 0.31f, 0.29f);
+            return light;
+        }
+
+        /// <summary>
+        /// Shadow quality on the URP asset (feedback 2026-08-11: sun patches through the
+        /// windows must land inside the house): main-light shadows on, 2K map, soft,
+        /// 25 m distance — enough for a house, cheap enough for Quest.
+        /// </summary>
+        private static void EnsureShadowQuality()
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>(
+                "Assets/Settings/URP-Asset.asset");
+            if (asset == null)
+            {
+                Debug.LogWarning("[Setup] URP-Asset.asset not found — shadow quality left as-is");
+                return;
+            }
+            var so = new SerializedObject(asset);
+            so.FindProperty("m_MainLightShadowsSupported").boolValue = true;
+            so.FindProperty("m_MainLightShadowmapResolution").intValue = 2048;
+            so.FindProperty("m_SoftShadowsSupported").boolValue = true;
+            so.FindProperty("m_ShadowDistance").floatValue = 25f;
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(asset);
         }
 
         /// <summary>

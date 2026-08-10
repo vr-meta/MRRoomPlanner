@@ -48,8 +48,11 @@ namespace RoomPlanner.EditorTools
             // skybox shader survives build stripping
             ctx.SkyMat = CreateSkyMat("Env_Sky");
 
-            // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
+            // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent.
+            // Glass must NOT cast shadows: sun comes through the window into the house
+            // (feedback 2026-08-11) — belt-and-braces, the badge shader has no caster pass.
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
+            ctx.GlassMat.SetShaderPassEnabled("ShadowCaster", false);
             // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone, lit
             ctx.JoineryMat = CreateSurfaceMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f), null);
             // stairs share the concrete look of walls/floors until painting lands

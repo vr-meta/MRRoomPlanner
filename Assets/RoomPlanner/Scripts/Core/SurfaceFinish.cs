@@ -24,14 +24,15 @@ namespace RoomPlanner.Core
         public string TextureId;   // catalog id ("wallpaper-001a"); null unless Texture
         public float TileMeters;   // metric tile size for the UV scale (1 m UV / TileMeters)
         public float TileMetersY;  // vertical/second-axis tile; 0 = square (use TileMeters)
+        public float Smoothness;   // 0 matte … 1 gloss (shader _Smoothness; design/04 v1.2)
 
         public static readonly SurfaceFinish None = new() { Kind = FinishKind.None };
 
-        public static SurfaceFinish OfColor(Color c) =>
-            new() { Kind = FinishKind.Color, Color = c };
+        public static SurfaceFinish OfColor(Color c, float smoothness = 0f) =>
+            new() { Kind = FinishKind.Color, Color = c, Smoothness = Mathf.Clamp01(smoothness) };
 
         public static SurfaceFinish OfTexture(string id, float tileMeters,
-            float tileMetersY = 0f, Color? tint = null) =>
+            float tileMetersY = 0f, Color? tint = null, float smoothness = 0f) =>
             new()
             {
                 Kind = FinishKind.Texture,
@@ -39,6 +40,7 @@ namespace RoomPlanner.Core
                 TileMeters = Mathf.Max(0.05f, tileMeters),
                 TileMetersY = tileMetersY > 0f ? Mathf.Max(0.05f, tileMetersY) : 0f,
                 Color = tint ?? UnityEngine.Color.white,
+                Smoothness = Mathf.Clamp01(smoothness),
             };
 
         public bool IsNone => Kind == FinishKind.None;

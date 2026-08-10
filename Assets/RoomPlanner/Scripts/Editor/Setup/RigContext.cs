@@ -46,6 +46,7 @@ namespace RoomPlanner.EditorTools
         public Material FurnitureMat, ProxyMat, RailingMat;
         public Material WireMat, FixtureMat;
         public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
+        public Light Sun;                 // the shadow-casting directional (Rendering page toggle)
     }
 }
 #endif

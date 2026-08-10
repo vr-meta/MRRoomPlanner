@@ -52,6 +52,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
+        [SerializeField] private Light sunLight;           // Rendering page: sun-shadows toggle
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -675,8 +676,20 @@ namespace RoomPlanner.Tools
                 .Header("rhead", "Rendering")
                 .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
                 .Toggle("ssao", "SSAO",
-                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao());
+                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao())
+                .Toggle("sunsh", "Sun shadows",
+                    () => sunLight != null && sunLight.shadows != LightShadows.None,
+                    _ => ToggleSunShadows());
             return _renderSchema;
+        }
+
+        /// <summary>Sun patches through the windows (feedback 2026-08-11) — toggleable
+        /// because a 2K shadow map is not free on Quest.</summary>
+        private void ToggleSunShadows()
+        {
+            if (sunLight == null) return;
+            sunLight.shadows = sunLight.shadows == LightShadows.None
+                ? LightShadows.Soft : LightShadows.None;
         }
 
         /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>
