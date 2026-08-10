@@ -115,6 +115,21 @@ namespace RoomPlanner.Editing
             Resolve();
             if (_state == state) return;
             _state = state;
+            ApplyHighlight();
+        }
+
+        /// <summary>Re-apply the CURRENT highlight state — needed after an external repaint
+        /// (a paint stroke, undo/redo) overwrote the tinted per-material block while the
+        /// state itself did not change (so SetHighlight would early-out).</summary>
+        public void ReapplyHighlight()
+        {
+            Resolve();
+            ApplyHighlight();
+        }
+
+        private void ApplyHighlight()
+        {
+            HighlightState state = _state;
             if (_renderers == null) return;
 
             bool tint = state != HighlightState.None;
@@ -140,6 +155,15 @@ namespace RoomPlanner.Editing
                 {
                     r.SetPropertyBlock(null);   // restore the material's own color
                 }
+            }
+
+            // Painted walls carry a per-material block (submesh 0) that OVERRIDES the
+            // renderer-wide tint above — sync it, or hover/selection is invisible on paint
+            // and un-highlighting would erase the paint (design/04 + UX v2 P1.4).
+            if (_wall != null)
+            {
+                if (tint) _wall.ApplyPaintHighlight(stateColor, t);
+                else _wall.ApplyPaintBlock();
             }
         }
 

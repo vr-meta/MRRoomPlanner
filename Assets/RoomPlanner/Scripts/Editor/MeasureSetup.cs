@@ -32,6 +32,7 @@ namespace RoomPlanner.EditorTools
             SetupBlueprintTool.Build(ctx);
             SetupImportTool.Build(ctx);
             SetupElectricTool.Build(ctx);
+            SetupPaintTool.Build(ctx);
 
             ToolMenuAndInspector(ctx);
             SetupCoreRig.TryEnableEffectMeshColliders();
@@ -71,6 +72,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("blueprint").objectReferenceValue = ctx.Blueprint;
             so.FindProperty("importTool").objectReferenceValue = ctx.Import;
             so.FindProperty("electric").objectReferenceValue = ctx.Electric;
+            so.FindProperty("paint").objectReferenceValue = ctx.Paint;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
             so.ApplyModifiedProperties();
         }

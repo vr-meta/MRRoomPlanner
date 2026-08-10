@@ -139,6 +139,68 @@ namespace RoomPlanner.Walls
             _collider.sharedMesh = _mesh.vertexCount > 0 ? _mesh : null;
         }
 
+        // ---- paint (design/04, v1): a per-wall tint over the shared concrete material.
+        // A MaterialPropertyBlock on submesh 0 only — the shared material asset stays
+        // untouched (no leaked instances) and window glass (submesh 1) keeps its look.
+        // The block lives on the renderer, so it survives mesh rebuilds by itself. ----
+
+        private static readonly int PaintBaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int PaintColorId = Shader.PropertyToID("_Color");
+        private static MaterialPropertyBlock _paintScratch;
+        private MeshRenderer _renderer;
+
+        public bool HasPaint { get; private set; }
+        public Color PaintColor { get; private set; } = Color.white;
+
+        public void SetPaint(Color color)
+        {
+            HasPaint = true;
+            PaintColor = color;
+            ApplyPaintBlock();
+        }
+
+        /// <summary>Back to the bare shared material (concrete).</summary>
+        public void ClearPaint()
+        {
+            HasPaint = false;
+            ApplyPaintBlock();
+        }
+
+        /// <summary>(Re)apply the plain paint block — also the restore path when a highlight
+        /// tint ends (the Selectable calls this instead of erasing the paint).</summary>
+        public void ApplyPaintBlock()
+        {
+            var r = PaintRenderer();
+            if (r == null) return;
+            if (!HasPaint) { r.SetPropertyBlock(null, 0); return; }
+            WritePaintBlock(r, PaintColor);
+        }
+
+        /// <summary>Highlight over paint: a per-material block overrides the renderer-wide
+        /// tint the Selectable uses, so a painted face must get the lerped color written
+        /// into ITS block or hover/selection would be invisible on it.</summary>
+        public void ApplyPaintHighlight(Color stateColor, float strength)
+        {
+            if (!HasPaint) return;   // no per-material block → the renderer-wide tint shows
+            var r = PaintRenderer();
+            if (r != null) WritePaintBlock(r, Color.Lerp(PaintColor, stateColor, strength));
+        }
+
+        private MeshRenderer PaintRenderer()
+        {
+            if (_renderer == null) _renderer = GetComponent<MeshRenderer>();
+            return _renderer;
+        }
+
+        private static void WritePaintBlock(MeshRenderer r, Color color)
+        {
+            _paintScratch ??= new MaterialPropertyBlock();
+            _paintScratch.Clear();
+            _paintScratch.SetColor(PaintBaseColorId, color);
+            _paintScratch.SetColor(PaintColorId, color);
+            r.SetPropertyBlock(_paintScratch, 0);
+        }
+
         /// <summary>
         /// Draw ONE graph segment, with its ends shaped by whatever meets it at each node
         /// (<see cref="WallMesh"/>). Replaces the polyline path for graph-backed walls; the

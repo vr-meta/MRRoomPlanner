@@ -22,13 +22,13 @@ namespace RoomPlanner.EditorTools
             // Keep the quad's collider: the whole panel must block scene tools, or a trigger
             // pull between buttons places a point on the wall BEHIND the menu.
             panel.transform.SetParent(root.transform, false);
-            panel.transform.localScale = new Vector3(0.34f, 0.16f, 1f);   // fits 7 tool buttons
+            panel.transform.localScale = new Vector3(0.385f, 0.16f, 1f);   // fits 8 tool buttons
             panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
             panel.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
             SetupAssets.AddRim(panel, ctx.RimMat);
 
             // ---- tool buttons from the registry order (must match ToolManager's list) ----
-            ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool, ctx.Blueprint, ctx.Import, ctx.Electric };
+            ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool, ctx.Blueprint, ctx.Import, ctx.Electric, ctx.Paint };
             var toolButtons = new MenuButton[tools.Length];
             var toolSize = new Vector2(0.045f, 0.05f);
             float stepX = 0.0485f;                                  // centered row

@@ -312,6 +312,27 @@
   пользователя 2026-08-10: код и тесты написаны, прогон и сборка — отдельным заходом;
   состав рига изменился → перед Play-тестами обязателен SetupRig)
 
+## 2l. Покраска стен v1 (дизайн: `design/04-surfaces-materials.md`, ветка `worktree-electrical`)
+
+- [x] **P1 — Core**: `PaintPalette` (12 именованных пресетов, wrap-индекс) +
+  `Wall.SetPaint/ClearPaint/HasPaint/PaintColor` (MPB на сабмеш 0, стекло не тонируется,
+  переживает Rebuild) + `ApplyPaintHighlight` (лерп к цвету состояния) + 7 EditMode-тестов
+  (`WallPaintTests`)
+- [x] **P2 — интеграция подсветки**: `Selectable.SetHighlight` синхронизирует
+  per-material блок краски (иначе подсветка невидима на покрашенной стене, а снятие
+  подсветки стирало бы краску); попутно закрыт баг — `SelectController.OnDeactivate`
+  не прятал сферы-ручки (правило 5.3), и их коллайдеры на слое 6 оставались «поверхностями»
+- [x] **P3 — `PaintController : ITool`** («paint»/«Paint», 8-я кнопка): hover по своим
+  стенам через `SceneModel.TryPick`, триггер = `PaintCommand` (before/after, no-op мазок
+  не пишется в историю), схема «Color» (цикл каталога) + «Action» (Paint/Clear), B = Esc
+- [x] **P4 — Setup + регистрация**: `SetupPaintTool` (только wiring), `RigContext`,
+  `MeasureSetup` + `FindProperty("paint")`, реестр `ToolManager` (8-й), `SetupPalette`
+  (панель 0.34→0.385) + 5 PlayMode-тестов (`PaintPlayTests`)
+- [x] **P5 — доки**: `04-surfaces-materials.md` (состояние v1 + что отложено),
+  `10-controls.md` (8 кнопок + инспектор Paint)
+- [ ] **P6 — прогон тестов headless + SetupRig + проверка на устройстве** (вместе с E8:
+  код и тесты написаны, прогон отдельным заходом)
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

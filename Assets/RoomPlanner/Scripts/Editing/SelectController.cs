@@ -56,6 +56,8 @@ namespace RoomPlanner.Editing
             EndDrag(record: true);
             Deselect();
             SetHover(null);
+            UpdateHandles();          // hide handle spheres — stale colliders on layer 6 would
+                                      // read as surfaces to other tools (rule 5.3)
             if (reticle != null) reticle.gameObject.SetActive(false);
         }
 
