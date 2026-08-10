@@ -41,6 +41,7 @@ namespace RoomPlanner.EditorTools
         public Material IconMat, InsetMat, ScrimMat;   // UI v2 (design/20): icons, wells, radial scrim
         public RoomPlanner.Tools.RadialMenu Radial;
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
+        public Material FurnitureMat, ProxyMat, RailingMat;
         public Material WireMat, FixtureMat;
         public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
     }

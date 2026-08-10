@@ -20,15 +20,21 @@ namespace RoomPlanner.Tools
         private readonly List<Floor> _floors;
         private readonly List<Stair> _stairs;
         private readonly List<RoomPlanner.Import.MepView> _mep;
+        private readonly List<RoomPlanner.Electrical.ElectricFixture> _fixtures;
+        private readonly List<RoomPlanner.Electrical.WireRoute> _routes;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
-            List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null)
+            List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null,
+            List<RoomPlanner.Electrical.ElectricFixture> fixtures = null,
+            List<RoomPlanner.Electrical.WireRoute> routes = null)
         {
             _walls = walls;
             _floors = floors;
             _stairs = stairs;
             _mep = mep;
+            _fixtures = fixtures;
+            _routes = routes;
             _delta = delta;
         }
 
@@ -54,6 +60,16 @@ namespace RoomPlanner.Tools
             if (_mep != null)
                 foreach (var m in _mep)
                     if (m != null) m.MoveBy(d);
+            // The electrical layer is world-anchored model data like everything else —
+            // without this shift, outlets and wires visually "follow the user" (headset
+            // feedback 2026-08-10). BaseLevel rides along so storey-relative mounting
+            // heights stay honest after a vertical teleport.
+            if (_fixtures != null)
+                foreach (var fx in _fixtures)
+                    if (fx != null) { fx.MoveBy(d); fx.BaseLevel += d.y; }
+            if (_routes != null)
+                foreach (var r in _routes)
+                    if (r != null) r.MoveBy(d);
         }
 
         /// <summary>
@@ -84,6 +100,24 @@ namespace RoomPlanner.Tools
             var list = new List<RoomPlanner.Import.MepView>();
             foreach (var m in Object.FindObjectsByType<RoomPlanner.Import.MepView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 list.Add(m);
+            return list;
+        }
+
+        /// <summary>Every electrical fixture, hidden ones included — same rule as slabs.</summary>
+        public static List<RoomPlanner.Electrical.ElectricFixture> CollectFixtures()
+        {
+            var list = new List<RoomPlanner.Electrical.ElectricFixture>();
+            foreach (var f in Object.FindObjectsByType<RoomPlanner.Electrical.ElectricFixture>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                list.Add(f);
+            return list;
+        }
+
+        /// <summary>Every wire route with real points, hidden ones included.</summary>
+        public static List<RoomPlanner.Electrical.WireRoute> CollectRoutes()
+        {
+            var list = new List<RoomPlanner.Electrical.WireRoute>();
+            foreach (var r in Object.FindObjectsByType<RoomPlanner.Electrical.WireRoute>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (r.PointCount >= 2) list.Add(r);
             return list;
         }
     }

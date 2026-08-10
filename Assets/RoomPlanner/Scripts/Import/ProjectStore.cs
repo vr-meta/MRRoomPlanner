@@ -97,7 +97,15 @@ namespace RoomPlanner.Import
                 if (m == null || !m.gameObject.activeSelf) continue;
                 var mf = m.GetComponent<MeshFilter>();
                 if (mf == null || mf.sharedMesh == null) continue;
-                var pm = new ProjectMep { Name = m.name, Origin = m.transform.position };
+                var msel = m.GetComponent<Editing.Selectable>();
+                var pm = new ProjectMep
+                {
+                    Name = m.name, Origin = m.transform.position,
+                    Category = (int)m.Category,
+                    Transparency = m.Transparency,
+                    Painted = msel != null && msel.IsPainted,
+                    Paint = msel != null && msel.IsPainted ? msel.Paint : Color.clear,
+                };
                 pm.Vertices.AddRange(mf.sharedMesh.vertices);
                 pm.Triangles.AddRange(mf.sharedMesh.triangles);
                 data.Plumbing.Add(pm);
@@ -187,6 +195,10 @@ namespace RoomPlanner.Import
                     Vertices = new List<Vector3>(m.Vertices),
                     Triangles = new List<int>(m.Triangles),
                     StoreyIndex = m.Storey,
+                    Category = (MepCategory)m.Category,
+                    Transparency = m.Transparency,
+                    HasColor = m.Painted,
+                    Color = m.Paint,
                 });
             return b;
         }

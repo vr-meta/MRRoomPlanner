@@ -328,7 +328,9 @@ namespace RoomPlanner.Tools
                         GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
                         TeleportCommand.CollectFloors(), delta,
                         TeleportCommand.CollectStairs(),
-                        TeleportCommand.CollectMep()));
+                        TeleportCommand.CollectMep(),
+                        TeleportCommand.CollectFixtures(),
+                        TeleportCommand.CollectRoutes()));
                     UpdateGroundLevel();
                     input.Pulse(0.4f, 0.02f);
                 }

@@ -138,8 +138,36 @@ namespace RoomPlanner.Electrical
         private static bool IsWall(Vector3 n) => Mathf.Abs(n.y) < 0.3f;
         private static bool IsCeiling(Vector3 n) => n.y < -0.7f;
 
-        private float CeilingY() => manager != null ? manager.Level + manager.WallHeight : 2.7f;
-        private float RunY() => CeilingY() - _ceilingOff;
+        private static readonly RaycastHit[] _ceilingHits = new RaycastHit[16];
+
+        /// <summary>
+        /// The REAL ceiling above the run: an upward ray from knee height at the point's
+        /// XZ, taking the lowest downward-facing surface at least 2 m up (imported houses
+        /// have 3 m+ ceilings — the wall tool's drawing height is wrong there, headset
+        /// feedback 2026-08-10). Furniture undersides sit below the 2 m bar; wires and
+        /// their handles are excluded so a drawn ceiling run does not become the next
+        /// run's "ceiling". Fallback: the wall tool height, as before.
+        /// </summary>
+        private float CeilingY(Vector3 near)
+        {
+            float floor = Level();
+            var origin = new Vector3(near.x, floor + 0.3f, near.z);
+            int n = Physics.RaycastNonAlloc(new Ray(origin, Vector3.up), _ceilingHits, 15f,
+                ~0, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                var h = _ceilingHits[i];
+                if (h.normal.y > -0.3f) continue;                   // not a downward face
+                if (h.point.y < floor + 2f) continue;               // table/sofa underside
+                if (h.collider.GetComponentInParent<WireRoute>() != null) continue;
+                best = Mathf.Min(best, h.point.y);
+            }
+            if (best < float.MaxValue) return best;
+            return manager != null ? manager.Level + manager.WallHeight : 2.7f;
+        }
+
+        private float RunY(Vector3 near) => CeilingY(near) - _ceilingOff;
         private float Level() => manager != null ? manager.Level : 0f;
 
         // ---- fixtures (Outlet / Switch / Panel) ----
@@ -354,7 +382,7 @@ namespace RoomPlanner.Electrical
 
             if (_ortho)
             {
-                WireMath.OrthoWaypoints(last, cursor, RunY(), _orthoScratch);
+                WireMath.OrthoWaypoints(last, cursor, RunY(last), _orthoScratch);
                 _pts.AddRange(_orthoScratch);
             }
             _pts.Add(cursor);
@@ -412,7 +440,7 @@ namespace RoomPlanner.Electrical
                 Vector3 last = _pts[_pts.Count - 1];
                 if (_ortho)
                 {
-                    WireMath.OrthoWaypoints(last, cursor, RunY(), _orthoScratch);
+                    WireMath.OrthoWaypoints(last, cursor, RunY(last), _orthoScratch);
                     _previewPts.AddRange(_orthoScratch);
                 }
                 _previewPts.Add(cursor);

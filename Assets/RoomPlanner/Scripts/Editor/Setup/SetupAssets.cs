@@ -59,6 +59,11 @@ namespace RoomPlanner.EditorTools
             // Double-sided (fixture Breps have arbitrary winding); plain lit: imported
             // meshes carry no vertex colors for the AO shader.
             ctx.PlumbingMat = CreatePlainLitMat("MEP_Plumbing", new Color(0.95f, 0.96f, 0.97f));
+            // Baked imports beyond plumbing (design/18 I17). Neutral defaults — the IFC's
+            // own IfcStyledItem colour overrides per object via the paint machinery.
+            ctx.FurnitureMat = CreatePlainLitMat("MEP_Furniture", new Color(0.62f, 0.50f, 0.38f)); // warm wood
+            ctx.ProxyMat = CreatePlainLitMat("MEP_Generic", new Color(0.78f, 0.78f, 0.80f));       // trade plastic
+            ctx.RailingMat = CreatePlainLitMat("MEP_Railing", new Color(0.35f, 0.36f, 0.38f));     // dark metal
 
             // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
             // hole on passthrough; fixtures near-white, so they read as trade plastic.

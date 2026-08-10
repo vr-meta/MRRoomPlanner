@@ -28,6 +28,10 @@ namespace RoomPlanner.Import
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private Material stairMat;
         [SerializeField] private Material plumbingMat;
+        [SerializeField] private Material furnitureMat;
+        [SerializeField] private Material proxyMat;
+        [SerializeField] private Material railingMat;
+        [SerializeField] private Material mepGlassMat;   // transparency ≥ GlassThreshold
 
         private const int SelectableLayer = 6;   // picked by Select, ignored by the surface raycaster
 
@@ -241,7 +245,7 @@ namespace RoomPlanner.Import
             int mepCount = 0;
             foreach (var mep in building.Plumbing)
             {
-                var go = new GameObject($"Plumbing {mep.Name}");
+                var go = new GameObject($"{mep.Category} {mep.Name}");
                 go.transform.SetParent(transform, false);
                 go.transform.position = mep.Origin;
                 var mesh = new Mesh { name = "MepMesh" };
@@ -251,11 +255,19 @@ namespace RoomPlanner.Import
                 mesh.RecalculateBounds();
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
-                if (plumbingMat != null) mr.sharedMaterial = plumbingMat;
-                go.AddComponent<MepView>();
+                var mat = MaterialFor(mep);
+                if (mat != null) mr.sharedMaterial = mat;
+                var view = go.AddComponent<MepView>();
+                view.Category = mep.Category;
+                view.Transparency = mep.Transparency;
                 // Selectable only for the hide/show machinery (undo, storey filter) — no
                 // collider, so it is invisible to picking and never registered for it.
                 var sel = go.AddComponent<Selectable>();
+                // The file's own colour rides the paint machinery: one visual writer,
+                // undo-able, round-trips through the project format.
+                if (mep.HasColor)
+                    sel.SetPaint(new Color(mep.Color.r, mep.Color.g, mep.Color.b,
+                        1f - Mathf.Clamp01(mep.Transparency)));
                 _created.Add((sel, mep.StoreyIndex));
                 mepCount++;
             }
@@ -270,6 +282,21 @@ namespace RoomPlanner.Import
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
                 + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
+        }
+
+        /// <summary>Material by category; strongly transparent surfaces (glass shower
+        /// walls and the like) get the see-through material whatever the category.</summary>
+        private Material MaterialFor(ImportedMep mep)
+        {
+            const float glassThreshold = 0.3f;
+            if (mep.Transparency >= glassThreshold && mepGlassMat != null) return mepGlassMat;
+            return mep.Category switch
+            {
+                MepCategory.Furniture => furnitureMat != null ? furnitureMat : plumbingMat,
+                MepCategory.Proxy => proxyMat != null ? proxyMat : plumbingMat,
+                MepCategory.Railing => railingMat != null ? railingMat : plumbingMat,
+                _ => plumbingMat,
+            };
         }
 
         /// <summary>
@@ -371,6 +398,15 @@ namespace RoomPlanner.Import
                 if (s != null) Destroy(s.gameObject);
             foreach (var m in TeleportCommand.CollectMep())
                 if (m != null) Destroy(m.gameObject);
+            // The electrical layer is scene content too — "New project" must not leave
+            // orphaned outlets and wires behind (headset feedback 2026-08-10). Only
+            // REGISTERED objects: the parked fixture template and the tool's ghost
+            // preview are not in the model and must survive.
+            if (sceneModel != null)
+                foreach (var item in new List<ISelectable>(sceneModel.Items))
+                    if (item is Selectable s && s.IsAlive
+                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                        Destroy(s.gameObject);
             _created.Clear();
             _importedSegments.Clear();
             _building = null;
