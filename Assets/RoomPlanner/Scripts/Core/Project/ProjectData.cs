@@ -73,6 +73,10 @@ namespace RoomPlanner.Core.Project
         public List<Vector3> Vertices = new();
         public List<int> Triangles = new();
         public int Storey = -1;
+        public int Category;               // MepCategory as int (0 = plumbing, old files)
+        public float Transparency;
+        public bool Painted;               // IFC colour or user paint
+        public Color Paint;
     }
 
     [Serializable]

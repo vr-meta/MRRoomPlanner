@@ -3,12 +3,17 @@ using UnityEngine;
 namespace RoomPlanner.Import
 {
     /// <summary>
-    /// An imported MEP fixture (design/18 I12 — plumbing terminals for now): the mesh is
-    /// baked in LOCAL space around the transform, so moving the whole model (teleport)
-    /// is a plain transform shift — no mesh rebuild.
+    /// An imported baked-mesh element (design/18 I12/I17 — plumbing, furniture, proxies,
+    /// railings): the mesh is baked in LOCAL space around the transform, so moving the
+    /// whole model (teleport) is a plain transform shift — no mesh rebuild.
     /// </summary>
     public class MepView : MonoBehaviour
     {
+        /// <summary>What the element is (drives material) — kept for project capture.</summary>
+        public RoomPlanner.Core.Ifc.MepCategory Category;
+        /// <summary>IFC surface transparency (0 opaque … 1 clear) — kept for capture.</summary>
+        public float Transparency;
+
         public void MoveBy(Vector3 delta) => transform.position += delta;
 
         private void OnDestroy()

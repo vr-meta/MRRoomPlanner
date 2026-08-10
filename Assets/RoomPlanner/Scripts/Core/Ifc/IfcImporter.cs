@@ -19,24 +19,35 @@ namespace RoomPlanner.Core.Ifc
             MapElementsToStoreys(ctx, b);
             MapLayerThickness(ctx);
             MapVoidsAndFills(ctx);
+            MapStyles(ctx);
             ImportWalls(ctx, b);
             ImportColumns(ctx, b);
             ImportSlabs(ctx, b);
             ImportStairs(ctx, b);
-            ImportPlumbing(ctx, b);
+            ImportBakedElements(ctx, b);
             return b;
         }
 
-        // ---------------------------------------------------------------- MEP (plumbing)
+        // ---------------------------------------------------------------- baked meshes
+
+        private static readonly (string Type, MepCategory Category)[] BakedTypes =
+        {
+            ("IFCFLOWTERMINAL", MepCategory.Plumbing),          // sanitary fixtures
+            ("IFCFURNISHINGELEMENT", MepCategory.Furniture),    // furniture (IKEA Breps)
+            ("IFCBUILDINGELEMENTPROXY", MepCategory.Proxy),     // shower boxes, decor, …
+            ("IFCRAILING", MepCategory.Railing),                // stair/balcony railings
+        };
 
         /// <summary>
-        /// Sanitary fixtures (IfcFlowTerminal) as baked meshes — IFC ships them as Breps.
-        /// Pipes/wiring would be IfcFlowSegment / cable entities; this export has none, so
-        /// terminals are the whole visible plumbing layer for now (design/18 I12).
+        /// Elements that only exist as meshes (IfcFlowTerminal / furniture / proxies /
+        /// railings) — baked Breps with the file's own colour when IfcStyledItem carries
+        /// one. Pipes/wiring would be IfcFlowSegment / cable entities; this export has
+        /// none. 2D-only proxies (annotation curves) are skipped with a counter.
         /// </summary>
-        private static void ImportPlumbing(Ctx c, ImportedBuilding b)
+        private static void ImportBakedElements(Ctx c, ImportedBuilding b)
         {
-            foreach (int id in c.F.OfType("IFCFLOWTERMINAL"))
+            foreach (var (type, category) in BakedTypes)
+            foreach (int id in c.F.OfType(type))
             {
                 var a = c.F.Args(id);
                 if (a == null || a.Count < 7) { b.SkippedMep++; continue; }
@@ -44,7 +55,8 @@ namespace RoomPlanner.Core.Ifc
 
                 var verts = new List<Vector3>();
                 var tris = new List<int>();
-                if (!BrepWorldMesh(c, a[6], place, verts, tris) || verts.Count == 0)
+                if (!BrepWorldMesh(c, a[6], place, verts, tris, out bool hasColor, out Color color,
+                        out float transparency) || verts.Count == 0)
                 {
                     b.SkippedMep++;
                     continue;
@@ -59,10 +71,14 @@ namespace RoomPlanner.Core.Ifc
                 b.Plumbing.Add(new ImportedMep
                 {
                     Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
+                    Category = category,
                     Origin = origin,
                     Vertices = verts,
                     Triangles = tris,
                     StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
+                    HasColor = hasColor,
+                    Color = color,
+                    Transparency = transparency,
                 });
             }
         }
@@ -70,14 +86,26 @@ namespace RoomPlanner.Core.Ifc
         /// <summary>
         /// Triangulated FacetedBrep(s) of a Body representation (direct or one mapped-item
         /// level), fan per polyloop, in Unity world space. Returns false if the body holds
-        /// no Brep geometry.
+        /// no Brep geometry. The first styled solid (IfcStyledItem on the Brep or on the
+        /// mapped item) supplies the element's colour and transparency.
         /// </summary>
         private static bool BrepWorldMesh(Ctx c, StepValue pdsRef, Matrix4x4 place,
-            List<Vector3> verts, List<int> tris)
+            List<Vector3> verts, List<int> tris,
+            out bool hasColor, out Color color, out float transparency)
         {
+            hasColor = false; color = default; transparency = 0f;
             var items = FindRepresentation(c, pdsRef, "Body");
             if (items == null) return false;
             bool any = false;
+            bool foundStyle = false; Color styleColor = default; float styleTr = 0f;
+
+            void TakeStyle(int itemId)
+            {
+                if (foundStyle || !c.StyleOfItem.TryGetValue(itemId, out var s)) return;
+                foundStyle = true;
+                styleColor = s.Color;
+                styleTr = s.Transparency;
+            }
 
             void EmitBrep(int brepId, Matrix4x4 m)
             {
@@ -120,31 +148,31 @@ namespace RoomPlanner.Core.Ifc
                 {
                     case "IFCFACETEDBREP":
                         EmitBrep(it.Ref, place);
+                        TakeStyle(it.Ref);
                         break;
                     case "IFCMAPPEDITEM":
                     {
                         var mi = c.F.Args(it.Ref);
                         var map = c.F.Deref(mi[0]);       // IFCREPRESENTATIONMAP(Origin, Rep)
                         if (map == null || map.Count < 2) continue;
-                        var op = c.F.Deref(mi[1]);
-                        var opM = Matrix4x4.identity;
-                        if (op != null && op.Count >= 4)
-                        {
-                            float s = op[3].Kind == StepKind.Number ? op[3].AsFloat : 1f;
-                            opM = Matrix4x4.TRS(
-                                op[2].Kind == StepKind.Ref ? Point(c, op[2]) : Vector3.zero,
-                                Quaternion.identity, new Vector3(s, s, s));
-                        }
+                        var opM = MapOperator(c, mi[1]);   // honors mounting-rotation axes
                         var extra = opM * Axis2Placement3D(c, map[0]).inverse;
                         var rep = c.F.Deref(map[1]);
                         if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
+                        TakeStyle(it.Ref);
                         foreach (var inner in rep[3].Items)
                             if (inner.Kind == StepKind.Ref && c.F.TypeOf(inner.Ref) == "IFCFACETEDBREP")
+                            {
                                 EmitBrep(inner.Ref, place * extra);
+                                TakeStyle(inner.Ref);
+                            }
                         break;
                     }
                 }
             }
+            hasColor = foundStyle;
+            color = styleColor;
+            transparency = styleTr;
             return any;
         }
 
@@ -308,6 +336,49 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, List<int>> VoidsOfElement = new(); // element id → opening ids
             public readonly Dictionary<int, int> FillerOfOpening = new();   // opening id → door/window id
             public readonly Dictionary<int, int> TypeOfElement = new();     // element id → style/type record
+            public readonly Dictionary<int, (Color Color, float Transparency)> StyleOfItem = new();
+        }
+
+        /// <summary>
+        /// IFCSTYLEDITEM(Item, Styles, Name) → geometry-item id → surface colour (+
+        /// transparency). Chain: PresentationStyleAssignment → SurfaceStyle →
+        /// SurfaceStyleRendering/Shading → ColourRgb.
+        /// </summary>
+        private static void MapStyles(Ctx c)
+        {
+            foreach (int id in c.F.OfType("IFCSTYLEDITEM"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 2 || a[0].Kind != StepKind.Ref || a[1].Kind != StepKind.List) continue;
+                foreach (var assignRef in a[1].Items)
+                {
+                    var assign = c.F.Deref(assignRef);   // IFCPRESENTATIONSTYLEASSIGNMENT((styles))
+                    if (assign == null || assign.Count < 1 || assign[0].Kind != StepKind.List) continue;
+                    foreach (var styleRef in assign[0].Items)
+                    {
+                        if (styleRef.Kind != StepKind.Ref || c.F.TypeOf(styleRef.Ref) != "IFCSURFACESTYLE") continue;
+                        var surf = c.F.Args(styleRef.Ref);   // (Name, Side, (renderings))
+                        if (surf == null || surf.Count < 3 || surf[2].Kind != StepKind.List) continue;
+                        foreach (var rendRef in surf[2].Items)
+                        {
+                            if (rendRef.Kind != StepKind.Ref) continue;
+                            string t = c.F.TypeOf(rendRef.Ref);
+                            if (t != "IFCSURFACESTYLERENDERING" && t != "IFCSURFACESTYLESHADING") continue;
+                            var rend = c.F.Args(rendRef.Ref);   // (SurfaceColour, Transparency?, …)
+                            if (rend == null || rend.Count < 1 || rend[0].Kind != StepKind.Ref) continue;
+                            var rgb = c.F.Args(rend[0].Ref);    // IFCCOLOURRGB(Name, R, G, B)
+                            if (rgb == null || rgb.Count < 4) continue;
+                            float tr = rend.Count > 1 && rend[1].Kind == StepKind.Number
+                                ? Mathf.Clamp01(rend[1].AsFloat) : 0f;
+                            c.StyleOfItem[a[0].Ref] =
+                                (new Color(rgb[1].AsFloat, rgb[2].AsFloat, rgb[3].AsFloat), tr);
+                            break;
+                        }
+                        if (c.StyleOfItem.ContainsKey(a[0].Ref)) break;
+                    }
+                    if (c.StyleOfItem.ContainsKey(a[0].Ref)) break;
+                }
+            }
         }
 
         private static void MapVoidsAndFills(Ctx c)

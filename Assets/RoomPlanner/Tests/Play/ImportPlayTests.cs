@@ -129,6 +129,39 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator BakedElementGetsCategoryMaterialAndFileColour()
+        {
+            var (import, _, _) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            var sofa = new ImportedMep
+            {
+                Name = "Sofa", Category = MepCategory.Furniture,
+                Origin = new Vector3(1f, 0.4f, 1f),
+                HasColor = true, Color = new Color(0.8f, 0.2f, 0.1f), Transparency = 0.5f,
+            };
+            sofa.Vertices.AddRange(new[]
+            {
+                new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, -0.5f),
+                new Vector3(0.5f, 0f, 0.5f), new Vector3(-0.5f, 0f, 0.5f),
+            });
+            sofa.Triangles.AddRange(new[] { 0, 1, 2, 0, 2, 3 });
+            b.Plumbing.Add(sofa);
+            import.BuildScene(b);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            Assert.IsNotNull(view);
+            StringAssert.Contains("Furniture", view.name);
+            Assert.AreEqual(MepCategory.Furniture, view.Category);
+            var sel = view.GetComponent<Selectable>();
+            Assert.IsTrue(sel.IsPainted, "the file colour rides the paint machinery");
+            Assert.AreEqual(0.8f, sel.Paint.r, 1e-4);
+            Assert.AreEqual(0.5f, sel.Paint.a, 1e-4, "alpha = 1 − transparency");
+        }
+
+        [UnityTest]
         public IEnumerator BuildsSegmentsAndSlabs_FromImportedBuilding()
         {
             var (import, walls, _) = MakeRig();

@@ -21,6 +21,10 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.FindProperty("stairMat").objectReferenceValue = ctx.StairMat;
             so.FindProperty("plumbingMat").objectReferenceValue = ctx.PlumbingMat;
+            so.FindProperty("furnitureMat").objectReferenceValue = ctx.FurnitureMat;
+            so.FindProperty("proxyMat").objectReferenceValue = ctx.ProxyMat;
+            so.FindProperty("railingMat").objectReferenceValue = ctx.RailingMat;
+            so.FindProperty("mepGlassMat").objectReferenceValue = ctx.GlassMat;
             so.ApplyModifiedProperties();
 
             // persistence v0: autosave on pause/quit, restore on launch (design/06)

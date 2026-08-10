@@ -86,17 +86,26 @@ namespace RoomPlanner.Core.Ifc
         public Color PaintColor;
     }
 
+    /// <summary>What a baked-mesh element IS — drives its material in the scene.</summary>
+    public enum MepCategory { Plumbing = 0, Furniture = 1, Proxy = 2, Railing = 3 }
+
     /// <summary>
-    /// An MEP fixture (plumbing terminal etc.) as a baked mesh: IFC ships them as Breps,
-    /// not parameters. Vertices are LOCAL around Origin so the object moves by transform.
+    /// A baked-mesh element (plumbing terminal, furniture, proxy, railing): IFC ships
+    /// them as Breps, not parameters. Vertices are LOCAL around Origin so the object
+    /// moves by transform. Colour comes from IfcStyledItem when the file has one.
     /// </summary>
     public sealed class ImportedMep
     {
         public string Name;
+        public MepCategory Category;
         public Vector3 Origin;                  // Unity world, metres
         public List<Vector3> Vertices = new();  // local to Origin
         public List<int> Triangles = new();
         public int StoreyIndex = -1;
+        public bool HasColor;
+        public Color Color;
+        /// <summary>0 = opaque, 1 = fully transparent (IfcSurfaceStyleRendering).</summary>
+        public float Transparency;
     }
 
     public sealed class ImportedBuilding
