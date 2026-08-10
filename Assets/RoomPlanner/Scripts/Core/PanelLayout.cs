@@ -28,13 +28,14 @@ namespace RoomPlanner.Core
             return y + rowIndex * UiTokens.RowStep + UiTokens.RowHeight * 0.5f;
         }
 
-        /// <summary>Full panel height for a row count (auto-height, §3.3).</summary>
+        /// <summary>Full panel height for a row count (auto-height, §3.3). No artificial
+        /// floor: padding + title bar already is the natural minimum.</summary>
         public static float PanelHeight(int rows, bool hasTabs)
         {
             float h = 2f * UiTokens.PanelPadding + UiTokens.TitleBarHeight;
             if (hasTabs) h += TabStripHeight;
             if (rows > 0) h += rows * UiTokens.RowStep - (UiTokens.RowStep - UiTokens.RowHeight);
-            return Mathf.Max(h, 0.10f);
+            return h;
         }
 
         // ---- slider mapping (§2.2) ----

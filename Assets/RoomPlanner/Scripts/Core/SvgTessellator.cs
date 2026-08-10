@@ -92,7 +92,20 @@ namespace RoomPlanner.Core
                 int offset = verts.Count;
                 foreach (var v in merged)
                     verts.Add(new Vector3(v.x / viewBox - 0.5f, 0.5f - v.z / viewBox, 0f));
-                foreach (int idx in indices) tris.Add(offset + idx);
+                for (int t = 0; t + 2 < indices.Count; t += 3)
+                {
+                    // The clipper's unchecked tail triangle can be zero-area (collinear
+                    // leftovers) — dead weight on the GPU and a winding-test tripwire.
+                    // Threshold 1e-3 in viewBox units²: float noise on a degenerate tail
+                    // reaches ~1e-6, while the smallest REAL icon triangle is ~8.8 —
+                    // three orders of margin on both sides.
+                    Vector3 a = merged[indices[t]], b = merged[indices[t + 1]], c = merged[indices[t + 2]];
+                    float cross = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+                    if (Mathf.Abs(cross) < 1e-3f) continue;
+                    tris.Add(offset + indices[t]);
+                    tris.Add(offset + indices[t + 1]);
+                    tris.Add(offset + indices[t + 2]);
+                }
             }
 
             if (tris.Count == 0) return empty;
