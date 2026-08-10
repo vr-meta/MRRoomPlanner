@@ -33,6 +33,7 @@ namespace RoomPlanner.EditorTools
             SetupImportTool.Build(ctx);
             SetupElectricTool.Build(ctx);
             SetupPaintTool.Build(ctx);
+            SetupOpeningsTool.Build(ctx);   // after SetupWallTool: needs the graph renderer
 
             ToolMenuAndInspector(ctx);
             SetupCoreRig.TryEnableEffectMeshColliders();

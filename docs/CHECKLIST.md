@@ -636,7 +636,7 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   в срединной плоскости, submesh столярки; +тесты (рейкасты в полотно/перемычку)
 - [x] **O2** — Core: `OpeningMath` — `CanPlace` (простенок ≥5 см, перемычка ≥5 см,
   ширина ≥30 см, без пересечений), `NearestOpening` (для удаления по прицелу); +тесты
-- [~] **O3** — `OpeningsController : ITool` («Open», слот 4 радиала, иконка
+- [x] **O3** — `OpeningsController : ITool` («Open», слот 4 радиала, иконка
   `door-window`): табы Door/Window/Garage (Numeric-размеры), ghost-рамка с цветом
   валидности, триггер = `CreateOpeningCommand` (undo), B у проёма = `DeleteOpening`,
   B по пустоте = Esc; `SetupOpeningsTool` + реестр + слот; +Play-тесты
