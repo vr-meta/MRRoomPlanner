@@ -175,8 +175,10 @@ namespace RoomPlanner.EditorTools
 
         /// <summary>
         /// SSAO renderer feature on the URP renderer asset (design/04): created once,
-        /// inactive by default, toggled at runtime from the Paint settings. Source=Depth
-        /// with AfterOpaque, so our custom shader needs no extra passes or keywords.
+        /// runtime default OFF (ToolManager.Start), the Rendering-page toggle opts in.
+        /// Settings are (re)applied every Setup: full-res + DepthNormals — the original
+        /// half-res depth-only AO "swam" separately from the geometry on device
+        /// (headset feedback 2026-08-11).
         /// </summary>
         private static Object EnsureSsaoFeature()
         {
@@ -188,54 +190,50 @@ namespace RoomPlanner.EditorTools
                 return null;
             }
 
+            UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion feature = null;
             foreach (var sub in AssetDatabase.LoadAllAssetsAtPath(path))
                 if (sub is UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion existing)
                 {
-                    // The feature must be ACTIVE in the asset at build time or Unity strips
-                    // its shaders from the player and the runtime toggle spams
-                    // "Couldn't find the required resources" every frame (device log
-                    // 2026-08-11). ToolManager.Start turns it OFF at runtime instead.
-                    var eso = new SerializedObject(existing);
-                    if (!eso.FindProperty("m_Active").boolValue)
-                    {
-                        eso.FindProperty("m_Active").boolValue = true;
-                        eso.ApplyModifiedProperties();
-                        EditorUtility.SetDirty(data);
-                        AssetDatabase.SaveAssets();
-                    }
-                    return existing;
+                    feature = existing;
+                    break;
                 }
 
-            var feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion>();
-            feature.name = "SSAO";
-            AssetDatabase.AddObjectToAsset(feature, data);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId);
+            if (feature == null)
+            {
+                feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion>();
+                feature.name = "SSAO";
+                AssetDatabase.AddObjectToAsset(feature, data);
+                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId);
 
-            var so = new SerializedObject(data);
-            var list = so.FindProperty("m_RendererFeatures");
-            list.arraySize++;
-            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = feature;
-            var map = so.FindProperty("m_RendererFeatureMap");
-            map.arraySize++;
-            map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
-            so.ApplyModifiedProperties();
+                var so = new SerializedObject(data);
+                var list = so.FindProperty("m_RendererFeatures");
+                list.arraySize++;
+                list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = feature;
+                var map = so.FindProperty("m_RendererFeatureMap");
+                map.arraySize++;
+                map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
+                so.ApplyModifiedProperties();
+                Debug.Log("[Setup] SSAO renderer feature created");
+            }
 
             var fso = new SerializedObject(feature);
-            // active in the ASSET so the player keeps the shaders (stripping);
-            // the runtime default is OFF — ToolManager.Start disables it
+            // active in the ASSET so the player keeps the shaders (build stripping —
+            // device log 2026-08-11); the runtime default is OFF via ToolManager.Start
             fso.FindProperty("m_Active").boolValue = true;
             var settings = fso.FindProperty("m_Settings");
-            settings.FindPropertyRelative("Source").enumValueIndex = 1;        // Depth
-            settings.FindPropertyRelative("Downsample").boolValue = true;
+            // DepthNormals + FULL resolution: the half-res (Downsample) AO drifted
+            // visibly against the geometry in stereo ("тени двигаются отдельно",
+            // headset feedback 2026-08-11)
+            settings.FindPropertyRelative("Source").enumValueIndex = 1;        // DepthNormals
+            settings.FindPropertyRelative("Downsample").boolValue = false;
             settings.FindPropertyRelative("AfterOpaque").boolValue = true;     // mobile-cheap
-            settings.FindPropertyRelative("Intensity").floatValue = 1.2f;
-            settings.FindPropertyRelative("Radius").floatValue = 0.25f;
+            settings.FindPropertyRelative("Intensity").floatValue = 1.0f;
+            settings.FindPropertyRelative("Radius").floatValue = 0.18f;
             settings.FindPropertyRelative("DirectLightingStrength").floatValue = 0.25f;
             fso.ApplyModifiedProperties();
 
             EditorUtility.SetDirty(data);
             AssetDatabase.SaveAssets();
-            Debug.Log("[Setup] SSAO renderer feature created (inactive)");
             return feature;
         }
 
