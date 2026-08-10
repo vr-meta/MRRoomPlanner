@@ -36,7 +36,8 @@ namespace RoomPlanner.Electrical
 
         // wire routing
         public const float CeilingOffset = 0.20f;      // horizontal run distance below the ceiling
-        public const float MinCeilingOffset = 0.10f;
+        // 1 cm = the Ø15 tube presses right against the ceiling (headset request 2026-08-10)
+        public const float MinCeilingOffset = 0.01f;
         public const float MaxCeilingOffset = 0.50f;
         public const float CeilingOffsetStep = 0.05f;
 

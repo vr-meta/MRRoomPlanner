@@ -107,12 +107,9 @@ namespace RoomPlanner.Core.Ifc
                 styleTr = s.Transparency;
             }
 
-            void EmitBrep(int brepId, Matrix4x4 m)
+            void EmitFaces(StepValue faceList, Matrix4x4 m)
             {
-                var brep = c.F.Args(brepId);              // (Outer shell)
-                var shell = c.F.Deref(brep[0]);           // IFCCLOSEDSHELL((faces))
-                if (shell == null || shell.Count < 1 || shell[0].Kind != StepKind.List) return;
-                foreach (var faceRef in shell[0].Items)
+                foreach (var faceRef in faceList.Items)
                 {
                     var face = c.F.Deref(faceRef);        // IFCFACE((bounds))
                     if (face == null || face.Count < 1 || face[0].Kind != StepKind.List) continue;
@@ -141,49 +138,100 @@ namespace RoomPlanner.Core.Ifc
                 }
             }
 
+            void EmitBrep(int brepId, Matrix4x4 m)
+            {
+                var brep = c.F.Args(brepId);              // (Outer shell)
+                var shell = c.F.Deref(brep[0]);           // IFCCLOSEDSHELL((faces))
+                if (shell == null || shell.Count < 1 || shell[0].Kind != StepKind.List) return;
+                EmitFaces(shell[0], m);
+            }
+
+            // Open face soups (the SMEG fridge ships this way): face sets, no closed shell.
+            void EmitSurfaceModel(int modelId, Matrix4x4 m)
+            {
+                var a = c.F.Args(modelId);                // ((face sets))
+                if (a == null || a.Count < 1 || a[0].Kind != StepKind.List) return;
+                foreach (var setRef in a[0].Items)
+                {
+                    if (setRef.Kind != StepKind.Ref) continue;
+                    var set = c.F.Args(setRef.Ref);       // IFCCONNECTEDFACESET((faces))
+                    if (set == null || set.Count < 1 || set[0].Kind != StepKind.List) continue;
+                    EmitFaces(set[0], m);
+                }
+            }
+
             // Furniture ships as SweptSolid stacks (IKEA sofa = 7 extrusions), not Breps —
-            // tessellate them into the same mesh: side quads + ear-clipped caps.
+            // tessellate them into the same mesh: side quads + ear-clipped caps. Profile
+            // VOIDS matter: a window trim is a frame with a hole, and ignoring the inner
+            // rings would board the window up with a solid slab.
             void EmitExtruded(int solidId, Matrix4x4 m)
             {
                 var sa = c.F.Args(solidId);
                 if (sa == null || sa.Count < 4) return;
                 var ring = ProfileOutline(c, sa[0]);
                 if (ring == null || ring.Count < 3) return;
+                var holes = ProfileVoidRings(c, sa[0]);
                 var pm = m * Axis2Placement3D(c, sa[1]);
                 var dir = Direction(c, sa[2]) * sa[3].AsFloat;
-
-                float area2 = 0f;                      // normalize the ring CCW in-plane
-                for (int i = 0; i < ring.Count; i++)
-                {
-                    var p0 = ring[i]; var p1 = ring[(i + 1) % ring.Count];
-                    area2 += p0.x * p1.y - p1.x * p0.y;
-                }
-                if (area2 < 0f) ring.Reverse();
                 bool up = dir.z >= 0f;                 // extrusion along the profile normal?
 
-                int n = ring.Count;
-                int lo = verts.Count;
-                foreach (var p in ring) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p)));
-                int hi = verts.Count;
-                foreach (var p in ring) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p + dir)));
-
-                // sides: outward for a CCW ring extruded along +normal (order survives the
-                // Unity axis swap for the same reason the Brep loops above do)
-                for (int i = 0; i < n; i++)
+                // sides: outward for a CCW outer ring extruded along +normal (order
+                // survives the Unity axis swap for the same reason the Brep loops do);
+                // hole rings run CW so the same emitter faces them into the cavity
+                void SideWalls(List<Vector3> r, bool ccw)
                 {
-                    int j = (i + 1) % n;
-                    if (up) { tris.Add(lo + i); tris.Add(lo + j); tris.Add(hi + j); tris.Add(lo + i); tris.Add(hi + j); tris.Add(hi + i); }
-                    else { tris.Add(lo + j); tris.Add(lo + i); tris.Add(hi + i); tris.Add(lo + j); tris.Add(hi + i); tris.Add(hi + j); }
+                    float area2 = 0f;
+                    for (int i = 0; i < r.Count; i++)
+                    {
+                        var p0 = r[i]; var p1 = r[(i + 1) % r.Count];
+                        area2 += p0.x * p1.y - p1.x * p0.y;
+                    }
+                    if (ccw != area2 > 0f) r.Reverse();
+
+                    int n = r.Count;
+                    int lo = verts.Count;
+                    foreach (var p in r) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p)));
+                    int hi = verts.Count;
+                    foreach (var p in r) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p + dir)));
+                    for (int i = 0; i < n; i++)
+                    {
+                        int j = (i + 1) % n;
+                        if (up) { tris.Add(lo + i); tris.Add(lo + j); tris.Add(hi + j); tris.Add(lo + i); tris.Add(hi + j); tris.Add(hi + i); }
+                        else { tris.Add(lo + j); tris.Add(lo + i); tris.Add(hi + i); tris.Add(lo + j); tris.Add(hi + i); tris.Add(hi + j); }
+                    }
                 }
 
-                // caps: ear-clip the profile, establish the +normal order numerically
-                var flat = new List<Vector3>(n);
+                SideWalls(ring, ccw: true);
+                foreach (var hole in holes) SideWalls(hole, ccw: false);
+
+                // caps: ear-clip the profile with its holes bridged in, establish the
+                // +normal order numerically from the first emitted triangle
+                var flat = new List<Vector3>(ring.Count);
                 foreach (var p in ring) flat.Add(new Vector3(p.x, 0f, p.y));
-                var capTris = Polygon.Triangulate(flat);
+                var flatHoles = new List<IReadOnlyList<Vector3>>(holes.Count);
+                foreach (var hole in holes)
+                {
+                    var fh = new List<Vector3>(hole.Count);
+                    foreach (var p in hole) fh.Add(new Vector3(p.x, 0f, p.y));
+                    flatHoles.Add(fh);
+                }
+                List<Vector3> mergedFlat;
+                var capTris = holes.Count > 0
+                    ? Polygon.TriangulateWithHoles(flat, flatHoles, out mergedFlat)
+                    : Polygon.Triangulate(mergedFlat = flat);
                 if (capTris.Count >= 3)
                 {
-                    var a2 = ring[capTris[0]]; var b2 = ring[capTris[1]]; var c2 = ring[capTris[2]];
+                    var merged = new List<Vector3>(mergedFlat.Count);
+                    foreach (var p in mergedFlat) merged.Add(new Vector3(p.x, p.z, 0f));
+
+                    var a2 = merged[capTris[0]]; var b2 = merged[capTris[1]]; var c2 = merged[capTris[2]];
                     bool flip = (b2.x - a2.x) * (c2.y - a2.y) - (b2.y - a2.y) * (c2.x - a2.x) < 0f;
+
+                    int lo = verts.Count;
+                    foreach (var p in merged) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p)));
+                    int hi = verts.Count;
+                    foreach (var p in merged) verts.Add(ToUnity(c, pm.MultiplyPoint3x4(p + dir)));
+
                     for (int i = 0; i + 2 < capTris.Count; i += 3)
                     {
                         int ca = capTris[i];
@@ -207,6 +255,10 @@ namespace RoomPlanner.Core.Ifc
                         break;
                     case "IFCEXTRUDEDAREASOLID":
                         EmitExtruded(itemRef.Ref, m);
+                        TakeStyle(itemRef.Ref);
+                        break;
+                    case "IFCFACEBASEDSURFACEMODEL":
+                        EmitSurfaceModel(itemRef.Ref, m);
                         TakeStyle(itemRef.Ref);
                         break;
                 }
