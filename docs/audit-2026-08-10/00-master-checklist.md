@@ -14,14 +14,14 @@
 - [ ] **B1.** Электрика не сохраняется в проект, а загрузка её уничтожает → [08-electrical.md](08-electrical.md) §Б1
 - [ ] **B2.** Текстурная отделка при save/load деградирует в белый цвет → [06-paint-textures.md](06-paint-textures.md) §Б1
 - [ ] **B3.** Измерения не сохраняются; после загрузки проекта висят от прошлой сцены → [01-measure.md](01-measure.md) §Б1
-- [ ] **B4.** Сплит стены теряет проёмы (T-стык через стену с окном ломает окно) → [02-walls.md](02-walls.md) §Б1
+- [x] **B4.** Сплит стены теряет проёмы (T-стык через стену с окном ломает окно) → [02-walls.md](02-walls.md) §Б1
 - [x] **B5.** `Floor.AddHole`: непостроенный мост молча уничтожает плиту → [04-floors.md](04-floors.md) §Б1
-- [ ] **B6.** `ProjectMep.Storey` не заполняется в Capture → фильтр этажей мёртв после загрузки → [09-ifc-import.md](09-ifc-import.md) §Б1
-- [ ] **B7.** Ряд «Original look» в Paint никогда не срабатывает → [06-paint-textures.md](06-paint-textures.md) §Б2
+- [x] **B6.** `ProjectMep.Storey` не заполняется в Capture → фильтр этажей мёртв после загрузки → [09-ifc-import.md](09-ifc-import.md) §Б1
+- [x] **B7.** Ряд «Original look» в Paint никогда не срабатывает → [06-paint-textures.md](06-paint-textures.md) §Б2
 - [ ] **B8.** Ряд «Corner» (Bevel/Round) стен — UI без эффекта → [02-walls.md](02-walls.md) §Б2
 - [x] **B9.** Калибровка Blueprint выставляет масштаб вне диапазона слайдера → [07-blueprint.md](07-blueprint.md) §Б1
-- [ ] **B10.** `Switch To URP` затирает Renderer-ассет вместе с SSAO-фичей → [06-paint-textures.md](06-paint-textures.md) §Б3
-- [ ] **B11.** Скрытая (удалённая) стена продолжает формировать стыки соседей → [02-walls.md](02-walls.md) §Б3
+- [x] **B10.** `Switch To URP` затирает Renderer-ассет вместе с SSAO-фичей → [06-paint-textures.md](06-paint-textures.md) §Б3
+- [x] **B11.** Скрытая (удалённая) стена продолжает формировать стыки соседей → [02-walls.md](02-walls.md) §Б3
 - [x] **B12.** Атомарная запись автосейва (temp + Replace); битый JSON молча перетирается пустым → [12-persistence.md](12-persistence.md) §Б1
 - [x] **B13.** Вырез в плите над лестницей неверен на импорте (первый этаж — бьёшься головой): правило headroom 2.0 м → [05-stairs.md](05-stairs.md) §Б1
 
@@ -49,7 +49,7 @@
 - [ ] **Q3.** Paint: отделка по сторонам стены; фильтр таба по типу цели; T4 (метрический верх плиты) → [06-paint-textures.md](06-paint-textures.md) §Р1–Р3
 - [ ] **Q4.** Blueprint: план отдельным слоем, путь файла в проект, undo placement → [07-blueprint.md](07-blueprint.md) §Р1–Р3
 - [~] **Q5.** IFC: асинхронный импорт с Progress, счётчики невидимых пропусков, защита от циклов → [09-ifc-import.md](09-ifc-import.md) §Р1, §Б2
-- [ ] **Q6.** UI: точка в numpad, живые Readout, скролл панели, кнопки Undo/Redo → [10-ui-system.md](10-ui-system.md) §Р1–Р4
+- [~] **Q6.** UI: точка в numpad, живые Readout, скролл панели, кнопки Undo/Redo → [10-ui-system.md](10-ui-system.md) §Р1–Р4
 - [ ] **Q7.** Локомоция: телепорт по земле/скану, глушить ход при попапе → [11-locomotion.md](11-locomotion.md) §Р1–Р2
 - [~] **Q8.** Электрика: смета в CSV, несколько щитков, зачистка мёртвого API → [08-electrical.md](08-electrical.md) §Р3–Р4
 
