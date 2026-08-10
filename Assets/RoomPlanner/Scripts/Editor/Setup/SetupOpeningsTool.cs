@@ -30,6 +30,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.FindProperty("walls").objectReferenceValue = ctx.Rig.GetComponent<WallGraphRenderer>();
             so.FindProperty("ghost").objectReferenceValue = ghost;
+            so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;   // #47
             so.ApplyModifiedProperties();
 
             var mso = new SerializedObject(ctx.Manager);

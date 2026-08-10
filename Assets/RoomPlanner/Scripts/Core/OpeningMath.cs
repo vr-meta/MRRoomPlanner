@@ -20,7 +20,8 @@ namespace RoomPlanner.Walls
         /// Piers to both ends and every existing opening ≥ MinPier, top clears the
         /// header, width sane. Hidden walls are the caller's business.
         /// </summary>
-        public static bool CanPlace(WallSegment s, float centerMeters, float width, float topAboveBase)
+        public static bool CanPlace(WallSegment s, float centerMeters, float width,
+            float topAboveBase, WallOpening ignore = null)
         {
             if (s == null || width < MinWidth) return false;
             float len = s.Length;
@@ -32,6 +33,7 @@ namespace RoomPlanner.Walls
 
             foreach (var o in s.Openings)
             {
+                if (o == ignore) continue;   // an opening never collides with itself (drag)
                 float oc = o.AlongFraction * len;
                 float oh = o.Width * 0.5f;
                 bool clear = centerMeters + half + MinPier <= oc - oh

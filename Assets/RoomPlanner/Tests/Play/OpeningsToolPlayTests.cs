@@ -101,5 +101,27 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, seg.Openings.Count, "and undo puts the SAME opening back");
             Assert.AreSame(opening, seg.Openings[0]);
         }
+
+        [UnityTest]
+        public IEnumerator MoveCommand_SlidesTheOpening_AndIsUndoable()
+        {
+            var (walls, model, seg) = MakeWallRig();
+            yield return null;
+            var view = walls.ViewOf(seg);
+            var target = view.GetComponent<Selectable>();
+            var opening = new WallOpening
+            {
+                Id = 1002, AlongFraction = 0.3f, Width = 0.85f, Height = 2.1f,
+                Kind = OpeningKind.Door,
+            };
+            model.History.Execute(new CreateOpeningCommand(walls, seg, opening, target));
+
+            model.History.Record(new OpeningMoveCommand(walls, seg, opening, 0.3f, 0.6f, target));
+            // Record = the gesture already applied live; redo path must land the same spot
+            model.History.Undo();
+            Assert.AreEqual(0.3f, opening.AlongFraction, 1e-5f, "undo returns the door");
+            model.History.Redo();
+            Assert.AreEqual(0.6f, opening.AlongFraction, 1e-5f, "redo slides it back");
+        }
     }
 }

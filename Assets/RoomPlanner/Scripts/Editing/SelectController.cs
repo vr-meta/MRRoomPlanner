@@ -27,6 +27,16 @@ namespace RoomPlanner.Editing
         private Vector3 _dragTotal;
         private float _dragPlaneY;
 
+        // Armed-but-not-dragging state (#46): the selecting tap arms; the drag engages
+        // on hold or travel. Constants mirror the measure tap-vs-drag window.
+        private const float DragHoldSeconds = 0.25f;
+        private const float DragEngageDistance = 0.03f;
+        private ISelectable _armed;
+        private float _armedAt;
+        private Vector3 _armedStart;
+        private bool _armedStartValid;
+        private float _armedPlaneY;
+
         public string Id => "select";
         public string PaletteLabel => "Sel";
         public string IconId => "select-cursor";
@@ -55,6 +65,7 @@ namespace RoomPlanner.Editing
             // desync undo from the visible scene.
             EndHandleDrag();          // settle physics + record, never leave a half-applied drag
             EndDrag(record: true);
+            _armed = null;            // an armed (not yet engaged) drag simply dissolves
             Deselect();
             SetHover(null);
             UpdateHandles();          // hide handle spheres — stale colliders on layer 6 would
@@ -94,6 +105,32 @@ namespace RoomPlanner.Editing
                     return;
                 }
                 EndHandleDrag();
+            }
+
+            // --- Armed drag (#46): the selecting tap must never nudge the object. The drag
+            // engages only after a real hold or real hand travel; releasing earlier leaves
+            // a pure selection and nothing moved.
+            if (_armed != null)
+            {
+                if (!_armed.IsAlive) _armed = null;
+                else if (input.ConfirmHeld())
+                {
+                    bool engage = Time.time - _armedAt >= DragHoldSeconds;
+                    if (MeasureMath.RayPlaneY(ray, _armedPlaneY, out var cur))
+                    {
+                        if (!_armedStartValid) { _armedStart = cur; _armedStartValid = true; }
+                        else if ((cur - _armedStart).sqrMagnitude
+                                 >= DragEngageDistance * DragEngageDistance) engage = true;
+                    }
+                    if (engage)
+                    {
+                        var target = _armed;
+                        _armed = null;
+                        BeginDrag(target, ray);   // latches from the CURRENT cursor — no jump
+                    }
+                    return;
+                }
+                else _armed = null;               // early release — tap = select only
             }
 
             // --- Dragging the selected object across the ground plane at its own height ---
@@ -155,7 +192,12 @@ namespace RoomPlanner.Editing
                 else if (over)
                 {
                     Select(picked);
-                    BeginDrag(picked, ray);
+                    // Arm instead of dragging (#46): jitter during the click used to move
+                    // the object every single time and cost an undo.
+                    _armed = picked;
+                    _armedAt = Time.time;
+                    _armedPlaneY = picked.WorldBounds.center.y;
+                    _armedStartValid = MeasureMath.RayPlaneY(ray, _armedPlaneY, out _armedStart);
                 }
                 else
                 {

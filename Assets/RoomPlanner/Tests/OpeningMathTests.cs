@@ -65,6 +65,19 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void CanPlace_IgnoresTheDraggedOpeningItself()
+        {
+            // Drag validation (#47 follow-up): an opening must not collide with itself.
+            var s = Seg();
+            AddOpening(s, 2f, 1f);
+            var dragged = s.Openings[0];
+            Assert.IsFalse(OpeningMath.CanPlace(s, 2.1f, 1f, 2.1f),
+                "as a NEW opening the spot is blocked by the existing one");
+            Assert.IsTrue(OpeningMath.CanPlace(s, 2.1f, 1f, 2.1f, ignore: dragged),
+                "as the dragged opening itself the spot is free");
+        }
+
+        [Test]
         public void NearestOpening_PicksTheClosest_WithinReach()
         {
             var s = Seg();
