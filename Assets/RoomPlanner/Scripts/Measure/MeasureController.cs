@@ -163,16 +163,9 @@ namespace RoomPlanner.Measure
                 MaybeHidePlus();
             }
 
-            // --- Точка назначения: ось (грип) + магнит к концам (работает и в воздухе) ---
-            Vector3 target = _cursorPoint;
-            if (_pendingStart.HasValue && input.SnapHeld())
-                target = SnapToAxis(_pendingStart.Value, _cursorPoint);
-
-            bool corners = manager == null || manager.SnapCorner;
-            if (corners && TrySnapToEndpoint(_cursorPoint, out var snapPt, null))
-                target = snapPt;
-            else if (manager != null && manager.SnapGrid)
-                target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
+            // --- Destination: the ONE snap policy shared by every mode (audit 01 §Б3) ---
+            Vector3 target = ResolveTarget(_cursorPoint, allowSurface: false,
+                exclude: null, axisAnchor: _pendingStart);
 
             if (reticle != null)
             {
@@ -198,7 +191,12 @@ namespace RoomPlanner.Measure
                 else if (effHandle != null)
                 {
                     _dragging = effHandle;                               // тащить точку (по коллайдеру или магниту)
-                    if (effHandle.Owner != null) effHandle.Owner.SetInteractable(false);
+                    if (effHandle.Owner != null)
+                    {
+                        _dragOrigin = effHandle.IsEndA
+                            ? effHandle.Owner.PointA : effHandle.Owner.PointB;
+                        effHandle.Owner.SetInteractable(false);
+                    }
                 }
                 else
                     PlacePoint(target);                                  // первая точка нового измерения
@@ -228,15 +226,9 @@ namespace RoomPlanner.Measure
                 return;
             }
 
-            Vector3 target = tip;
-
-            bool corners = manager == null || manager.SnapCorner;
-            if (corners && TrySnapToEndpoint(tip, out var sp, null)) target = sp;
-            else if (TrySnapToNearbySurface(tip, out var sfc)) target = sfc;
-            if (manager != null && manager.SnapGrid)
-                target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
-            if (_pendingStart.HasValue && input.SnapHeld())
-                target = SnapToAxis(_pendingStart.Value, target);
+            // same snap policy as ray mode — the tip only adds the surface magnet
+            Vector3 target = ResolveTarget(tip, allowSurface: true,
+                exclude: null, axisAnchor: _pendingStart);
 
             // the reticle IS the tape tip — always visible in hands mode
             if (reticle != null)
@@ -282,16 +274,8 @@ namespace RoomPlanner.Measure
         {
             if (input.ConfirmHeld())
             {
-                Vector3 t = tip;
-                if (TrySnapToEndpoint(tip, out var sp, _dragging.Owner)) t = sp;
-                else if (TrySnapToNearbySurface(tip, out var sfc)) t = sfc;
-                if (manager != null && manager.SnapGrid)
-                    t = MeasureMath.SnapToGridXZ(t, manager.GridSize);
-                if (input.SnapHeld() && _dragging.Owner != null)
-                {
-                    Vector3 other = _dragging.IsEndA ? _dragging.Owner.PointB : _dragging.Owner.PointA;
-                    t = SnapToAxis(other, t);
-                }
+                Vector3 t = ResolveTarget(tip, allowSurface: true,
+                    exclude: _dragging.Owner, axisAnchor: OtherEnd(_dragging));
                 ApplyDrag(_dragging, t);
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
             }
@@ -305,6 +289,7 @@ namespace RoomPlanner.Measure
                     ApplyDrag(h, _dragOrigin);        // barely moved — put it back
                     StartChainFrom(_dragOrigin);      // tap on a vertex = continue from it
                 }
+                else RecordDragCommand(h);            // one undo entry per gesture (01 §Б2)
             }
         }
 
@@ -342,21 +327,54 @@ namespace RoomPlanner.Measure
         {
             if (input.ConfirmHeld())
             {
-                Vector3 t = _cursorPoint;
-                if (input.SnapHeld() && _dragging.Owner != null)
-                {
-                    Vector3 other = _dragging.IsEndA ? _dragging.Owner.PointB : _dragging.Owner.PointA;
-                    t = SnapToAxis(other, t);
-                }
-                if (TrySnapToEndpoint(_cursorPoint, out var sp, _dragging.Owner)) t = sp;
+                Vector3 t = ResolveTarget(_cursorPoint, allowSurface: false,
+                    exclude: _dragging.Owner, axisAnchor: OtherEnd(_dragging));
                 ApplyDrag(_dragging, t);
                 if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
             }
             else
             {
-                if (_dragging.Owner != null) _dragging.Owner.SetInteractable(true);
+                var h = _dragging;
                 _dragging = null;
+                if (h.Owner != null) h.Owner.SetInteractable(true);
+                RecordDragCommand(h);                 // one undo entry per gesture (01 §Б2)
             }
+        }
+
+        /// <summary>The fixed end of the dragged measurement — the axis modifier's anchor.</summary>
+        private static Vector3? OtherEnd(MeasurePointHandle h)
+        {
+            if (h == null || h.Owner == null) return null;
+            return h.IsEndA ? h.Owner.PointB : h.Owner.PointA;
+        }
+
+        /// <summary>
+        /// Probe the endpoint/surface magnets, then resolve the shared snap-priority
+        /// policy (MeasureMath.ApplySnapPolicy). Every gesture in both modes goes
+        /// through here — the three hand-rolled orderings disagreed (audit 01 §Б3).
+        /// </summary>
+        private Vector3 ResolveTarget(Vector3 raw, bool allowSurface, Measurement exclude, Vector3? axisAnchor)
+        {
+            Vector3? endpoint = null;
+            if ((manager == null || manager.SnapCorner) && TrySnapToEndpoint(raw, out var sp, exclude))
+                endpoint = sp;
+            Vector3? surface = null;
+            if (!endpoint.HasValue && allowSurface && TrySnapToNearbySurface(raw, out var sfc))
+                surface = sfc;
+            return MeasureMath.ApplySnapPolicy(raw, endpoint, surface,
+                axisAnchor, input.SnapHeld(),
+                manager != null && manager.SnapGrid, manager != null ? manager.GridSize : 0f);
+        }
+
+        /// <summary>Record the finished drag as one undo entry; a sub-mm wiggle is not an edit.</summary>
+        private void RecordDragCommand(MeasurePointHandle h)
+        {
+            if (sceneModel == null || h == null || h.Owner == null) return;
+            Vector3 after = h.IsEndA ? h.Owner.PointA : h.Owner.PointB;
+            if ((after - _dragOrigin).sqrMagnitude < 1e-6f) return;
+            var sel = h.Owner.GetComponent<Selectable>();
+            if (sel == null) return;
+            sceneModel.History.Record(new MeasurePointMoveCommand(sel, h.Owner, h.IsEndA, _dragOrigin, after));
         }
 
         private void ApplyDrag(MeasurePointHandle h, Vector3 pos)
@@ -441,7 +459,13 @@ namespace RoomPlanner.Measure
                 if (done == null) return;   // preview destroyed externally — abandon gracefully
                 done.Set(start, p);
                 _measurements.Add(done);
-                if (sceneModel != null) sceneModel.Register(done.GetComponent<Selectable>());
+                if (sceneModel != null)
+                {
+                    var sel = done.GetComponent<Selectable>();
+                    sceneModel.Register(sel);
+                    // Creation is history too: X takes back a misplaced point (01 §Б2).
+                    if (sel != null) sceneModel.History.Record(new Editing.CreateCommand(sel));
+                }
                 done.SetInteractable(true);
                 TrimMeasurements();
             }
@@ -550,6 +574,5 @@ namespace RoomPlanner.Measure
             return found;
         }
 
-        private static Vector3 SnapToAxis(Vector3 a, Vector3 b) => MeasureMath.SnapToAxis(a, b);
     }
 }

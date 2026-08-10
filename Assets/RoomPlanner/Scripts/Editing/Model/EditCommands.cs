@@ -35,6 +35,27 @@ namespace RoomPlanner.Editing
         public void Undo() { if (Alive) _target.MoveBy(-_delta); }
     }
 
+    /// <summary>
+    /// Creation — the mirror of <see cref="DeleteCommand"/>: the object is already live
+    /// when recorded, undo hides it, redo shows it again. Closes the systemic gap where
+    /// created objects were born OUTSIDE the history, so X could not take back a
+    /// misplaced point (audit 2026-08-10, S1).
+    /// </summary>
+    public class CreateCommand : ICommand, ISelectableCommand
+    {
+        private readonly ISelectable _target;
+
+        public CreateCommand(ISelectable target) => _target = target;
+
+        public ISelectable Target => _target;
+
+        private bool Alive => _target != null && _target.IsAlive;
+
+        public string Name => "Create";
+        public void Do() { if (Alive) _target.SetHidden(false); }
+        public void Undo() { if (Alive) _target.SetHidden(true); }
+    }
+
     /// <summary>Delete = hide (SetActive false) so the object can be restored on undo.</summary>
     public class DeleteCommand : ICommand, ISelectableCommand
     {
