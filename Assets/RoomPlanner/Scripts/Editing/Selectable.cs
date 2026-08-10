@@ -25,6 +25,8 @@ namespace RoomPlanner.Editing
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
+        private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
 
         // Tint strength: enough to read the state, weak enough to keep the object's own color
         // visible — a full repaint would erase wall paint, the core future feature (UX v2 P1.4).
@@ -121,6 +123,7 @@ namespace RoomPlanner.Editing
 
         private SurfaceFinish _finish = SurfaceFinish.None;
         private Texture2D _finishTexture;   // resolved by the caller (FinishLibrary)
+        private Texture2D _finishNormal;    // optional relief — null for most finishes (design/22)
 
         public bool IsPainted { get { Resolve(); return !_finish.IsNone; } }
 
@@ -129,6 +132,7 @@ namespace RoomPlanner.Editing
 
         public SurfaceFinish Finish { get { Resolve(); return _finish; } }
         public Texture2D FinishTexture { get { Resolve(); return _finishTexture; } }
+        public Texture2D FinishNormal { get { Resolve(); return _finishNormal; } }
 
         /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
         public Color BaseBodyColor
@@ -145,12 +149,14 @@ namespace RoomPlanner.Editing
         public void SetPaint(Color color) => SetFinish(SurfaceFinish.OfColor(color), null);
 
         /// <summary>Apply a finish; for Texture kind the caller resolves the Texture2D
-        /// through FinishLibrary (the model itself never touches assets).</summary>
-        public void SetFinish(SurfaceFinish finish, Texture2D texture)
+        /// (and the optional normal map) through FinishLibrary — the model itself never
+        /// touches assets.</summary>
+        public void SetFinish(SurfaceFinish finish, Texture2D texture, Texture2D normal = null)
         {
             Resolve();
             _finish = finish;
             _finishTexture = finish.Kind == FinishKind.Texture ? texture : null;
+            _finishNormal = finish.Kind == FinishKind.Texture ? normal : null;
             ApplyVisual();
         }
 
@@ -160,6 +166,7 @@ namespace RoomPlanner.Editing
             Resolve();
             _finish = SurfaceFinish.None;
             _finishTexture = null;
+            _finishNormal = null;
             ApplyVisual();
         }
 
@@ -216,6 +223,13 @@ namespace RoomPlanner.Editing
                         // floors keep the blueprint projection in uv0; finish textures
                         // tile over the metric uv1 channel (design/04, T4)
                         if (_floor != null) _mpb.SetFloat(UseUv1Id, 1f);
+                        // optional relief (design/22): the shader derives the TBN from
+                        // derivatives, so no mesh tangents are needed
+                        if (_finishNormal != null)
+                        {
+                            _mpb.SetTexture(BumpMapId, _finishNormal);
+                            _mpb.SetFloat(HasBumpId, 1f);
+                        }
                     }
                     if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);

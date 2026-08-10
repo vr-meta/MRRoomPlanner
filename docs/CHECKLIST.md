@@ -626,6 +626,27 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 - [ ] S5. Прогон анализатора после фиксов, тесты, APK, шлем; IfcSpace → комнаты
   (док 09) — отдельной фичей
 
+## 2t. Генератор ламината (дизайн: `design/22-laminate-generator.md`, ветка `worktree-laminate-generator`)
+
+Источник — D:\Maps (18 досок дуба 4096×684, diffuse+normal; лицензия не CC0 —
+в git не попадает). Паттерны запекаются в редакторе в тайлящиеся 2К-карты.
+
+- [x] L1. **`Core/LaminateLayout`** — раскладки Deck / Herringbone / Basket в квады
+  досок (квадратный период: 1.2 м, ёлочка 2.4 м; детерминированный seed) +
+  `LaminateLayoutTests` (покрытие без дыр/наложений, чередование, wrap, детерминизм)
+- [x] L2. **`LaminateBaker`** (Editor, menu + headless) — CPU-композитинг PlankQuad'ов
+  в 2048²: diffuse с цветокором пресета (natural/grey/dark/bleached) и V-фаской
+  швов (~2 мм затемнение + наклон нормали + ±5% яркости на доску), normal с
+  поворотом XY вместе с доской; 15 PNG в `Textures/Laminate/`, импорт
+  (Repeat/mips/NormalMap), пин-тест состава `LaminateCatalog`
+- [x] L3. **Нормали в рендере** (опционально per-материал): `FinishLibrary.normalMaps`
+  (+ null у старых), `Selectable` → MPB `_BumpMap`/`_HasBump`, `LitVertexAO` —
+  пертурбация по производным (cotangent frame), юниформ-ветка
+- [x] L4. **Каталог**: 12 записей ламината в Floors (`SetupPaintTool` из
+  `LaminateCatalog`, tile из периода, gloss 0.35); EditMode 370/370, PlayMode 110/110
+- [~] L5. APK собран и установлен (2026-08-12); ждём фидбек шлема: рельеф, стыки,
+  цвета, ориентация зелёного канала нормалей (если рельеф «вдавлен» — флип G)
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._
@@ -675,6 +696,17 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
 
 ## Решённые проблемы окружения (как чинили — не повторять ошибок)
 
+- [x] **Gradle `mergeReleaseNativeLibs`: дубль `libopenxr_loader.so`** при сборке из
+  СВЕЖЕЙ Library (новая worktree, 2026-08-12): `SetIncludeInBuildDelegate(false)` на
+  `openxr_loader.aar` **не учитывается** Bee-экспортом gradle с нуля (в main работало
+  только за счёт инкрементального состояния Library/Bee). Решение: в
+  `CiTools.ExcludeDuplicateOpenXRLoaders` дополнительно жёстко выключать Android-
+  платформу дублей (`SetCompatibleWithPlatform(Android,false)+SaveAndReimport`) —
+  персистится в .meta кэша пакета.
+- [x] **Worktree без бинарников**: gitignored-ассеты (Textures/*.jpg+meta) не приезжают
+  с веткой — перед батчем скопировать из основного чекаута (`robocopy /E`), иначе
+  FinishLibrary соберётся пустой. Первый батч в worktree = полный импорт Library
+  (~несколько минут).
 - [x] **Unity Hub (MSIX) забивал C: через свой TEMP** → `ENOSPC`. Решение: ставить
   редакторы **офлайн-инсталляторами** Unity (обычные exe слушаются нашего `TEMP=D:\Temp`),
   а не через Hub. URL берём из release API Unity по changeset.

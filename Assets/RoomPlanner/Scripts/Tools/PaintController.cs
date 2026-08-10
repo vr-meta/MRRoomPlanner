@@ -13,19 +13,24 @@ namespace RoomPlanner.Tools
         private readonly Selectable _target;
         private readonly SurfaceFinish _after;
         private readonly Texture2D _afterTex;
+        private readonly Texture2D _afterNormal;
         private readonly SurfaceFinish _before;
         private readonly Texture2D _beforeTex;
+        private readonly Texture2D _beforeNormal;
 
         public PaintCommand(Selectable target, Color color)
             : this(target, SurfaceFinish.OfColor(color), null) { }
 
-        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex)
+        public PaintCommand(Selectable target, SurfaceFinish after, Texture2D afterTex,
+            Texture2D afterNormal = null)
         {
             _target = target;
             _after = after;
             _afterTex = afterTex;
+            _afterNormal = afterNormal;
             _before = target != null ? target.Finish : SurfaceFinish.None;
             _beforeTex = target != null ? target.FinishTexture : null;
+            _beforeNormal = target != null ? target.FinishNormal : null;
         }
 
         public ISelectable Target => _target;
@@ -33,8 +38,8 @@ namespace RoomPlanner.Tools
         private bool Alive => _target != null && _target.IsAlive;
 
         public string Name => "Paint";
-        public void Do() { if (Alive) _target.SetFinish(_after, _afterTex); }
-        public void Undo() { if (Alive) _target.SetFinish(_before, _beforeTex); }
+        public void Do() { if (Alive) _target.SetFinish(_after, _afterTex, _afterNormal); }
+        public void Undo() { if (Alive) _target.SetFinish(_before, _beforeTex, _beforeNormal); }
     }
 
     /// <summary>
@@ -174,10 +179,12 @@ namespace RoomPlanner.Tools
 
         /// <summary>The finish the trigger applies, decided by the active tab; false if
         /// the tab has no usable pick (textures not downloaded).</summary>
-        private bool TryCurrentFinish(out SurfaceFinish finish, out Texture2D texture)
+        private bool TryCurrentFinish(out SurfaceFinish finish, out Texture2D texture,
+            out Texture2D normal)
         {
             finish = SurfaceFinish.None;
             texture = null;
+            normal = null;
             if (_tab == 0)
             {
                 finish = SurfaceFinish.OfColor(CurrentColor, GlossFor(0));
@@ -188,6 +195,7 @@ namespace RoomPlanner.Tools
             if (ids == null || ids.Length == 0 || library == null) return false;
             int pick = Mathf.Clamp(_pick[c], 0, ids.Length - 1);
             if (!library.TryGet(ids[pick], out texture, out float tile)) return false;
+            normal = library.NormalOf(ids[pick]);   // optional relief (design/22)
             // per-axis overrides: 0 = catalog tile; H unset follows W (square)
             float w = _tileW[c] > 0f ? _tileW[c] : tile;
             finish = SurfaceFinish.OfTexture(ids[pick], w, _tileH[c], null, GlossFor(_tab));
@@ -260,9 +268,9 @@ namespace RoomPlanner.Tools
             }
 
             if (input.ConfirmPressed() && _hover != null
-                && TryCurrentFinish(out var finish, out var texture))
+                && TryCurrentFinish(out var finish, out var texture, out var normal))
             {
-                sceneModel.History.Execute(new PaintCommand(_hover, finish, texture));
+                sceneModel.History.Execute(new PaintCommand(_hover, finish, texture, normal));
                 input.Pulse(0.5f, 0.02f);
             }
 

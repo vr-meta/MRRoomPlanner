@@ -16,6 +16,12 @@ Shader "RoomPlanner/LitVertexAO"
         _UseUV1("Sample UV1 (metric channel)", Float) = 0
         // Finish gloss (design/04 v1.2): 0 = the old pure-matte look, 1 = glossy tile.
         _Smoothness("Smoothness", Range(0, 1)) = 0
+        // Optional relief (design/22, baked laminate): our procedural meshes carry no
+        // tangents, the TBN comes from screen-space derivatives in the fragment.
+        // MPB-driven (keywords can't ride a property block), so a float flag, not a
+        // shader_feature; the uniform branch is coherent and free when off.
+        _BumpMap("Normal Map", 2D) = "bump" {}
+        _HasBump("Has Normal Map", Float) = 0
     }
     SubShader
     {
@@ -32,6 +38,7 @@ Shader "RoomPlanner/LitVertexAO"
             float _Cull;
             float _UseUV1;
             float _Smoothness;
+            float _HasBump;
         CBUFFER_END
         ENDHLSL
 
@@ -56,6 +63,21 @@ Shader "RoomPlanner/LitVertexAO"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             TEXTURE2D(_BaseMap); SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_BumpMap); SAMPLER(sampler_BumpMap);
+
+            // Tangent-free normal mapping (Schüler's cotangent frame): reconstruct the
+            // T/B axes from screen-space derivatives of position and UV. Our meshes are
+            // procedural and deliberately carry no tangent stream (design/22).
+            half3 PerturbNormal(half3 n, float3 positionWS, float2 uv, half3 nTS)
+            {
+                float3 dpdx = ddx(positionWS), dpdy = ddy(positionWS);
+                float2 duvdx = ddx(uv), duvdy = ddy(uv);
+                float3 r1 = cross(dpdy, float3(n)), r2 = cross(float3(n), dpdx);
+                float3 t = r1 * duvdx.x + r2 * duvdy.x;
+                float3 b = r1 * duvdx.y + r2 * duvdy.y;
+                float invMax = rsqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
+                return normalize(nTS.x * half3(t * invMax) + nTS.y * half3(b * invMax) + nTS.z * n);
+            }
 
             struct Attributes
             {
@@ -99,6 +121,14 @@ Shader "RoomPlanner/LitVertexAO"
 
                 half3 albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, i.uv).rgb * _BaseColor.rgb;
                 half3 n = normalize(i.normalWS);
+
+                // optional relief (design/22): laminate/brick finishes set _BumpMap +
+                // _HasBump via MPB; everything else keeps the geometric normal
+                if (_HasBump > 0.5)
+                {
+                    half3 nTS = UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, i.uv));
+                    n = PerturbNormal(n, i.positionWS, i.uv, nTS);
+                }
 
                 // ambient (SH) scaled by baked vertex AO
                 half3 color = SampleSH(n) * albedo * i.ao;

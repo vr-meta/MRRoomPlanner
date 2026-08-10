@@ -121,6 +121,16 @@ namespace RoomPlanner.EditorTools
                 {
                     Debug.Log($"[CI] excluding duplicate OpenXR loader: {p}");
                     importer.SetIncludeInBuildDelegate(path => false);
+                    // The delegate alone is NOT honored by a from-scratch Bee gradle
+                    // export (fresh worktree Library, 2026-08-12: gradle died on the
+                    // duplicate again) — main only built because its incremental Bee
+                    // state predated the aar. Hard-disable the Android platform so the
+                    // exclusion persists in the importer meta.
+                    if (importer.GetCompatibleWithPlatform(BuildTarget.Android))
+                    {
+                        importer.SetCompatibleWithPlatform(BuildTarget.Android, false);
+                        importer.SaveAndReimport();
+                    }
                 }
             }
         }

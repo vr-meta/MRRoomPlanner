@@ -17,6 +17,7 @@ namespace RoomPlanner.Editing
         [SerializeField] private float[] tileMeters;
         [SerializeField] private float[] gloss;         // catalog smoothness 0..1 (v1.2)
         [SerializeField] private string[] categories;   // "Walls" / "Floors" / "Tiles" / "Ceiling"
+        [SerializeField] private Texture2D[] normalMaps; // OPTIONAL per entry — most are null (design/22)
 
         public int Count => ids != null ? ids.Length : 0;
 
@@ -38,6 +39,17 @@ namespace RoomPlanner.Editing
                     return texture != null;
                 }
             return false;
+        }
+
+        /// <summary>Optional normal map of the finish; null for most entries (only the
+        /// baked laminate ships relief — design/22).</summary>
+        public Texture2D NormalOf(string id)
+        {
+            if (ids == null || normalMaps == null || string.IsNullOrEmpty(id)) return null;
+            for (int i = 0; i < ids.Length; i++)
+                if (ids[i] == id)
+                    return i < normalMaps.Length ? normalMaps[i] : null;
+            return null;
         }
 
         /// <summary>Ids of one category, catalog order — the paint tool's swatch rows.</summary>
