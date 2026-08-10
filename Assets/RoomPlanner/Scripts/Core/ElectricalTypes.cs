@@ -1,7 +1,8 @@
 namespace RoomPlanner.Electrical
 {
-    /// <summary>Point elements of the Electrical layer (docs/design/19-electrical.md).</summary>
-    public enum FixtureKind { Outlet, Switch, Panel }
+    /// <summary>Point elements of the Electrical layer (docs/design/19-electrical.md).
+    /// Junction (v2) is the ceiling/wall distribution box wires branch through.</summary>
+    public enum FixtureKind { Outlet, Switch, Panel, Junction }
 
     /// <summary>Cable assortment v1: lighting 3x1.5, power outlets 3x2.5.</summary>
     public enum CableType { C3x15, C3x25 }
@@ -55,6 +56,9 @@ namespace RoomPlanner.Electrical
         public const float PanelBoxWidth = 0.30f;
         public const float PanelBoxHeight = 0.40f;
         public const float PanelBoxDepth = 0.08f;
+        // v2 junction box: mounts on walls AND ceilings, free height, no preset
+        public const float JunctionBoxSize = 0.08f;
+        public const float JunctionBoxDepth = 0.045f;
 
         // BOM
         public const int DefaultReservePercent = 10;

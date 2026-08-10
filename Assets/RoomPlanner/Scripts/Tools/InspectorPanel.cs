@@ -175,6 +175,7 @@ namespace RoomPlanner.Tools
             "Outlet" => "outlet",
             "Switch" => "switch",
             "Wire" => "wire",
+            "Box" => "junction-box",
             "Panel" => "breaker-panel",
             "Stairs" => "stairs",
             _ => null,

@@ -46,17 +46,27 @@ namespace RoomPlanner.Electrical
         {
             FixtureKind.Outlet => Posts * ElectricalDefaults.PostModule,
             FixtureKind.Switch => ElectricalDefaults.PostModule,
+            FixtureKind.Junction => ElectricalDefaults.JunctionBoxSize,
             _ => ElectricalDefaults.PanelBoxWidth,
         };
 
-        public float BlockHeight => Kind == FixtureKind.Panel
-            ? ElectricalDefaults.PanelBoxHeight : ElectricalDefaults.PostModule;
+        public float BlockHeight => Kind switch
+        {
+            FixtureKind.Panel => ElectricalDefaults.PanelBoxHeight,
+            FixtureKind.Junction => ElectricalDefaults.JunctionBoxSize,
+            _ => ElectricalDefaults.PostModule,
+        };
 
         /// <summary>Cable entry point in local space: top center of the block for
-        /// outlets/switches, bottom center for the panel (wires dive into it).</summary>
-        public Vector3 TerminalLocal => Kind == FixtureKind.Panel
-            ? new Vector3(0f, -ElectricalDefaults.PanelBoxHeight * 0.5f, ElectricalDefaults.PanelBoxDepth * 0.5f)
-            : new Vector3(0f, ElectricalDefaults.PostModule * 0.5f, ElectricalDefaults.PlateDepth * 0.5f);
+        /// outlets/switches, bottom center for the panel (wires dive into it), lid
+        /// center for the junction box (wires branch through its face).</summary>
+        public Vector3 TerminalLocal => Kind switch
+        {
+            FixtureKind.Panel => new Vector3(0f, -ElectricalDefaults.PanelBoxHeight * 0.5f,
+                ElectricalDefaults.PanelBoxDepth * 0.5f),
+            FixtureKind.Junction => new Vector3(0f, 0f, ElectricalDefaults.JunctionBoxDepth),
+            _ => new Vector3(0f, ElectricalDefaults.PostModule * 0.5f, ElectricalDefaults.PlateDepth * 0.5f),
+        };
 
         public Vector3 TerminalWorld => transform.TransformPoint(TerminalLocal);
 
@@ -117,6 +127,16 @@ namespace RoomPlanner.Electrical
                         float cx = -area * 0.5f + keyW * 0.5f + i * (keyW + gap);
                         AddBox(new Vector3(cx, 0f, d + 0.004f), new Vector3(keyW, area, 0.008f));
                     }
+                    break;
+                }
+                case FixtureKind.Junction:
+                {
+                    // distribution box: a small cube with a proud lid — mounts on walls
+                    // and ceilings, wires branch through its face (v2)
+                    float s = ElectricalDefaults.JunctionBoxSize;
+                    float d = ElectricalDefaults.JunctionBoxDepth;
+                    AddBox(new Vector3(0f, 0f, d * 0.5f), new Vector3(s, s, d));
+                    AddBox(new Vector3(0f, 0f, d + 0.003f), new Vector3(s - 0.01f, s - 0.01f, 0.006f));
                     break;
                 }
                 default: // Panel

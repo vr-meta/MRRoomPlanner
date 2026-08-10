@@ -8,14 +8,16 @@ using RoomPlanner.Editing;
 namespace RoomPlanner.Electrical
 {
     /// <summary>
-    /// Electric tool (docs/design/19-electrical.md): one palette button, four sub-modes
-    /// cycled in the inspector — Outlet / Switch / Wire / Panel.
+    /// Electric tool (docs/design/19-electrical.md): one palette button, five sub-modes
+    /// as inspector tabs — Outlet / Switch / Wire / Box / Panel.
     ///
     /// Fixtures go on wall faces with the mounting height snapped to the sub-mode preset
-    /// (grip = free vertical for the odd counter-top outlet). Wires are drawn point by
-    /// point on walls and the ceiling; Ortho mode inserts vertical/horizontal elbows at
-    /// the run height (an offset below the ceiling). Ends within reach of a fixture
-    /// terminal attach logically — clicking the panel finishes the run into it.
+    /// (grip = free vertical for the odd counter-top outlet); the junction box (v2)
+    /// mounts on walls AND ceilings at any height. Wires are routed BY HAND, point by
+    /// point on walls and the ceiling — Ortho inserts a single elbow with the horizontal
+    /// travel at the higher of the two clicks, never an automatic detour to the ceiling
+    /// (headset feedback 2026-08-10). Ends within reach of a fixture terminal attach
+    /// logically — clicking any terminal finishes the run into it.
     /// </summary>
     public class ElectricController : MonoBehaviour, ITool
     {
@@ -29,7 +31,7 @@ namespace RoomPlanner.Electrical
         [SerializeField] private ToolManager manager;
         [SerializeField] private SceneModel sceneModel;
 
-        public enum SubMode { Outlet, Switch, Wire, Panel }
+        public enum SubMode { Outlet, Switch, Wire, Junction, Panel }
 
         // ---- tool defaults (the inspector rows edit these; instances copy them on creation) ----
         private SubMode _mode = SubMode.Outlet;
@@ -39,7 +41,6 @@ namespace RoomPlanner.Electrical
         private float _switchHeight = ElectricalDefaults.SwitchHeight;
         private CableType _cable = CableType.C3x25;
         private bool _ortho = true;
-        private float _ceilingOff = ElectricalDefaults.CeilingOffset;
         private int _reserve = ElectricalDefaults.DefaultReservePercent;
 
         // ---- wire-drawing state ----
@@ -138,36 +139,6 @@ namespace RoomPlanner.Electrical
         private static bool IsWall(Vector3 n) => Mathf.Abs(n.y) < 0.3f;
         private static bool IsCeiling(Vector3 n) => n.y < -0.7f;
 
-        private static readonly RaycastHit[] _ceilingHits = new RaycastHit[16];
-
-        /// <summary>
-        /// The REAL ceiling above the run: an upward ray from knee height at the point's
-        /// XZ, taking the lowest downward-facing surface at least 2 m up (imported houses
-        /// have 3 m+ ceilings — the wall tool's drawing height is wrong there, headset
-        /// feedback 2026-08-10). Furniture undersides sit below the 2 m bar; wires and
-        /// their handles are excluded so a drawn ceiling run does not become the next
-        /// run's "ceiling". Fallback: the wall tool height, as before.
-        /// </summary>
-        private float CeilingY(Vector3 near)
-        {
-            float floor = Level();
-            var origin = new Vector3(near.x, floor + 0.3f, near.z);
-            int n = Physics.RaycastNonAlloc(new Ray(origin, Vector3.up), _ceilingHits, 15f,
-                ~0, QueryTriggerInteraction.Ignore);
-            float best = float.MaxValue;
-            for (int i = 0; i < n; i++)
-            {
-                var h = _ceilingHits[i];
-                if (h.normal.y > -0.3f) continue;                   // not a downward face
-                if (h.point.y < floor + 2f) continue;               // table/sofa underside
-                if (h.collider.GetComponentInParent<WireRoute>() != null) continue;
-                best = Mathf.Min(best, h.point.y);
-            }
-            if (best < float.MaxValue) return best;
-            return manager != null ? manager.Level + manager.WallHeight : 2.7f;
-        }
-
-        private float RunY(Vector3 near) => CeilingY(near) - _ceilingOff;
         private float Level() => manager != null ? manager.Level : 0f;
 
         // ---- fixtures (Outlet / Switch / Panel) ----
@@ -183,6 +154,7 @@ namespace RoomPlanner.Electrical
         {
             SubMode.Outlet => FixtureKind.Outlet,
             SubMode.Switch => FixtureKind.Switch,
+            SubMode.Junction => FixtureKind.Junction,
             _ => FixtureKind.Panel,
         };
 
@@ -190,7 +162,9 @@ namespace RoomPlanner.Electrical
         {
             if (previewLine != null) previewLine.enabled = false;
 
-            bool valid = hasHit && IsWall(normal);
+            // junction boxes (v2) mount on walls AND ceilings; everything else is wall-only
+            bool junction = _mode == SubMode.Junction;
+            bool valid = hasHit && (IsWall(normal) || (junction && IsCeiling(normal)));
             if (!valid)
             {
                 // no air fixtures, ever: a miss shows no ghost and a click places nothing
@@ -202,14 +176,27 @@ namespace RoomPlanner.Electrical
             }
 
             // height locks to the sub-mode preset — a hand tremor of ±3–5 cm at ray distance
-            // must not decide mounting heights; grip frees the vertical for odd cases
+            // must not decide mounting heights; grip frees the vertical for odd cases.
+            // The junction box has no preset: it sits wherever the run needs it.
             Vector3 place = point;
-            if (!input.SnapHeld()) place.y = Level() + PresetHeight();
+            if (!junction && !input.SnapHeld()) place.y = Level() + PresetHeight();
 
-            Vector3 outward = new Vector3(normal.x, 0f, normal.z);
-            if (outward.sqrMagnitude < 1e-6f) outward = Vector3.forward;
-            Quaternion rot = Quaternion.LookRotation(outward.normalized);
-            place += outward.normalized * 0.002f;   // keep the back plate off the wall plane
+            Quaternion rot;
+            if (IsWall(normal))
+            {
+                Vector3 outward = new Vector3(normal.x, 0f, normal.z);
+                if (outward.sqrMagnitude < 1e-6f) outward = Vector3.forward;
+                outward.Normalize();
+                rot = Quaternion.LookRotation(outward);
+                place += outward * 0.002f;   // keep the back plate off the wall plane
+            }
+            else
+            {
+                // ceiling mount: local +Z (the lid) looks down into the room
+                Vector3 n = normal.normalized;
+                rot = Quaternion.LookRotation(n, Mathf.Abs(n.y) > 0.9f ? Vector3.forward : Vector3.up);
+                place += n * 0.002f;
+            }
 
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = place; }
             UpdateGhost(place, rot);
@@ -283,6 +270,7 @@ namespace RoomPlanner.Electrical
         {
             FixtureKind.Outlet => posts * ElectricalDefaults.PostModule * 0.5f,
             FixtureKind.Switch => ElectricalDefaults.PostModule * 0.5f,
+            FixtureKind.Junction => ElectricalDefaults.JunctionBoxSize * 0.5f,
             _ => ElectricalDefaults.PanelBoxWidth * 0.5f,
         };
 
@@ -382,13 +370,13 @@ namespace RoomPlanner.Electrical
 
             if (_ortho)
             {
-                WireMath.OrthoWaypoints(last, cursor, RunY(last), _orthoScratch);
+                WireMath.OrthoElbow(last, cursor, _orthoScratch);
                 _pts.AddRange(_orthoScratch);
             }
             _pts.Add(cursor);
             input.Pulse(0.6f, 0.02f);
 
-            // the panel is where circuits end — reaching it finishes the run by itself
+            // any terminal ends the run — panel, junction box or another outlet
             if (terminal != null) FinishRoute(terminal);
         }
 
@@ -440,7 +428,7 @@ namespace RoomPlanner.Electrical
                 Vector3 last = _pts[_pts.Count - 1];
                 if (_ortho)
                 {
-                    WireMath.OrthoWaypoints(last, cursor, RunY(last), _orthoScratch);
+                    WireMath.OrthoElbow(last, cursor, _orthoScratch);
                     _previewPts.AddRange(_orthoScratch);
                 }
                 _previewPts.Add(cursor);
@@ -481,20 +469,16 @@ namespace RoomPlanner.Electrical
                     v => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
                     (_, v) => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
                     () => $"{_switchHeight * 100f:0} cm", displayScale: 100f);
+            // v2: no "Ceiling off" row — runs are routed by hand, the wire goes where
+            // the user clicks and nowhere else (headset feedback 2026-08-10)
             var wire = new SettingsSchema()
                 .Segmented("cable", "Cable",
                     new[] { Cable.Label(CableType.C3x15), Cable.Label(CableType.C3x25) },
                     () => (int)_cable, i => _cable = (CableType)i)
                 .Segmented("routing", "Route", new[] { "Ortho", "Free" },
-                    () => _ortho ? 0 : 1, i => _ortho = i == 0)
-                .Slider("coff", "Ceiling off", ElectricalDefaults.MinCeilingOffset,
-                    ElectricalDefaults.MaxCeilingOffset, ElectricalDefaults.CeilingOffsetStep,
-                    () => _ceilingOff,
-                    v => _ceilingOff = Mathf.Clamp(v, ElectricalDefaults.MinCeilingOffset,
-                        ElectricalDefaults.MaxCeilingOffset),
-                    (_, v) => _ceilingOff = Mathf.Clamp(v, ElectricalDefaults.MinCeilingOffset,
-                        ElectricalDefaults.MaxCeilingOffset),
-                    () => $"{_ceilingOff * 100f:0} cm", displayScale: 100f);
+                    () => _ortho ? 0 : 1, i => _ortho = i == 0);
+            var box = new SettingsSchema()
+                .Readout("jmount", "Mount", () => "Wall / ceiling");
             var panel = new SettingsSchema()
                 .Slider("res", "Reserve", 0f, ElectricalDefaults.MaxReservePercent,
                     ElectricalDefaults.ReserveStep,
@@ -504,14 +488,14 @@ namespace RoomPlanner.Electrical
                     () => $"{_reserve} %");
 
             return SettingsSchema.Tabbed(
-                new[] { "Outlet", "Switch", "Wire", "Panel" },
-                () => (int)_mode, SetMode, outlet, sw, wire, panel);
+                new[] { "Outlet", "Switch", "Wire", "Box", "Panel" },
+                () => (int)_mode, SetMode, outlet, sw, wire, box, panel);
         }
 
         private void SetMode(int mode)
         {
             FinishOrCancelRoute();               // switching modes never eats a drawn run
-            _mode = (SubMode)Mathf.Clamp(mode, 0, 3);
+            _mode = (SubMode)Mathf.Clamp(mode, 0, 4);
         }
 
         private static float ClampHeight(float value, float min) =>

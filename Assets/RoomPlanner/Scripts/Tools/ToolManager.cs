@@ -33,6 +33,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private RoomPlanner.Import.ImportController importTool;
         [SerializeField] private RoomPlanner.Electrical.ElectricController electric;
         [SerializeField] private PaintController paint;
+        [SerializeField] private TeleportLocomotion locomotion;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
         [SerializeField] private int offsetMode = 0;  // 0 Outer, 1 Center, 2 Inner
@@ -45,7 +46,9 @@ namespace RoomPlanner.Tools
         [SerializeField] private float gridSize = 0.05f;   // 5 cm
         [SerializeField] private float angleStep = 15f;    // degrees
         [SerializeField] private float level = 0f;         // working floor level Y (storeys); Quest floor ≈ 0
-        [SerializeField] private bool scanOn = true;       // show/hide the scanned room mesh (EffectMesh)
+        // Scan OFF is the default since 2026-08-10: the main workflow is walking an
+        // imported house in the virtual environment, not scanning the real room.
+        [SerializeField] private bool scanOn = false;
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
@@ -65,6 +68,8 @@ namespace RoomPlanner.Tools
         public float GridSize => gridSize;
         public float AngleStep => angleStep;
         public float Level => level;
+        /// <summary>Passthrough scan state — smooth locomotion is gated on it being OFF.</summary>
+        public bool ScanOn => scanOn;
 
         // ---- shared-parameter mutators (referenced by tool schemas) ----
 
@@ -140,6 +145,21 @@ namespace RoomPlanner.Tools
                 radial.OnPicked = i => { if (i >= 0) SetActiveTool(i); };
             }
             RefreshMenu();
+
+            // Enforce the serialized scan default (OFF since 2026-08-10). MRUK spawns the
+            // scan meshes asynchronously, so a single early SetScan would miss them —
+            // re-apply a few times while the scene settles.
+            SetScan(scanOn);
+            if (!scanOn) StartCoroutine(ReapplyScanState());
+        }
+
+        private System.Collections.IEnumerator ReapplyScanState()
+        {
+            foreach (float delay in new[] { 1f, 3f, 6f })
+            {
+                yield return new WaitForSeconds(delay);
+                SetScan(scanOn);
+            }
         }
 
         private int IndexOfTool(string id)
@@ -190,6 +210,10 @@ namespace RoomPlanner.Tools
                 if (input.UndoPressed()) { sceneModel.History.Undo(); UpdateGroundLevel(); RefreshMenu(); }
                 else if (input.RedoPressed()) { sceneModel.History.Redo(); UpdateGroundLevel(); RefreshMenu(); }
             }
+
+            // Left-hand navigation (design/21): portal aim + smooth walk. The radial owns
+            // the left hand while open — an active aim cancels instead of fighting it.
+            if (locomotion != null) locomotion.Tick(radial != null && radial.IsOpen, scanOn);
 
             Ray ray = pointer.GetRay();
 
@@ -341,7 +365,8 @@ namespace RoomPlanner.Tools
             // the aimed slab spot under your feet — the model moves, never the camera
             // (passthrough; design/18 I6). Works from any tool.
             if (!overMenu && !debounced && sceneModel != null && teleportTap
-                && (select == null || !select.IsDragging))
+                && (select == null || !select.IsDragging)
+                && (locomotion == null || !locomotion.IsAiming))
             {
                 // Slabs AND stair treads are teleport targets — aiming a step is how you
                 // walk down to a lower storey (design/18 I12).
@@ -349,18 +374,7 @@ namespace RoomPlanner.Tools
                     && picked is Selectable sel
                     && (sel.Kind == SelectableKind.Floor || sel.Kind == SelectableKind.Stair))
                 {
-                    var head = Camera.main != null ? Camera.main.transform.position : ray.origin;
-                    var delta = BuildingNav.TeleportDelta(point, head);
-                    sceneModel.History.Execute(new TeleportCommand(
-                        GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
-                        TeleportCommand.CollectFloors(), delta,
-                        TeleportCommand.CollectStairs(),
-                        TeleportCommand.CollectMep(),
-                        TeleportCommand.CollectFixtures(),
-                        TeleportCommand.CollectRoutes(),
-                        TeleportCommand.CollectMeasurements()));
-                    UpdateGroundLevel();
-                    input.Pulse(0.4f, 0.02f);
+                    TeleportModelTo(point);
                 }
             }
 
@@ -453,6 +467,28 @@ namespace RoomPlanner.Tools
                     _holdBtn = null;
                 }
             }
+        }
+
+        /// <summary>
+        /// Bring the aimed spot under your feet — the model moves, never the camera
+        /// (passthrough; design/18 I6). Shared by the A-tap teleport and the left-trigger
+        /// portal (design/21): both roads lead into the same undoable TeleportCommand.
+        /// </summary>
+        public void TeleportModelTo(Vector3 point)
+        {
+            if (sceneModel == null) return;
+            var head = Camera.main != null ? Camera.main.transform.position : point + Vector3.up;
+            var delta = BuildingNav.TeleportDelta(point, head);
+            sceneModel.History.Execute(new TeleportCommand(
+                GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
+                TeleportCommand.CollectFloors(), delta,
+                TeleportCommand.CollectStairs(),
+                TeleportCommand.CollectMep(),
+                TeleportCommand.CollectFixtures(),
+                TeleportCommand.CollectRoutes(),
+                TeleportCommand.CollectMeasurements()));   // tape stays on the model (feedback 2026-08-10)
+            UpdateGroundLevel();
+            if (input != null) input.Pulse(0.4f, 0.02f);
         }
 
         /// <summary>Activate a tool by its stable id (e.g. B-on-empty returns to "select").</summary>

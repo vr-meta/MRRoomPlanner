@@ -8,14 +8,14 @@ namespace RoomPlanner.Measure
     /// </summary>
     public class MeasureInput : MonoBehaviour
     {
-        /// <summary>Place / select / start drag — index TRIGGER (either hand; you point with the right).</summary>
+        /// <summary>Place / select / start drag — RIGHT index trigger only (you point with
+        /// the right; the left trigger aims the teleport portal since 21-locomotion).</summary>
         public bool ConfirmPressed()
         {
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.Space)) return true;
 #endif
-            return OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger)
-                || OVRInput.GetDown(OVRInput.Button.SecondaryIndexTrigger);
+            return OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger);
         }
 
         /// <summary>Trigger held — for dragging a point.</summary>
@@ -24,8 +24,17 @@ namespace RoomPlanner.Measure
 #if UNITY_EDITOR
             if (Input.GetKey(KeyCode.Space)) return true;
 #endif
-            return OVRInput.Get(OVRInput.Button.PrimaryIndexTrigger)
-                || OVRInput.Get(OVRInput.Button.SecondaryIndexTrigger);
+            return OVRInput.Get(OVRInput.RawButton.RIndexTrigger);
+        }
+
+        /// <summary>LEFT index trigger held — aims the teleport portal arc
+        /// (`21-locomotion.md`); release fires the jump. Editor: G.</summary>
+        public bool TeleportAimHeld()
+        {
+#if UNITY_EDITOR
+            if (Input.GetKey(KeyCode.G)) return true;
+#endif
+            return OVRInput.Get(OVRInput.RawButton.LIndexTrigger);
         }
 
         /// <summary>Cancel / delete / finish chain — B button.</summary>
@@ -96,7 +105,8 @@ namespace RoomPlanner.Measure
                 || OVRInput.GetDown(OVRInput.Button.SecondaryHandTrigger);
         }
 
-        /// <summary>Thumbstick vector (either controller, larger magnitude wins).</summary>
+        /// <summary>Thumbstick vector — RIGHT stick only (cursor depth, Blueprint pan,
+        /// popup scroll). The left stick belongs to locomotion / the radial flick.</summary>
         public Vector2 Thumbstick()
         {
 #if UNITY_EDITOR
@@ -105,9 +115,7 @@ namespace RoomPlanner.Measure
                 (Input.GetKey(KeyCode.PageUp) ? 1f : 0f) - (Input.GetKey(KeyCode.PageDown) ? 1f : 0f));
             if (k.sqrMagnitude > 0f) return k;
 #endif
-            Vector2 l = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick);
-            Vector2 r = OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick);
-            return r.sqrMagnitude >= l.sqrMagnitude ? r : l;
+            return OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.RTouch);
         }
 
         /// <summary>Air-cursor depth — thumbstick up/down (either controller).</summary>

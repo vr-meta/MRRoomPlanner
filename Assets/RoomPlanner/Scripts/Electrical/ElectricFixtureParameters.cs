@@ -44,6 +44,10 @@ namespace RoomPlanner.Electrical
                         () => ApplyKeys(Fx.Keys - 1), () => ApplyKeys(Fx.Keys + 1));
                     AddHeightRow(s, ElectricalDefaults.MinSwitchHeight);
                     break;
+                case FixtureKind.Junction:
+                    // no height preset and nothing to configure — show what branches here
+                    s.Readout("fjwires", "Wires", () => $"{AttachedRoutes()}");
+                    break;
                 default:
                     s.Stepper("fres", "Reserve", () => $"{Fx.ReservePercent} %",
                         () => ApplyReserve(Fx.ReservePercent - ElectricalDefaults.ReserveStep),
@@ -76,6 +80,25 @@ namespace RoomPlanner.Electrical
             // the fixture's BaseLevel, and 30–180 cm still must mean "above THIS floor"
             float rel = Mathf.Clamp(relValue, min, ElectricalDefaults.MaxMountHeight);
             Apply(FixtureParamCommand.ForHeight(this, Fx.BaseLevel + rel));
+        }
+
+        /// <summary>Routes attached to this fixture by id (selection-time readout only).</summary>
+        private int AttachedRoutes()
+        {
+            var owner = Owner;
+            var model = SceneModel.Instance;
+            if (owner == null || model == null || string.IsNullOrEmpty(owner.Id)) return 0;
+            int n = 0;
+            var items = model.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is not Selectable sel || sel.Kind != SelectableKind.Wire) continue;
+                var r = sel.Route;
+                if (r != null && (r.StartFixtureId == owner.Id || r.EndFixtureId == owner.Id)) n++;
+            }
+            return n;
         }
 
         private void Apply(FixtureParamCommand cmd)

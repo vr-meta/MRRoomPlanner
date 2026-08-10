@@ -24,34 +24,22 @@ namespace RoomPlanner.Electrical
         }
 
         /// <summary>
-        /// Intermediate points for the ortho layout between two placed points: rise/drop
-        /// to the run height, travel horizontally, rise/drop to the target. Degenerate
-        /// elbows (shorter than MergeDistance) and points collinear with their neighbors
-        /// are dropped, so a same-height pair yields a plain straight segment.
-        /// The result EXCLUDES prev and next.
+        /// The single ortho elbow between two placed points (v2 manual routing): the
+        /// horizontal travel runs at the HIGHER of the two heights — drops stay vertical
+        /// and mains run along the top, the way walls are actually chased. The wire only
+        /// reaches the ceiling when the user clicks the ceiling; a same-height pair is a
+        /// straight segment and a same-XZ pair a plain vertical. The result EXCLUDES
+        /// prev and next.
         /// </summary>
-        public static void OrthoWaypoints(Vector3 prev, Vector3 next, float runY, List<Vector3> result)
+        public static void OrthoElbow(Vector3 prev, Vector3 next, List<Vector3> result)
         {
             result.Clear();
-            // no horizontal travel → a plain vertical drop, never a detour to the run height
             float dx = next.x - prev.x, dz = next.z - prev.z;
-            if (Mathf.Sqrt(dx * dx + dz * dz) < MergeDistance) return;
-            result.Add(prev);
-            result.Add(new Vector3(prev.x, runY, prev.z));
-            result.Add(new Vector3(next.x, runY, next.z));
-            result.Add(next);
-            CollapsePoints(result, MergeDistance);
-
-            // strip interior points that add no travel (lie on the neighbor-to-neighbor line)
-            for (int i = result.Count - 2; i > 0; i--)
-            {
-                Vector3 onSeg = MeasureMath.ClosestPointOnSegment(result[i - 1], result[i + 1], result[i]);
-                if (Vector3.Distance(onSeg, result[i]) < MergeDistance) result.RemoveAt(i);
-            }
-
-            // hand back interior points only
-            if (result.Count > 0) result.RemoveAt(result.Count - 1);
-            if (result.Count > 0) result.RemoveAt(0);
+            if (Mathf.Sqrt(dx * dx + dz * dz) < MergeDistance) return;   // vertical pair
+            if (Mathf.Abs(next.y - prev.y) < MergeDistance) return;      // level pair
+            result.Add(next.y > prev.y
+                ? new Vector3(prev.x, next.y, prev.z)    // climb first, then travel on top
+                : new Vector3(next.x, prev.y, next.z));  // travel on top, then drop
         }
 
         /// <summary>In-place removal of consecutive points closer than mergeDistance

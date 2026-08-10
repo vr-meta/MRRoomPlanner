@@ -23,6 +23,7 @@ namespace RoomPlanner.EditorTools
         public SceneModel SceneModel;
         public ToolManager Manager;
         public GameObject Reticle;
+        public TeleportLocomotion Locomotion;
 
         // tools (order = registry/palette order)
         public SelectController Select;

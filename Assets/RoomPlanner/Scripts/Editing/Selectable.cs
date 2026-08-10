@@ -310,6 +310,24 @@ namespace RoomPlanner.Editing
                     return $"Outlet ×{_fixture.Posts}, h {_fixture.HeightAboveLevel * 100f:0} cm";
                 case RoomPlanner.Electrical.FixtureKind.Switch:
                     return $"Switch ×{_fixture.Keys}, h {_fixture.HeightAboveLevel * 100f:0} cm";
+                case RoomPlanner.Electrical.FixtureKind.Junction:
+                {
+                    // how many runs branch through this box — the number the electrician wants
+                    int wires = 0;
+                    var m = SceneModel.Instance;
+                    if (m != null && !string.IsNullOrEmpty(Id))
+                    {
+                        var items = m.Items;
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            var item = items[i];
+                            if (item == null || !item.IsAlive || item.IsHidden) continue;
+                            if (item is not Selectable s || s.Kind != SelectableKind.Wire || s._route == null) continue;
+                            if (s._route.StartFixtureId == Id || s._route.EndFixtureId == Id) wires++;
+                        }
+                    }
+                    return $"Junction box · {wires} wires";
+                }
                 default:
                 {
                     var model = SceneModel.Instance;

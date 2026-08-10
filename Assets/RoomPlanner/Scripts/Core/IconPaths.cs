@@ -97,6 +97,14 @@ namespace RoomPlanner.Core
         public const string Wire =
             "M4 20 V10 C4 6.7 6.7 4 10 4 H20 V7 H10 C8.3 7 7 8.3 7 10 V20 Z";
 
+        /// <summary>Square distribution box: lid frame (evenodd hole), four cable entries,
+        /// center terminal — the v2 junction box wires branch through.</summary>
+        public const string JunctionBox =
+            "M4.5 4.5 H19.5 V19.5 H4.5 Z M7 7 V17 H17 V7 Z " +
+            "M10.9 1.2 H13.1 V4.5 H10.9 Z M10.9 19.5 H13.1 V22.8 H10.9 Z " +
+            "M1.2 10.9 H4.5 V13.1 H1.2 Z M19.5 10.9 H22.8 V13.1 H19.5 Z " +
+            "M10.6 10.6 H13.4 V13.4 H10.6 Z";
+
         /// <summary>Cabinet with a breaker row, main switch and indicator.</summary>
         public const string BreakerPanel =
             "M4 3 H20 V21 H4 Z " +
@@ -273,6 +281,7 @@ namespace RoomPlanner.Core
             { "outlet", Outlet },
             { "switch", Switch },
             { "wire", Wire },
+            { "junction-box", JunctionBox },
             { "breaker-panel", BreakerPanel },
             // glyphs
             { "plus", Plus },
