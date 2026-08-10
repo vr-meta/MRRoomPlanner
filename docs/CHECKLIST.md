@@ -402,23 +402,32 @@
 виджетов инспектора, SVG-иконки (текст → тесселяция в меши, без бинарных ассетов),
 дизайн-токены. Итог двух экспертных панелей 2026-08-10.
 
-- [ ] U1. Core-фундамент: `SvgPath` (парсер M/L/H/V/C/Q/Z), `SvgTessellator`
-  (evenodd-дыры → `Polygon.TriangulateWithHoles`), `UiTokens` + тесты
-- [ ] U2. `IconLibrary`: все пути 24×24 (8 инструментов + 4 резерва + UI-глифы)
-  + тест «каждая иконка парсится и тесселируется, winding наружу»
-- [ ] U3. `SettingsSchema` v2 (Slider/Segmented/Select/Toggle/Numeric/Swatch/
-  Action/Readout/Progress/Header + Tabs) + `PanelLayout` (сетка 6 мм) + тесты
-- [ ] U4. `RadialMath`: угол→сектор (12, гистерезис +4°), пороги 0.55/0.45,
-  флик-vs-browse (<400 мс) + тесты
-- [ ] U5. `RadialMenu` (арк-меши, 2 инстанса) + `MeasureInput.StickClick*` +
-  `SetupRadial` + обновить `10-controls.md`
-- [ ] U6. `InspectorPanel` v2: 12 типов рядов, popups (Select/Numpad/Swatch,
-  модальный слой), stick-scroll списков + PlayMode-тесты
-- [ ] U7. Миграция инструментов на новые виджеты (Cycle → Segmented/Select/Action/
-  Tabs; Electric на Tabs) + палитра-полоска Snap & Layers + чип инструмента
-- [ ] U8. Синхронизация доков (10-controls, 16-ux-v2 дельты, 20 — фактическое)
-- [ ] U9. SetupRig + headless-прогон всех тестов + APK + проверка на устройстве
-  (вместе с накопившимися E8/P6)
+- [x] U1. Core-фундамент: `SvgPath` (парсер M/L/H/V/C/Q/Z), `SvgTessellator`
+  (evenodd-дыры → `Polygon.TriangulateWithHoles`), `UiTokens`, `UiMeshes` + тесты.
+  Попутно **исправлены два бага `Polygon`** (вложенное кольцо перекраивало депт по
+  внутренней точке; два шва в одну вершину = дедлок клиппера) + regression-тесты
+  (`PolygonSeamRegressionTests`); пути провалидированы вне Unity JS-зеркалом пайплайна
+- [x] U2. `IconPaths`: 45 путей 24×24 (12 слотов радиала + stairs + 4 суб-иконки
+  Electric + folder/calibrate/storey/eraser + глифы) + `IconPathsTests`
+- [x] U3. `SettingsSchema` v2 (Slider/Segmented/Select/Toggle/Numeric/Swatch/
+  Action/Readout/Progress/Header + Tabs; Cycle оставлен как LEGACY для тестов) +
+  `PanelLayout` (сетка 6 мм, слайдер-математика) + тесты
+- [x] U4. `RadialMath` + `RadialTracker` (гистерезис +4°, пороги 0.55/0.45,
+  флик-vs-browse <400 мс) + тесты
+- [x] U5. `RadialMenu` (процедурные сектора/хаб/скрим, стик+луч, L3/R3 в
+  `MeasureInput`) + `SetupRadial` + `10-controls.md`
+- [x] U6. `InspectorPanel` v2 (реальные метры, 12 типов рядов, табы) + `UiPopups`
+  (Select-список со stick-скроллом, numpad c DisplayScale, свотч-сетка, модальный
+  слой) + `SliderWidget` + драг/деструктив-холд/дебаунс в `ToolManager` +
+  PlayMode-тесты обновлены и дополнены
+- [x] U7. Миграция всех инструментов и per-instance провайдеров на новые виджеты
+  (Wall/Floor/Blueprint/Import/Paint; Electric на Tabs; Wall/Floor/Fixture/Wire
+  параметры на Numeric/Segmented с командами) + палитра-полоска Snap & Layers
+  (иконки-тумблеры + чип инструмента) + `IconId` у всех ITool
+- [~] U8. Синхронизация доков (10-controls ✓, 20 ✓; HTML-превью артефактом ✓)
+- [ ] U9. SetupRig (обязателен: радиал, палитра-полоска, инспектор v2, новые
+  материалы Ui_*) + headless-прогон всех тестов + APK + проверка на устройстве
+  (вместе с накопившимися E8/P6). **Тесты ещё не запускались ни разу**
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 

@@ -66,6 +66,20 @@ namespace RoomPlanner.Tests.Play
             _spawned.Clear();
         }
 
+        // v2 widget drivers (design/20 §2): numeric fields commit absolute values,
+        // segmented rows set an option index — these mimic what the inspector does.
+        private static void Bump(RoomPlanner.Core.SettingField f, float delta)
+        {
+            float before = f.GetNumber();
+            f.CommitNumber(before, before + delta);
+        }
+
+        private static void NextOption(RoomPlanner.Core.SettingField f)
+        {
+            int n = f.ResolveOptions().Length;
+            f.SetIndex((f.GetIndex() + 1) % n);
+        }
+
         [UnityTest]
         public IEnumerator SelectedWall_OffersItsOwnRows()
         {
@@ -89,7 +103,7 @@ namespace RoomPlanner.Tests.Play
             var bc = Draw(r, P(2, 0), P(2, 2));   // shares the corner node
             yield return null;
 
-            Row(r, ab, "wthk").Increase();
+            Bump(Row(r, ab, "wthk"), +0.02f);
 
             Assert.AreEqual(0.22f, ab.Thickness, 1e-4f, "the edited wall changed");
             Assert.AreEqual(0.20f, bc.Thickness, 1e-4f, "its neighbour did NOT");
@@ -103,7 +117,7 @@ namespace RoomPlanner.Tests.Play
             var s = Draw(r, P(0, 0), P(3, 0));
             yield return null;
 
-            Row(r, s, "wthk").Increase();
+            Bump(Row(r, s, "wthk"), +0.02f);
             var next = Draw(r, P(0, 5), P(3, 5));
 
             Assert.AreEqual(0.22f, s.Thickness, 1e-4f);
@@ -117,7 +131,7 @@ namespace RoomPlanner.Tests.Play
             var s = Draw(r, P(0, 0), P(3, 0));
             yield return null;
 
-            Row(r, s, "wthk").Increase();
+            Bump(Row(r, s, "wthk"), +0.02f);
             Assert.AreEqual(0.22f, s.Thickness, 1e-4f);
 
             model.History.Undo();
@@ -136,7 +150,7 @@ namespace RoomPlanner.Tests.Play
             s.Thickness = 0.03f;
             yield return null;
 
-            Row(r, s, "wthk").Decrease();
+            Bump(Row(r, s, "wthk"), -0.02f);
             Assert.AreEqual(0.02f, s.Thickness, 1e-4f, "clamped at the minimum");
 
             model.History.Undo();
@@ -152,8 +166,8 @@ namespace RoomPlanner.Tests.Play
             s.Join = WallJoin.Miter;
             yield return null;
 
-            Row(r, s, "woff").Increase();
-            Row(r, s, "wjoin").Increase();
+            NextOption(Row(r, s, "woff"));
+            NextOption(Row(r, s, "wjoin"));
             Assert.AreEqual(WallOffsetMode.Center, s.Offset);
             Assert.AreEqual(WallJoin.Bevel, s.Join);
 
@@ -172,7 +186,7 @@ namespace RoomPlanner.Tests.Play
             var mesh = r.ViewOf(s).GetComponent<MeshFilter>().sharedMesh;
             float before = mesh.bounds.center.z;
 
-            Row(r, s, "wside").Increase();
+            NextOption(Row(r, s, "wside"));
             Assert.AreEqual(-1f, s.SideSign, 1e-4f);
             Assert.AreNotEqual(before, mesh.bounds.center.z, "the wall actually moved to the other side");
 
@@ -190,7 +204,7 @@ namespace RoomPlanner.Tests.Play
             var mesh = r.ViewOf(s).GetComponent<MeshFilter>().sharedMesh;
             float beforeHeight = mesh.bounds.size.y;
 
-            Row(r, s, "wh").Increase();
+            Bump(Row(r, s, "wh"), +0.1f);
 
             Assert.AreEqual(beforeHeight + 0.1f, mesh.bounds.size.y, 1e-3f,
                 "the view is rebuilt, not left showing the old height");

@@ -29,6 +29,7 @@ namespace RoomPlanner.Editing
 
         public string Id => "select";
         public string PaletteLabel => "Sel";
+        public string IconId => "select-cursor";
 
         /// <summary>No parameter rows — the selection group is a dedicated panel section.</summary>
         /// <summary>

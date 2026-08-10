@@ -46,6 +46,7 @@ namespace RoomPlanner.Core
         public float Min;
         public float Max;
         public float Step;             // detent interval; <= 0 → continuous
+        public float DisplayScale = 1f;   // native → display units (100 = meters shown as cm)
         public Func<float> GetNumber;
         public Action<float> SetNumber;            // live preview while dragging / typing
         public Action<float, float> CommitNumber;  // (before, after) → ONE undo command on release/OK
@@ -138,12 +139,12 @@ namespace RoomPlanner.Core
 
         public SettingsSchema Slider(string id, string caption, float min, float max, float step,
             Func<float> get, Action<float> preview, Action<float, float> commit,
-            Func<string> value)
+            Func<string> value, float displayScale = 1f)
         {
             _fields.Add(new SettingField
             {
                 Id = id, Caption = caption, Kind = SettingKind.Slider,
-                Min = min, Max = max, Step = step,
+                Min = min, Max = max, Step = step, DisplayScale = displayScale,
                 GetNumber = get, SetNumber = preview, CommitNumber = commit, Value = value,
             });
             return this;
@@ -182,12 +183,14 @@ namespace RoomPlanner.Core
         }
 
         public SettingsSchema Numeric(string id, string caption, float min, float max,
-            Func<float> get, Action<float, float> commit, Func<string> value)
+            Func<float> get, Action<float, float> commit, Func<string> value,
+            float displayScale = 1f)
         {
             _fields.Add(new SettingField
             {
                 Id = id, Caption = caption, Kind = SettingKind.Numeric,
-                Min = min, Max = max, GetNumber = get, CommitNumber = commit, Value = value,
+                Min = min, Max = max, DisplayScale = displayScale,
+                GetNumber = get, CommitNumber = commit, Value = value,
             });
             return this;
         }

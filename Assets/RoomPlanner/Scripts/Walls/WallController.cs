@@ -36,24 +36,32 @@ namespace RoomPlanner.Walls
 
         public string Id => "wall";
         public string PaletteLabel => "Wall";
+        public string IconId => "wall";
 
-        /// <summary>Wall parameters live in ToolManager (shared store); the schema binds to it.</summary>
+        /// <summary>Wall parameters live in ToolManager (shared store); the schema binds to it.
+        /// v2 widgets (design/20 §2): sliders for the bounded lengths, segmented rows for
+        /// the mode enums — every option visible, no blind cycling.</summary>
         public SettingsSchema GetSettings()
         {
             if (manager == null) return null;
             _settings ??= new SettingsSchema()
-                .Stepper("thk", "Thickness",
-                    () => $"{manager.WallThickness * 100f:0} cm",
-                    () => manager.AdjustWallThickness(-0.02f), () => manager.AdjustWallThickness(0.02f))
-                .Stepper("h", "Height",
-                    () => $"{manager.WallHeight * 100f:0} cm",
-                    () => manager.AdjustWallHeight(-0.1f), () => manager.AdjustWallHeight(0.1f))
+                .Slider("thk", "Thickness", 0.02f, 1f, 0.01f,
+                    () => manager.WallThickness, v => manager.SetWallThickness(v),
+                    (_, v) => manager.SetWallThickness(v),
+                    () => $"{manager.WallThickness * 100f:0} cm", displayScale: 100f)
+                .Slider("h", "Height", 0.2f, 5f, 0.05f,
+                    () => manager.WallHeight, v => manager.SetWallHeight(v),
+                    (_, v) => manager.SetWallHeight(v),
+                    () => $"{manager.WallHeight * 100f:0} cm", displayScale: 100f)
                 .Stepper("ang", "Angle step",
                     () => $"{manager.AngleStep:0}°",
                     () => manager.AdjustAngleStep(-5f), () => manager.AdjustAngleStep(5f))
-                .Cycle("off", "Offset", () => manager.OffsetName(), manager.CycleOffsetMode)
-                .Cycle("join", "Corner", () => manager.JoinName(), manager.CycleJoinMode)
-                .Cycle("place", "Place", () => manager.PlaceName(), manager.CyclePlaceMode);
+                .Segmented("off", "Offset", new[] { "Outer", "Center", "Inner" },
+                    () => manager.OffsetModeIndex, i => manager.OffsetModeIndex = i)
+                .Segmented("join", "Corner", new[] { "Miter", "Bevel", "Round" },
+                    () => manager.JoinModeIndex, i => manager.JoinModeIndex = i)
+                .Segmented("place", "Place", new[] { "Surface", "Free", "Floor" },
+                    () => manager.PlaceModeIndex, i => manager.PlaceModeIndex = i);
             return _settings;
         }
 

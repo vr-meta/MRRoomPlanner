@@ -39,6 +39,8 @@ namespace RoomPlanner.Tests.Play
             f.SetValue(target, value);
         }
 
+        private Transform _tabsRoot;
+
         private InspectorPanel MakePanel(out Transform rowsRoot, out GameObject panelRoot, out GameObject selectionGroup)
         {
             var root = new GameObject("InspectorTest");
@@ -49,13 +51,17 @@ namespace RoomPlanner.Tests.Play
             panelRoot.transform.SetParent(root.transform, false);
             var rows = new GameObject("Rows");
             rows.transform.SetParent(panelRoot.transform, false);
+            var tabs = new GameObject("Tabs");
+            tabs.transform.SetParent(panelRoot.transform, false);
             selectionGroup = new GameObject("SelectionGroup");
             selectionGroup.transform.SetParent(panelRoot.transform, false);
 
             SetPrivate(panel, "panelRoot", panelRoot);
             SetPrivate(panel, "rowsRoot", rows.transform);
+            SetPrivate(panel, "tabsRoot", tabs.transform);
             SetPrivate(panel, "selectionGroup", selectionGroup);
             rowsRoot = rows.transform;
+            _tabsRoot = tabs.transform;
             return panel;
         }
 
@@ -140,6 +146,112 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(2, rows.GetComponentsInChildren<MenuButton>(true).Length);
         }
 
+        // ---- v2 widget rows (design/20 §2) ----
+
+        [Test]
+        public void SliderRow_BuildsWidgetWithCollider_PreviewAndCommitRoute()
+        {
+            float v = 2.7f;
+            float committedAfter = -1f;
+            var schema = new SettingsSchema()
+                .Slider("h", "Height", 0.2f, 5f, 0.05f,
+                    () => v, x => v = x, (_, a) => committedAfter = a,
+                    () => $"{v * 100f:0} cm", displayScale: 100f);
+            var panel = MakePanel(out var rows, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false);
+
+            var widget = rows.GetComponentInChildren<SliderWidget>(true);
+            Assert.IsNotNull(widget, "slider rows carry a SliderWidget for drag capture");
+            Assert.IsNotNull(widget.GetComponent<BoxCollider>(), "the whole track is the hit zone");
+            Assert.AreEqual(MenuLayer, widget.gameObject.layer);
+
+            // simulate the ToolManager drag: preview snaps to detents, release commits ONE value
+            widget.BeginDrag();
+            widget.PreviewAt(widget.GetComponent<BoxCollider>().size.x * 0.5f);
+            Assert.AreNotEqual(2.7f, v, "preview moves the value");
+            widget.EndDrag();
+            Assert.AreEqual(v, committedAfter, 1e-5f, "release commits the final value once");
+        }
+
+        [Test]
+        public void SegmentedRow_BuildsOneButtonPerOption()
+        {
+            int mode = 0;
+            var schema = new SettingsSchema()
+                .Segmented("o", "Offset", new[] { "Outer", "Center", "Inner" },
+                    () => mode, i => mode = i);
+            var panel = MakePanel(out var rows, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false);
+
+            var buttons = rows.GetComponentsInChildren<MenuButton>(true);
+            Assert.AreEqual(3, buttons.Length, "every option is its own visible button");
+            buttons[2].OnClick();
+            Assert.AreEqual(2, mode, "clicking an option selects it by index");
+        }
+
+        [Test]
+        public void ToggleRow_ClickFlipsTheBool()
+        {
+            bool on = false;
+            var schema = new SettingsSchema().Toggle("t", "Scan", () => on, x => on = x);
+            var panel = MakePanel(out var rows, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false);
+
+            var button = rows.GetComponentsInChildren<MenuButton>(true);
+            Assert.AreEqual(1, button.Length);
+            button[0].OnClick();
+            Assert.IsTrue(on);
+            button[0].OnClick();
+            Assert.IsFalse(on);
+        }
+
+        [UnityTest]
+        public IEnumerator TabbedSchema_BuildsStrip_AndSwitchesPages()
+        {
+            int tab = 0, posts = 2;
+            bool ceiling = false;
+            var outlet = new SettingsSchema()
+                .Stepper("posts", "Posts", () => posts.ToString(), () => posts--, () => posts++);
+            var wire = new SettingsSchema()
+                .Toggle("coff", "Ceiling", () => ceiling, x => ceiling = x);
+            var schema = SettingsSchema.Tabbed(
+                new[] { "Outlet", "Wire" }, () => tab, i => tab = i, outlet, wire);
+            var panel = MakePanel(out var rows, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false);
+            Assert.AreEqual(2, _tabsRoot.GetComponentsInChildren<MenuButton>(true).Length,
+                "one tab button per page");
+            Assert.AreEqual(2, rows.GetComponentsInChildren<MenuButton>(true).Length,
+                "outlet page: [−][+]");
+
+            // click the second tab — the page below must rebuild to the wire rows
+            var tabButtons = _tabsRoot.GetComponentsInChildren<MenuButton>(true);
+            tabButtons[1].OnClick();
+            yield return null;   // deferred destroy of the old rows
+
+            Assert.AreEqual(1, tab, "tab click routes through SelectTab");
+            Assert.AreEqual(1, rows.GetComponentsInChildren<MenuButton>(true).Length,
+                "wire page: the toggle row");
+        }
+
+        [Test]
+        public void ActionRow_Destructive_IsMarkedForHoldToFire()
+        {
+            bool fired = false;
+            var schema = new SettingsSchema()
+                .Action("d", "New project", "trash", () => fired = true, destructive: true);
+            var panel = MakePanel(out var rows, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false);
+
+            var b = rows.GetComponentInChildren<MenuButton>(true);
+            Assert.IsTrue(b.Destructive, "destructive actions must demand the 0.5 s hold");
+            Assert.IsFalse(fired, "building the row must not fire the action");
+        }
+
         [Test]
         public void SelectionOnly_ShowsSelectionGroup_HidesRows()
         {
@@ -192,12 +304,14 @@ namespace RoomPlanner.Tests.Play
 
             Assert.Less(short2, long6, "background height follows the row count");
             Assert.Less(short2, 0.30f, "2 rows must not keep the full-size quad");
-            // top edge stays fixed: center sits at Top − h/2
-            Assert.AreEqual(0.22f - long6 * 0.5f, bg.localPosition.y, 1e-4f);
+            Assert.AreEqual(PanelLayout.PanelHeight(6, hasTabs: false), long6, 1e-4f,
+                "auto-height follows the 6 mm grid (design/20 §3.3)");
+            // v2 panel origin is TOP-center: the quad hangs down from y = 0
+            Assert.AreEqual(-long6 * 0.5f, bg.localPosition.y, 1e-4f);
         }
 
-        [Test]
-        public void PerInstanceRows_ShiftBelowSelectionGroup()
+        [UnityTest]
+        public IEnumerator PerInstanceRows_ShiftBelowSelectionGroup()
         {
             int v = 0;
             var schema = new SettingsSchema()
@@ -206,10 +320,21 @@ namespace RoomPlanner.Tests.Play
             AddBackground(panel, panelRoot);
 
             panel.ShowFor(schema, showSelection: false);
-            Assert.AreEqual(0f, rows.localPosition.y, 1e-5f, "tool settings sit at the top");
-
+            float topAlone = RowTop(rows);
             panel.ShowFor(schema, showSelection: true);
-            Assert.Less(rows.localPosition.y, -0.3f, "per-instance rows drop below the selection group");
+            yield return null;   // deferred Destroy of the re-bound rows applies
+            float topWithSelection = RowTop(rows);
+
+            Assert.Less(topWithSelection, topAlone - 0.10f,
+                "per-instance rows drop below the selection band (design/20 §3)");
+        }
+
+        private static float RowTop(Transform rows)
+        {
+            float top = float.MinValue;
+            foreach (Transform child in rows)
+                if (child != null) top = Mathf.Max(top, child.localPosition.y);
+            return top;
         }
 
         // ---- real tool schemas against the real shared store ----
@@ -234,18 +359,20 @@ namespace RoomPlanner.Tests.Play
             Assert.IsNotNull(s);
             Assert.AreEqual(6, s.Fields.Count, "Thickness/Height/Angle/Offset/Corner/Place");
 
-            float before = mgr.WallThickness;
-            s.Fields[0].Increase();
-            Assert.AreEqual(before + 0.02f, mgr.WallThickness, 1e-5f, "stepper mutates the shared store");
-
-            for (int i = 0; i < 100; i++) s.Fields[0].Increase();
+            // v2 (design/20 §2.2): thickness is a slider — preview + commit route to the store
+            var thk = s.Fields[0];
+            Assert.AreEqual(SettingKind.Slider, thk.Kind);
+            thk.SetNumber(0.30f);
+            Assert.AreEqual(0.30f, mgr.WallThickness, 1e-5f, "slider preview mutates the shared store");
+            thk.CommitNumber(0.30f, 5f);
             Assert.LessOrEqual(mgr.WallThickness, 1f + 1e-5f, "store clamps stay enforced");
 
-            string joinBefore = mgr.JoinName();
-            var join = s.Fields.Count > 4 ? s.Fields[4] : null;
-            Assert.IsNotNull(join);
-            join.Increase();
-            Assert.AreNotEqual(joinBefore, mgr.JoinName(), "cycle advances the mode");
+            // §2.3: corner mode is segmented — all options visible, set by index
+            var join = s.Fields[4];
+            Assert.AreEqual(SettingKind.Segmented, join.Kind);
+            Assert.AreEqual(3, join.ResolveOptions().Length);
+            join.SetIndex(2);
+            Assert.AreEqual(2, mgr.JoinModeIndex, "segmented sets the mode by index");
         }
 
         [Test]
@@ -261,9 +388,10 @@ namespace RoomPlanner.Tests.Play
             Assert.IsNotNull(s);
             Assert.AreEqual(2, s.Fields.Count, "Level/Thickness — plan placement moved to the Blueprint tool");
 
-            float lvl = mgr.Level;
-            s.Fields[0].Increase();
-            Assert.AreEqual(lvl + 0.1f, mgr.Level, 1e-5f);
+            // v2: Level is a numeric field (numpad) — commit writes the store
+            Assert.AreEqual(SettingKind.Numeric, s.Fields[0].Kind);
+            s.Fields[0].CommitNumber(0f, 2.8f);
+            Assert.AreEqual(2.8f, mgr.Level, 1e-5f);
         }
 
         [Test]
@@ -277,11 +405,13 @@ namespace RoomPlanner.Tests.Play
 
             var s = bp.GetSettings();
             Assert.IsNotNull(s);
-            Assert.AreEqual(5, s.Fields.Count, "Plan scale / Rotation / Calibrate / Plan file / Load");
+            Assert.AreEqual(6, s.Fields.Count,
+                "Plan scale / Rotation / Plan file / Load / Calibrate / Status");
 
-            float scale = bp.PlanScale;
-            s.Fields[0].Increase();
-            Assert.AreEqual(scale + 0.25f, bp.PlanScale, 1e-5f, "scale stepper mutates the tool's own state");
+            var scale = s.Fields[0];
+            Assert.AreEqual(SettingKind.Slider, scale.Kind);
+            scale.CommitNumber(bp.PlanScale, 3.25f);
+            Assert.AreEqual(3.25f, bp.PlanScale, 1e-5f, "scale slider mutates the tool's own state");
 
             float rot = bp.PlanRotationDeg;
             s.Fields[1].Increase();
@@ -289,6 +419,10 @@ namespace RoomPlanner.Tests.Play
 
             for (int i = 0; i < 300; i++) s.Fields[1].Increase();
             Assert.That(bp.PlanRotationDeg, Is.InRange(0f, 360f), "rotation wraps, never accumulates");
+
+            // §2.4: the file row is a Select with a dynamic options provider
+            Assert.AreEqual(SettingKind.Select, s.Fields[2].Kind);
+            Assert.IsNotNull(s.Fields[2].ResolveOptions());
         }
 
         [Test]

@@ -69,6 +69,47 @@ namespace RoomPlanner.EditorTools
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
             ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);
             ctx.ActiveMat = CreateMat("Menu_Active", UiColors.Selected);
+
+            // UI v2 (design/20 §6): icons/plates are white and MPB-tinted per state;
+            // inset wells are darker "carved-in" surfaces; the radial scrim is a
+            // procedural radial-falloff texture (texture > vertex color: survives
+            // shader-variant stripping on device).
+            ctx.IconMat = CreateMat("Ui_Icon", Color.white);
+            ctx.InsetMat = CreateMat("Ui_Inset", RoomPlanner.Core.UiTokens.InsetBg);
+            ctx.ScrimMat = CreateBadgeMat("Ui_RadialScrim",
+                new Color(RoomPlanner.Core.UiTokens.PanelBg.r, RoomPlanner.Core.UiTokens.PanelBg.g,
+                    RoomPlanner.Core.UiTokens.PanelBg.b, RoomPlanner.Core.UiTokens.RadialScrimAlpha),
+                CreateScrimTexture());
+        }
+
+        /// <summary>Radial alpha falloff for the tool-wheel scrim (design/20 §6.5).
+        /// Deterministic content — same GUID-stable reuse as the badge texture.</summary>
+        private static Texture2D CreateScrimTexture()
+        {
+            string path = $"{MatDir}/Ui_ScrimFalloffTex.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 128;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+                name = "Ui_ScrimFalloffTex"
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x + 0.5f) / size - 0.5f, dy = (y + 0.5f) / size - 0.5f;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy) * 2f;
+                    float a = RoomPlanner.Core.UiMeshes.ScrimAlpha(r);
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, a);
+                }
+            tex.SetPixels(pixels);
+            tex.Apply();
+            AssetDatabase.CreateAsset(tex, path);
+            return tex;
         }
 
         /// <summary>Thin rim behind a panel background — keeps the panel silhouette visible on
@@ -356,7 +397,7 @@ namespace RoomPlanner.EditorTools
 
         public static MenuButton MakeMenuButton(Transform parent, string name, string label, MenuAction action,
             Vector3 lp, Vector2 size, Material bgMat, Material activeMat, bool withActiveMark, int toolIndex = -1,
-            MenuButtonKind kind = MenuButtonKind.Momentary)
+            MenuButtonKind kind = MenuButtonKind.Momentary, string iconId = null, Material iconMat = null)
         {
             var root = new GameObject(name);
             root.transform.SetParent(parent, false);
@@ -372,7 +413,22 @@ namespace RoomPlanner.EditorTools
             bg.transform.localScale = new Vector3(size.x, size.y, 1f);
             bg.GetComponent<Renderer>().sharedMaterial = bgMat;
 
-            var text = MakeTextChild(root.transform, "Label", label, size);
+            // icon buttons (design/20 §5): mesh built by IconRenderer at runtime Awake —
+            // nothing mesh-like is serialized, the id string is enough
+            if (!string.IsNullOrEmpty(iconId))
+            {
+                var icon = new GameObject("Icon");
+                icon.transform.SetParent(root.transform, false);
+                icon.transform.localPosition = new Vector3(0f, 0f, -0.006f);
+                var ir = icon.AddComponent<IconRenderer>();
+                var iso = new SerializedObject(ir);
+                iso.FindProperty("iconId").stringValue = iconId;
+                iso.FindProperty("material").objectReferenceValue = iconMat;
+                iso.FindProperty("size").floatValue = Mathf.Min(size.x, size.y) * 0.62f;
+                iso.ApplyModifiedProperties();
+            }
+
+            var text = string.IsNullOrEmpty(label) ? null : MakeTextChild(root.transform, "Label", label, size);
 
             GameObject mark = null;
             if (withActiveMark)

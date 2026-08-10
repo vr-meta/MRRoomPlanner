@@ -6,8 +6,10 @@ using RoomPlanner.Tools;
 namespace RoomPlanner.EditorTools
 {
     /// <summary>
-    /// Left-hand palette: tool buttons GENERATED from the registry order (labels come from
-    /// each tool's PaletteLabel — adding a tool needs no palette edits) + global snap toggles.
+    /// Left-hand palette v2 = the Snap &amp; Layers STRIP (design/20 §1.9). Tool buttons are
+    /// GONE — tool switching lives in the radial (L3). The strip keeps the five snap
+    /// toggles (now icon buttons) and a passive current-tool chip with the 4 mm layer
+    /// edge stripe. Palm-gating / lazy-follow wiring unchanged.
     /// </summary>
     internal static class SetupPalette
     {
@@ -19,83 +21,85 @@ namespace RoomPlanner.EditorTools
 
             var panel = GameObject.CreatePrimitive(PrimitiveType.Quad);
             panel.name = "Panel";
-            // Keep the quad's collider: the whole panel must block scene tools, or a trigger
+            // Keep the quad's collider: the whole strip must block scene tools, or a trigger
             // pull between buttons places a point on the wall BEHIND the menu.
             panel.transform.SetParent(root.transform, false);
-            panel.transform.localScale = new Vector3(0.385f, 0.16f, 1f);   // fits 8 tool buttons
+            panel.transform.localScale = new Vector3(0.30f, 0.085f, 1f);
             panel.transform.localPosition = new Vector3(0f, 0f, 0.006f);
             panel.GetComponent<Renderer>().sharedMaterial = ctx.PanelMat;
             SetupAssets.AddRim(panel, ctx.RimMat);
 
-            // ---- tool buttons from the registry order (must match ToolManager's list) ----
-            ITool[] tools = { ctx.Select, ctx.Measure, ctx.WallTool, ctx.FloorTool, ctx.Blueprint, ctx.Import, ctx.Electric, ctx.Paint };
-            var toolButtons = new MenuButton[tools.Length];
-            var toolSize = new Vector2(0.045f, 0.05f);
-            float stepX = 0.0485f;                                  // centered row
-            float startX = -stepX * (tools.Length - 1) * 0.5f;
-            // Full-word hints for the abbreviated labels (hover tooltip, feedback 2026-08-10).
-            string TooltipFor(ITool t) => t == null ? "" : t.Id switch
+            // ---- snap toggles: icon buttons with the LED (design/20 §2.5) ----
+            var snapSize = new Vector2(0.040f, 0.040f);
+            const float stepX = 0.0445f;
+            float x0 = -0.104f;
+            MenuButton Snap(int i, string name, MenuAction action, string icon, string tooltip)
             {
-                "select" => "Select & move objects",
-                "measure" => "Tape measure",
-                "wall" => "Draw walls",
-                "floor" => "Draw floor slabs",
-                "blueprint" => "Floor plan underlay",
-                "import" => "Import IFC (Revit)",
-                "paint" => "Paint surfaces",
-                _ => t.PaletteLabel,
-            };
-
-            for (int i = 0; i < tools.Length; i++)
-            {
-                string label = tools[i] != null ? tools[i].PaletteLabel : $"T{i}";
-                toolButtons[i] = SetupAssets.MakeMenuButton(root.transform, $"BtnTool{i}", label,
-                    MenuAction.SelectTool, new Vector3(startX + i * stepX, 0.045f, 0f), toolSize,
-                    ctx.BtnMat, ctx.ActiveMat, withActiveMark: true, toolIndex: i,
-                    kind: MenuButtonKind.Radio);
-                toolButtons[i].Tooltip = TooltipFor(tools[i]);
+                var b = SetupAssets.MakeMenuButton(root.transform, name, null, action,
+                    new Vector3(x0 + i * stepX, 0.008f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat,
+                    withActiveMark: true, kind: MenuButtonKind.Toggle,
+                    iconId: icon, iconMat: ctx.IconMat);
+                b.Tooltip = tooltip;
+                return b;
             }
+            var snapCornerBtn = Snap(0, "BtnSnapCorner", MenuAction.ToggleSnapCorner, "corner-snap", "Snap to corners");
+            var snapEdgeBtn = Snap(1, "BtnSnapEdge", MenuAction.ToggleSnapEdge, "edge-snap", "Snap to wall edges");
+            var snapGridBtn = Snap(2, "BtnSnapGrid", MenuAction.ToggleSnapGrid, "grid-snap", "Snap to 5 cm grid");
+            var snapAngleBtn = Snap(3, "BtnSnapAngle", MenuAction.ToggleSnapAngle, "angle-snap", "Angle snap for walls");
+            var scanBtn = Snap(4, "BtnScan", MenuAction.ToggleScan, "scan", "Room scan on / virtual world off");
 
-            // ---- global snap toggles (Toggle kind: strip + LED, not the radio inversion) ----
-            var snapSize = new Vector2(0.042f, 0.04f);
-            var snapCornerBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapCorner", "Cor", MenuAction.ToggleSnapCorner,
-                new Vector3(-0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
-            var snapEdgeBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapEdge", "Edg", MenuAction.ToggleSnapEdge,
-                new Vector3(-0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
-            var snapGridBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapGrid", "Grd", MenuAction.ToggleSnapGrid,
-                new Vector3(0f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
-            var snapAngleBtn = SetupAssets.MakeMenuButton(root.transform, "BtnSnapAngle", "Ang", MenuAction.ToggleSnapAngle,
-                new Vector3(0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
-            var scanBtn = SetupAssets.MakeMenuButton(root.transform, "BtnScan", "Scan", MenuAction.ToggleScan,
-                new Vector3(0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
-            snapCornerBtn.Tooltip = "Snap to corners";
-            snapEdgeBtn.Tooltip = "Snap to wall edges";
-            snapGridBtn.Tooltip = "Snap to 5 cm grid";
-            snapAngleBtn.Tooltip = "Angle snap for walls";
-            scanBtn.Tooltip = "Room scan on / virtual world off";
+            // ---- passive current-tool chip: icon + name + 4 mm layer stripe ----
+            var chip = new GameObject("ToolChip");
+            chip.transform.SetParent(root.transform, false);
+            chip.transform.localPosition = new Vector3(0.098f, 0.008f, 0f);
+            var chipBg = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            chipBg.name = "Bg";
+            SetupAssets.RemoveCollider(chipBg);
+            chipBg.transform.SetParent(chip.transform, false);
+            chipBg.transform.localScale = new Vector3(0.088f, 0.040f, 1f);
+            chipBg.GetComponent<Renderer>().sharedMaterial = ctx.BtnMat;
+            var stripe = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            stripe.name = "Stripe";
+            SetupAssets.RemoveCollider(stripe);
+            stripe.transform.SetParent(chip.transform, false);
+            stripe.transform.localScale = new Vector3(0.004f, 0.040f, 1f);
+            stripe.transform.localPosition = new Vector3(-0.042f, 0f, -0.001f);
+            stripe.GetComponent<Renderer>().sharedMaterial = ctx.ActiveMat;
 
-            // hover tooltip strip under the buttons
-            var tooltip = SetupAssets.MakeTextChild(root.transform, "Tooltip", "",
-                new Vector2(0.20f, 0.024f));
-            tooltip.rectTransform.localPosition = new Vector3(0f, -0.066f, 0f);
-            tooltip.gameObject.SetActive(false);
+            var chipIconGo = new GameObject("Icon");
+            chipIconGo.transform.SetParent(chip.transform, false);
+            chipIconGo.transform.localPosition = new Vector3(-0.028f, 0f, -0.004f);
+            var chipIcon = chipIconGo.AddComponent<IconRenderer>();
+            var iso = new SerializedObject(chipIcon);
+            iso.FindProperty("iconId").stringValue = "select-cursor";
+            iso.FindProperty("material").objectReferenceValue = ctx.IconMat;
+            iso.FindProperty("size").floatValue = 0.020f;
+            iso.ApplyModifiedProperties();
+
+            var chipLabel = SetupAssets.MakeTextChild(chip.transform, "Name", "Select",
+                new Vector2(0.056f, 0.020f));
+            chipLabel.rectTransform.localPosition = new Vector3(0.012f, 0f, -0.004f);
+
+            // hint strip: tooltip for hovered buttons + radial discoverability line
+            var tooltip = SetupAssets.MakeTextChild(root.transform, "Tooltip",
+                "Tools: click left stick", new Vector2(0.24f, 0.020f));
+            tooltip.rectTransform.localPosition = new Vector3(0f, -0.030f, 0f);
 
             var so = new SerializedObject(menu);
             Transform leftAnchor = SetupCoreRig.FindLeftControllerAnchor();
             if (leftAnchor != null) so.FindProperty("follow").objectReferenceValue = leftAnchor;
-            var arr = so.FindProperty("toolButtons");
-            arr.arraySize = toolButtons.Length;
-            for (int i = 0; i < toolButtons.Length; i++)
-                arr.GetArrayElementAtIndex(i).objectReferenceValue = toolButtons[i];
             so.FindProperty("snapCornerBtn").objectReferenceValue = snapCornerBtn;
             so.FindProperty("snapEdgeBtn").objectReferenceValue = snapEdgeBtn;
             so.FindProperty("snapGridBtn").objectReferenceValue = snapGridBtn;
             so.FindProperty("snapAngleBtn").objectReferenceValue = snapAngleBtn;
             so.FindProperty("scanBtn").objectReferenceValue = scanBtn;
             so.FindProperty("tooltipLabel").objectReferenceValue = tooltip;
+            so.FindProperty("chipIcon").objectReferenceValue = chipIcon;
+            so.FindProperty("chipLabel").objectReferenceValue = chipLabel;
+            so.FindProperty("chipStripe").objectReferenceValue = stripe.GetComponent<Renderer>();
             so.ApplyModifiedProperties();
 
-            root.transform.localScale = Vector3.one * 1.55f; // bigger, readable text (feedback 2026-08-10)
+            root.transform.localScale = Vector3.one * 1.55f; // readable at wrist distance
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.MenuLayer);
             return menu;
         }

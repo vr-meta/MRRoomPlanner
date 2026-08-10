@@ -16,14 +16,19 @@ namespace RoomPlanner.Electrical
         public SettingsSchema GetSettings()
         {
             if (Route == null) return null;
+            // v2: both cable types visible at once (design/20 §2.3), change stays undoable
             _schema ??= new SettingsSchema()
-                .Cycle("rcable", "Cable", () => Cable.Label(Route.Cable), CycleCable);
+                .Segmented("rcable", "Cable",
+                    new[] { Cable.Label(CableType.C3x15), Cable.Label(CableType.C3x25) },
+                    () => (int)Route.Cable, SetCable);
             return _schema;
         }
 
-        private void CycleCable()
+        private void SetCable(int index)
         {
-            var cmd = new RouteCableCommand(this, Route.Cable, Cable.Next(Route.Cable));
+            var target = (CableType)index;
+            if (Route.Cable == target) return;
+            var cmd = new RouteCableCommand(this, Route.Cable, target);
             var model = SceneModel.Instance;
             if (model != null) model.History.Execute(cmd);
             else cmd.Do();

@@ -35,56 +35,44 @@ namespace RoomPlanner.Walls
         {
             if (Segment == null) return null;
             // one schema per view: its delegates read the CURRENT segment every time, so the
-            // rows stay correct even after the wall is split or rebuilt
+            // rows stay correct even after the wall is split or rebuilt.
+            // v2 widgets: numeric fields commit ONE command per entry (design/20 §2.6),
+            // segmented rows replace the blind cycles (§2.3).
             _schema ??= new SettingsSchema()
-                .Stepper("wthk", "Thickness",
-                    () => $"{(Segment?.Thickness ?? 0f) * 100f:0} cm",
-                    () => AdjustThickness(-0.02f), () => AdjustThickness(0.02f))
-                .Stepper("wh", "Height",
-                    () => $"{(Segment?.Height ?? 0f) * 100f:0} cm",
-                    () => AdjustHeight(-0.1f), () => AdjustHeight(0.1f))
-                .Cycle("woff", "Offset", () => OffsetName(), CycleOffset)
-                .Cycle("wjoin", "Corner", () => JoinName(), CycleJoin)
-                .Cycle("wside", "Side", () => SideName(), FlipSide);
+                .Numeric("wthk", "Thickness", MinThickness, MaxThickness,
+                    () => Segment?.Thickness ?? 0f,
+                    (_, v) => SetThickness(v),
+                    () => $"{(Segment?.Thickness ?? 0f) * 100f:0} cm", displayScale: 100f)
+                .Numeric("wh", "Height", MinHeight, MaxHeight,
+                    () => Segment?.Height ?? 0f,
+                    (_, v) => SetHeight(v),
+                    () => $"{(Segment?.Height ?? 0f) * 100f:0} cm", displayScale: 100f)
+                .Segmented("woff", "Offset", new[] { "Outer", "Center", "Inner" },
+                    () => Segment != null ? (int)Segment.Offset : 0,
+                    i => { if (Segment != null) Apply(WallParamCommand.ForOffset(this, (WallOffsetMode)i)); })
+                .Segmented("wjoin", "Corner", new[] { "Miter", "Bevel", "Round" },
+                    () => Segment != null ? (int)Segment.Join : 0,
+                    i => { if (Segment != null) Apply(WallParamCommand.ForJoin(this, (WallJoin)i)); })
+                .Segmented("wside", "Side", new[] { "Right", "Left" },
+                    () => Segment != null && Segment.SideSign < 0f ? 1 : 0,
+                    i => { if (Segment != null) Apply(WallParamCommand.ForSide(this, i == 0 ? 1f : -1f)); });
             return _schema;
         }
 
         // ---- edits (each one undoable) ----
 
-        private void AdjustThickness(float delta)
+        private void SetThickness(float value)
         {
             var s = Segment;
             if (s == null) return;
-            Apply(WallParamCommand.ForThickness(this, Mathf.Clamp(s.Thickness + delta, MinThickness, MaxThickness)));
+            Apply(WallParamCommand.ForThickness(this, Mathf.Clamp(value, MinThickness, MaxThickness)));
         }
 
-        private void AdjustHeight(float delta)
+        private void SetHeight(float value)
         {
             var s = Segment;
             if (s == null) return;
-            Apply(WallParamCommand.ForHeight(this, Mathf.Clamp(s.Height + delta, MinHeight, MaxHeight)));
-        }
-
-        private void CycleOffset()
-        {
-            var s = Segment;
-            if (s == null) return;
-            Apply(WallParamCommand.ForOffset(this, (WallOffsetMode)(((int)s.Offset + 1) % 3)));
-        }
-
-        private void CycleJoin()
-        {
-            var s = Segment;
-            if (s == null) return;
-            Apply(WallParamCommand.ForJoin(this, (WallJoin)(((int)s.Join + 1) % 3)));
-        }
-
-        /// <summary>Flip which face the thickness grows on — the "I drew it from the wrong side" fix.</summary>
-        private void FlipSide()
-        {
-            var s = Segment;
-            if (s == null) return;
-            Apply(WallParamCommand.ForSide(this, -s.SideSign));
+            Apply(WallParamCommand.ForHeight(this, Mathf.Clamp(value, MinHeight, MaxHeight)));
         }
 
         private void Apply(WallParamCommand cmd)

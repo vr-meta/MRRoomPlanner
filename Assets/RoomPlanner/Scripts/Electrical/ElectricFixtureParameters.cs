@@ -53,9 +53,13 @@ namespace RoomPlanner.Electrical
             return s;
         }
 
+        /// <summary>Height as a v2 numeric field (design/20 §2.6): exact cm entry, ONE
+        /// undoable command per commit, clamped in storey-relative space.</summary>
         private void AddHeightRow(SettingsSchema s, float min) =>
-            s.Stepper("fh", "Height", () => $"{Fx.HeightAboveLevel * 100f:0} cm",
-                () => ApplyHeight(min, -1), () => ApplyHeight(min, +1));
+            s.Numeric("fh", "Height", min, ElectricalDefaults.MaxMountHeight,
+                () => Fx != null ? Fx.HeightAboveLevel : 0f,
+                (_, v) => ApplyHeightAbsolute(min, v),
+                () => $"{Fx.HeightAboveLevel * 100f:0} cm", displayScale: 100f);
 
         private void ApplyPosts(int value) =>
             Apply(FixtureParamCommand.ForPosts(this, Mathf.Clamp(value, 1, ElectricalDefaults.MaxPosts)));
@@ -66,12 +70,11 @@ namespace RoomPlanner.Electrical
         private void ApplyReserve(int value) =>
             Apply(FixtureParamCommand.ForReserve(this, Mathf.Clamp(value, 0, ElectricalDefaults.MaxReservePercent)));
 
-        private void ApplyHeight(float min, int dir)
+        private void ApplyHeightAbsolute(float min, float relValue)
         {
             // clamp in storey-relative space: on an upper floor the world Y is offset by
             // the fixture's BaseLevel, and 30–180 cm still must mean "above THIS floor"
-            float rel = Mathf.Clamp(Fx.HeightAboveLevel + dir * ElectricalDefaults.HeightStep,
-                min, ElectricalDefaults.MaxMountHeight);
+            float rel = Mathf.Clamp(relValue, min, ElectricalDefaults.MaxMountHeight);
             Apply(FixtureParamCommand.ForHeight(this, Fx.BaseLevel + rel));
         }
 

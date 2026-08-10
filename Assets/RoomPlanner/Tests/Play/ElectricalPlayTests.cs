@@ -64,37 +64,37 @@ namespace RoomPlanner.Tests.Play
 
         private static string IdOf(Component c) => c.GetComponent<Selectable>().Id;
 
-        // ---- sub-mode schemas ----
+        // ---- sub-modes are TABS on one schema (design/20 §2.12) ----
 
         [Test]
-        public void ElectricSchemas_OnePerMode_CycleRebinds()
+        public void ElectricSchema_TabbedSubModes_SwitchPages()
         {
             var go = new GameObject("Electric");
             _spawned.Add(go);
             var tool = go.AddComponent<ElectricController>();
 
-            var outlet = tool.GetSettings();
-            Assert.AreSame(outlet, tool.GetSettings(), "same mode → same schema instance");
-            CollectionAssert.AreEqual(new[] { "mode", "posts", "oh" },
-                outlet.Fields.Select(f => f.Id).ToArray());
-            Assert.AreEqual("Outlet", outlet.Fields[0].Value());
+            var schema = tool.GetSettings();
+            Assert.AreSame(schema, tool.GetSettings(), "one tabbed root instance, always");
+            Assert.IsTrue(schema.HasTabs, "sub-modes are tabs, not swapped schemas");
+            CollectionAssert.AreEqual(new[] { "Outlet", "Switch", "Wire", "Panel" }, schema.Tabs);
 
-            outlet.Fields[0].Increase();   // Mode row → Switch
-            var sw = tool.GetSettings();
-            Assert.AreNotSame(outlet, sw, "a different instance forces the inspector to re-bind");
-            CollectionAssert.AreEqual(new[] { "mode", "keys", "sh" },
-                sw.Fields.Select(f => f.Id).ToArray());
+            Assert.AreEqual(0, schema.ActiveTab());
+            CollectionAssert.AreEqual(new[] { "posts", "oh" },
+                schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
-            sw.Fields[0].Increase();       // → Wire
-            CollectionAssert.AreEqual(new[] { "mode", "cable", "routing", "coff" },
-                tool.GetSettings().Fields.Select(f => f.Id).ToArray());
+            schema.SelectTab(1);
+            CollectionAssert.AreEqual(new[] { "keys", "sh" },
+                schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
-            tool.GetSettings().Fields[0].Increase();   // → Panel
-            CollectionAssert.AreEqual(new[] { "mode", "res" },
-                tool.GetSettings().Fields.Select(f => f.Id).ToArray());
+            schema.SelectTab(2);
+            CollectionAssert.AreEqual(new[] { "cable", "routing", "coff" },
+                schema.ActivePage().Fields.Select(f => f.Id).ToArray());
+            Assert.AreEqual(SettingKind.Segmented, schema.ActivePage().Fields[0].Kind,
+                "cable options are all visible (design/20 §2.3)");
 
-            tool.GetSettings().Fields[0].Increase();   // wraps → Outlet
-            Assert.AreSame(outlet, tool.GetSettings());
+            schema.SelectTab(3);
+            CollectionAssert.AreEqual(new[] { "res" },
+                schema.ActivePage().Fields.Select(f => f.Id).ToArray());
         }
 
         [Test]
