@@ -259,16 +259,12 @@ namespace RoomPlanner.Core
             for (int i = 1; i < hole.Count; i++) if (hole[i].x > hole[m].x) m = i;
             Vector3 M = hole[m];
 
-            int best = -1;
-            float bestSqr = float.MaxValue;
-            for (int i = 0; i < ring.Count; i++)
-            {
-                float d = FlatSqrDistance(M, ring[i]);
-                if (d >= bestSqr) continue;
-                if (!SeamIsClear(M, ring[i], ring, hole)) continue;
-                bestSqr = d;
-                best = i;
-            }
+            // Prefer targets that are NOT already seam endpoints (positions occurring twice
+            // in the ring): two seams meeting at one vertex make it a triple point, the ring
+            // stops being weakly simple and ear clipping can legitimately deadlock (found on
+            // a two-hole shape whose second bridge landed on the first seam's vertex).
+            int best = FindSeamTarget(ring, hole, M, avoidDuplicates: true);
+            if (best < 0) best = FindSeamTarget(ring, hole, M, avoidDuplicates: false);
             if (best < 0) return false;
 
             // outer[0..best] + hole starting at M + M again + outer[best] again + the rest
@@ -278,6 +274,31 @@ namespace RoomPlanner.Core
             spliced.Add(M);
             for (int i = best; i < ring.Count; i++) spliced.Add(ring[i]);
             return true;
+        }
+
+        private static int FindSeamTarget(List<Vector3> ring, List<Vector3> hole, Vector3 M,
+            bool avoidDuplicates)
+        {
+            int best = -1;
+            float bestSqr = float.MaxValue;
+            for (int i = 0; i < ring.Count; i++)
+            {
+                float d = FlatSqrDistance(M, ring[i]);
+                if (d >= bestSqr) continue;
+                if (avoidDuplicates && CountPosition(ring, ring[i]) > 1) continue;
+                if (!SeamIsClear(M, ring[i], ring, hole)) continue;
+                bestSqr = d;
+                best = i;
+            }
+            return best;
+        }
+
+        private static int CountPosition(List<Vector3> ring, Vector3 p)
+        {
+            int n = 0;
+            foreach (var q in ring)
+                if (Same(q, p)) n++;
+            return n;
         }
 
         /// <summary>The seam must not cross any edge of the ring or of the hole itself.</summary>
@@ -309,6 +330,18 @@ namespace RoomPlanner.Core
                 var q = pts[k];
                 if (Same(q, a) || Same(q, b) || Same(q, c)) continue;
                 if (PointInTriangle(q, a, b, c)) return false;
+            }
+
+            // The vertex test alone is not enough once two holes are bridged: seams meeting
+            // at a shared vertex let a candidate ear span ACROSS a hole whose edges pass
+            // through the triangle without putting any vertex inside it. The ear's new
+            // diagonal a–c must not properly cross any remaining ring edge (SegmentsCross
+            // is strict, so edges merely touching at seam-twin positions stay legal).
+            for (int k = 0; k < idx.Count; k++)
+            {
+                int e1 = idx[k], e2 = idx[(k + 1) % idx.Count];
+                if (e1 == i0 || e1 == i1 || e1 == i2 || e2 == i0 || e2 == i1 || e2 == i2) continue;
+                if (SegmentsCross(a, c, pts[e1], pts[e2])) return false;
             }
             return true;
         }
