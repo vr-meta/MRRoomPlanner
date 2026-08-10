@@ -42,7 +42,7 @@ namespace RoomPlanner.Import
                 // an empty scene must not wipe yesterday's work (e.g. pause on the permission dialog)
                 if (data.Walls.Count == 0 && data.Floors.Count == 0
                     && data.Stairs.Count == 0 && data.Plumbing.Count == 0) return;
-                File.WriteAllText(path, data.ToJson());
+                ProjectFileIO.WriteAtomic(path, data.ToJson());
                 Debug.Log($"[Project] saved {data.Walls.Count}w {data.Floors.Count}f "
                     + $"{data.Stairs.Count}st {data.Plumbing.Count}p → {path}");
             }
@@ -54,9 +54,27 @@ namespace RoomPlanner.Import
 
         public bool TryLoad(string path)
         {
+            if (!File.Exists(path))
+                return File.Exists(ProjectFileIO.BackupPath(path)) && LoadFile(ProjectFileIO.BackupPath(path));
+            if (LoadFile(path)) return true;
+
+            // The main file exists but would not parse (truncated by a mid-write kill).
+            // Quarantine it — the next save must not destroy the evidence — and give
+            // the backup left by the previous atomic save a chance (audit 12 §Б1).
+            ProjectFileIO.QuarantineCorrupt(path);
+            string bak = ProjectFileIO.BackupPath(path);
+            if (File.Exists(bak) && LoadFile(bak))
+            {
+                Debug.LogWarning($"[Project] main file corrupt (quarantined) — restored from {bak}");
+                return true;
+            }
+            return false;
+        }
+
+        private bool LoadFile(string path)
+        {
             try
             {
-                if (!File.Exists(path)) return false;
                 var data = ProjectData.FromJson(File.ReadAllText(path));
                 if (data == null) return false;
                 ProjectStore.Apply(data, import, blueprint);
