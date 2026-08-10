@@ -1148,6 +1148,11 @@ namespace RoomPlanner.Core.Ifc
             int id = placeRef.Ref;
             if (c.Placements.TryGetValue(id, out var cached)) return cached;
 
+            // Mark this id BEFORE recursing: a cyclic PlacementRelTo chain in a broken
+            // file then resolves to identity instead of a StackOverflow no catch can
+            // stop (audit 09 §Б2). The placeholder is overwritten with the real matrix.
+            c.Placements[id] = Matrix4x4.identity;
+
             var m = Matrix4x4.identity;
             var a = c.F.Args(id);
             if (a != null && c.F.TypeOf(id) == "IFCLOCALPLACEMENT")

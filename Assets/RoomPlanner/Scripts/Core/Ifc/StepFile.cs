@@ -77,6 +77,35 @@ namespace RoomPlanner.Core.Ifc
 
         private void DetectUnits()
         {
+            // Imperial exports FIRST: their factor to metres sits in
+            // IFCCONVERSIONBASEDUNIT → IFCMEASUREWITHUNIT (feet: 0.3048), and the SI
+            // metre they also contain is merely that conversion's BASE unit — probing
+            // IFCSIUNIT first would claim it and silently leave the model 3.28× too
+            // large (audit 09 §Б3). Metric files carry no length conversion unit.
+            foreach (int id in OfType("IFCCONVERSIONBASEDUNIT"))
+            {
+                // IFCCONVERSIONBASEDUNIT(Dimensions, .LENGTHUNIT., Name, ConversionFactor)
+                var a = Args(id);
+                if (a == null || a.Count < 4) continue;
+                if (a[1].Kind != StepKind.Enum || a[1].Text != "LENGTHUNIT") continue;
+                var mwu = Deref(a[3]);   // IFCMEASUREWITHUNIT(ValueComponent, UnitComponent)
+                if (mwu == null || mwu.Count < 1) continue;
+                var value = mwu[0];
+                // ValueComponent is a typed number: IFCRATIOMEASURE(0.3048) / IFCLENGTHMEASURE(…)
+                double factor = value.Kind switch
+                {
+                    StepKind.Number => value.Number,
+                    StepKind.Typed when value.Count > 0 && value[0].Kind == StepKind.Number
+                        => value[0].Number,
+                    _ => 0.0,
+                };
+                if (factor > 1e-9)
+                {
+                    LengthToMeters = factor;
+                    return;
+                }
+            }
+
             foreach (int id in OfType("IFCSIUNIT"))
             {
                 // IFCSIUNIT(*, .LENGTHUNIT., .MILLI.|$, .METRE.)

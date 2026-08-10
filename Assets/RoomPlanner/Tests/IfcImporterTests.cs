@@ -29,6 +29,33 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void CyclicLocalPlacement_DoesNotOverflowTheStack()
+        {
+            // Audit 09 §Б2: the placement cache was written AFTER the recursive call, so
+            // a broken file with #40↔#41 referencing each other recursed forever — a
+            // StackOverflow that no catch can stop killed the whole app, not the import.
+            const string doc = @"DATA;
+#20=IFCCARTESIANPOINT((0.,0.,0.));
+#21=IFCCARTESIANPOINT((4.,0.,0.));
+#22=IFCPOLYLINE((#20,#21));
+#23=IFCSHAPEREPRESENTATION($,'Axis','Curve2D',(#22));
+#30=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,4.,0.15);
+#31=IFCEXTRUDEDAREASOLID(#30,#32,#33,3.);
+#32=IFCAXIS2PLACEMENT3D(#20,$,$);
+#33=IFCDIRECTION((0.,0.,1.));
+#34=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#31));
+#35=IFCPRODUCTDEFINITIONSHAPE($,$,(#23,#34));
+#40=IFCLOCALPLACEMENT(#41,#32);
+#41=IFCLOCALPLACEMENT(#40,#32);
+#50=IFCWALLSTANDARDCASE('gid',$,'W',$,$,#40,#35,$);
+ENDSEC;";
+            ImportedBuilding b = null;
+            Assert.DoesNotThrow(() => b = IfcImporter.Import(StepFile.Parse(doc)));
+            // The cycle resolves to identity — the wall must come through, not crash.
+            Assert.AreEqual(1, b.Walls.Count + b.SkippedWalls, "the wall is processed either way");
+        }
+
+        [Test]
         public void ImportsStoreysSortedByElevation()
         {
             var s = Building.Storeys;
