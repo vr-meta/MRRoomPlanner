@@ -83,11 +83,14 @@ namespace RoomPlanner.Tools
                 _palette = new Color[Presets.Length];
                 for (int i = 0; i < Presets.Length; i++) _palette[i] = Presets[i].Color;
             }
+            // Self-explaining panel (device feedback 2026-08-10): the whole palette is
+            // visible inline, and a hint row says what the trigger does.
             _settings ??= new SettingsSchema()
+                .Readout("how", "How to", () => "aim wall/floor · Trigger = paint")
                 .Swatch("color", "Color", _palette, () => _preset,
                     i => _preset = Mathf.Clamp(i, 0, Presets.Length - 1))
                 .Readout("cname", "Preset", () => Presets[_preset].Name)
-                .Action("clear", "Original look", "eraser", ClearHovered)
+                .Action("clear", "Original look (unpaint aimed)", "eraser", ClearHovered)
                 .Header("shade", "Shading")
                 .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
                 .Toggle("ssao", "SSAO",

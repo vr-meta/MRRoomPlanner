@@ -181,6 +181,9 @@ namespace RoomPlanner.Tools
                 case SettingKind.Header: BuildHeader(f, y); return;
                 case SettingKind.Action: BuildAction(f, y); return;
                 case SettingKind.Readout: BuildReadout(f, y); return;
+                case SettingKind.Swatch when (f.Palette?.Length ?? 0) <= 12:
+                    BuildSwatchInline(f, y);   // full-width chip grid — no caption, no popup
+                    return;
             }
 
             MakeCaption(f.Id + "Cap", f.Caption, y);
@@ -349,6 +352,40 @@ namespace RoomPlanner.Tools
             var value = MakeText(mb.transform, "Val", "—",
                 new Vector2(w - 0.008f, UiTokens.RowHeight - 0.012f));
             _refreshers.Add(() => { if (f.Value != null) value.text = f.Value(); });
+        }
+
+        /// <summary>Small palettes render INLINE — every color visible and one tap away
+        /// (device feedback 2026-08-10: the chip→popup Paint panel read as "непонятно").</summary>
+        private void BuildSwatchInline(SettingField f, float y)
+        {
+            var palette = f.Palette;
+            int n = palette.Length;
+            float gap = 0.004f;
+            float chip = Mathf.Min(UiTokens.RowHeight - 0.004f,
+                (PanelLayout.ContentWidth - gap * (n - 1)) / n);
+            float x0 = -((chip + gap) * n - gap) * 0.5f + chip * 0.5f;
+            var rims = new GameObject[n];
+            for (int i = 0; i < n; i++)
+            {
+                int idx = i;
+                var mb = MakeButton(rowsRoot, $"{f.Id}Chip{i}", null,
+                    new Vector3(x0 + i * (chip + gap), y, 0f),
+                    new Vector2(chip, chip),
+                    () => f.SetIndex?.Invoke(idx), background: false);
+                var plate = MakePlate(mb.transform, "Color", new Vector3(0f, 0f, 0.001f),
+                    chip, chip, UiTokens.RadiusS, buttonMaterial);
+                Tint(plate.GetComponent<Renderer>(), palette[i]);
+                rims[i] = MakePlate(mb.transform, "Rim", new Vector3(0f, 0f, 0.002f),
+                    chip + 0.005f, chip + 0.005f, UiTokens.RadiusS + 0.0025f, buttonMaterial);
+                Tint(rims[i].GetComponent<Renderer>(), UiTokens.Hover);
+                rims[i].SetActive(false);
+            }
+            _refreshers.Add(() =>
+            {
+                int cur = f.GetIndex?.Invoke() ?? -1;
+                for (int i = 0; i < rims.Length; i++)
+                    if (rims[i] != null) rims[i].SetActive(i == cur);
+            });
         }
 
         private void BuildSwatch(SettingField f, float y)
