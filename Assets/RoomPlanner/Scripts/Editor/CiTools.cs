@@ -125,6 +125,94 @@ namespace RoomPlanner.EditorTools
             }
         }
 
+        /// <summary>
+        /// Headless render of an imported scene to PNGs (Build/shots/*.png) — visual QA for
+        /// lighting/AO without a headset. Batchmode must run WITHOUT -nographics. The IFC
+        /// comes from the RP_SHOT_IFC env var, falling back to the test fixture. The scene
+        /// is NOT saved — the imported content lives only in this batch session.
+        /// </summary>
+        public static void RenderShots()
+        {
+            try
+            {
+                var scene = EditorSceneManager.OpenScene("Assets/Measure.unity", OpenSceneMode.Single);
+                Debug.Log($"[CI] opened scene {scene.path}");
+
+                var import = UnityEngine.Object.FindFirstObjectByType<RoomPlanner.Import.ImportController>(
+                    FindObjectsInactive.Include);
+                if (import == null) { Debug.LogError("[CI] no ImportController in scene"); EditorApplication.Exit(1); return; }
+
+                string ifc = Environment.GetEnvironmentVariable("RP_SHOT_IFC");
+                if (string.IsNullOrEmpty(ifc) || !System.IO.File.Exists(ifc))
+                    ifc = "Assets/RoomPlanner/Tests/Fixtures/MiniRevit.ifc";
+                Debug.Log($"[CI] importing {ifc}");
+                var building = RoomPlanner.Core.Ifc.IfcImporter.Import(
+                    RoomPlanner.Core.Ifc.StepFile.Parse(System.IO.File.ReadAllText(ifc)));
+                import.BuildScene(building);
+
+                // frame the model: bounds over pickable geometry + MEP fixtures
+                bool has = false;
+                var bounds = new Bounds(Vector3.zero, Vector3.one);
+                foreach (var r in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                {
+                    if (r.gameObject.layer != 6 && r.GetComponent<RoomPlanner.Import.MepView>() == null) continue;
+                    if (!has) { bounds = r.bounds; has = true; } else bounds.Encapsulate(r.bounds);
+                }
+                if (!has) { Debug.LogError("[CI] nothing to frame"); EditorApplication.Exit(1); return; }
+
+                var camGo = new GameObject("ShotCam");
+                var cam = camGo.AddComponent<Camera>();
+                cam.fieldOfView = 62f;
+                cam.nearClipPlane = 0.05f;
+                cam.farClipPlane = 300f;
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.13f, 0.18f, 0.24f);
+
+                System.IO.Directory.CreateDirectory("Build/shots");
+                Vector3 c = bounds.center;
+                float size = Mathf.Max(bounds.size.x, bounds.size.z);
+                float eyeY = bounds.min.y + 1.65f;
+
+                Shoot(cam, c + new Vector3(0.8f, 0.9f, -1f).normalized * size * 1.15f, c, "overview");
+                // four interior looks from the ground-floor centre — at least one faces a room
+                var eye = new Vector3(c.x, eyeY, c.z);
+                Shoot(cam, eye, eye + Vector3.forward * 3f + Vector3.down * 0.2f, "interior-n");
+                Shoot(cam, eye, eye + Vector3.back * 3f + Vector3.down * 0.2f, "interior-s");
+                Shoot(cam, eye, eye + Vector3.right * 3f + Vector3.down * 0.2f, "interior-e");
+                Shoot(cam, eye, eye + Vector3.left * 3f + Vector3.down * 0.2f, "interior-w");
+                Shoot(cam, new Vector3(c.x, eyeY + 0.3f, bounds.min.z - size * 0.8f),
+                    new Vector3(c.x, eyeY, c.z), "facade");
+                Shoot(cam, c + Vector3.up * size * 1.4f + Vector3.back * 0.1f, c, "top");
+
+                Debug.Log("[CI] shots saved to Build/shots");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[CI] RenderShots failed: {e}");
+                EditorApplication.Exit(1);
+            }
+        }
+
+        private static void Shoot(Camera cam, Vector3 from, Vector3 at, string name)
+        {
+            cam.transform.position = from;
+            cam.transform.LookAt(at);
+            var rt = new RenderTexture(1920, 1080, 24);
+            cam.targetTexture = rt;
+            cam.Render();
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = prev;
+            cam.targetTexture = null;
+            System.IO.File.WriteAllBytes($"Build/shots/{name}.png", tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            UnityEngine.Object.DestroyImmediate(rt);
+            Debug.Log($"[CI] shot {name}.png");
+        }
+
         /// <summary>Force a script recompile + asset refresh (used to verify compilation headless).</summary>
         public static void Compile()
         {

@@ -41,8 +41,9 @@ namespace RoomPlanner.EditorTools
             // BlueprintController replaces the texture as soon as a plan is loaded.
             ctx.FloorMat = CreateFloorMat("Floor_Top", new Color(0.78f, 0.78f, 0.76f), concreteTex);
 
-            // virtual ground for the scan-off mode (design/18 I10) — muted, not attention-grabbing
-            ctx.GroundMat = CreateSurfaceMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f), null);
+            // virtual ground for the scan-off mode (design/18 I10) — muted; PLAIN lit:
+            // the Unity plane primitive has no vertex colors for the AO shader
+            ctx.GroundMat = CreatePlainLitMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
 
             // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
@@ -51,8 +52,9 @@ namespace RoomPlanner.EditorTools
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
             // plumbing fixtures wear their MEP layer color (design/07); double-sided —
-            // fixture Breps arrive with arbitrary winding quality
-            ctx.PlumbingMat = CreateFloorMat("MEP_Plumbing", UiColors.LayerPlumbing);
+            // fixture Breps arrive with arbitrary winding quality. Plain lit: imported
+            // meshes carry no vertex colors for the AO shader.
+            ctx.PlumbingMat = CreatePlainLitMat("MEP_Plumbing", UiColors.LayerPlumbing);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
@@ -159,9 +161,19 @@ namespace RoomPlanner.EditorTools
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
-        private static Material CreateFloorMat(string name, Color color, Texture2D tex = null)
+        /// <summary>Lit material WITHOUT vertex AO — ground, MEP meshes.</summary>
+        private static Material CreatePlainLitMat(string name, Color color)
         {
             var mat = new Material(LitShader());
+            SetColor(mat, color);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+            TameSpecular(mat);
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        private static Material CreateFloorMat(string name, Color color, Texture2D tex = null)
+        {
+            var mat = new Material(AOShader());
             SetColor(mat, color);
             ApplyTexture(mat, tex);
             if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
@@ -172,7 +184,7 @@ namespace RoomPlanner.EditorTools
         /// <summary>Opaque textured surface (walls). UVs are metric, so tiling stays at 1.</summary>
         private static Material CreateSurfaceMat(string name, Color tint, Texture2D tex)
         {
-            var mat = new Material(LitShader());
+            var mat = new Material(AOShader());
             SetColor(mat, tint);
             ApplyTexture(mat, tex);
             TameSpecular(mat);
@@ -288,13 +300,22 @@ namespace RoomPlanner.EditorTools
             return s != null ? s : Shader.Find("Standard");
         }
 
-        /// <summary>Lit shader for real SURFACES (walls/floors/stairs/ground/joinery) —
-        /// they take the directional light and shadows (design/04 realism pass). UI, lines
-        /// and markers stay unlit on purpose.</summary>
+        /// <summary>Plain lit shader — for lit surfaces WITHOUT baked vertex colors
+        /// (ground plane, MEP fixture meshes): the AO shader would read missing vertex
+        /// color as black on some drivers.</summary>
         private static Shader LitShader()
         {
             Shader s = Shader.Find("Universal Render Pipeline/Lit");
             return s != null ? s : UnlitShader();
+        }
+
+        /// <summary>Lit + baked vertex-AO shader for OUR procedural surfaces (walls,
+        /// floors, stairs, joinery) — their builders always write vertex colors
+        /// (design/04 realism pass). UI, lines and markers stay unlit on purpose.</summary>
+        private static Shader AOShader()
+        {
+            Shader s = Shader.Find("RoomPlanner/LitVertexAO");
+            return s != null ? s : LitShader();
         }
 
         // ---- UI factory ----

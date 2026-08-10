@@ -84,6 +84,17 @@ namespace RoomPlanner.Stairs
             var v = new List<Vector3>();
             var uv = new List<Vector2>();
             var t = new List<int>();
+            var vc = new List<Color>();
+
+            void FillColors()
+            {
+                // vertex AO: contact shadow near the flight's base level (design/04)
+                while (vc.Count < v.Count)
+                {
+                    float ao = MeshShading.HeightAO(v[vc.Count].y - Base.y);
+                    vc.Add(new Color(ao, ao, ao, 1f));
+                }
+            }
 
             // Extrude a closed 2D ring (run, up) between two side offsets. Rings are wound
             // "up the left edge first" (clockwise in (run,up)); with the LEFT rail leading
@@ -180,8 +191,10 @@ namespace RoomPlanner.Stairs
                 }
             }
 
+            FillColors();
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(vc);
             _mesh.SetTriangles(t, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();

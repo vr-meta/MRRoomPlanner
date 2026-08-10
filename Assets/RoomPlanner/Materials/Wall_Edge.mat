@@ -30,8 +30,10 @@ Material:
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: 2000
-  stringTagMap: {}
-  disabledShaderPasses: []
+  stringTagMap:
+    RenderType: Opaque
+  disabledShaderPasses:
+  - MOTIONVECTORS
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
@@ -63,6 +65,6 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _BaseColor: {r: 0.1, g: 0.16, b: 0.32, a: 1}
-    - _Color: {r: 0.1, g: 0.16, b: 0.32, a: 1}
+    - _Color: {r: 0.09999997, g: 0.15999997, b: 0.31999996, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

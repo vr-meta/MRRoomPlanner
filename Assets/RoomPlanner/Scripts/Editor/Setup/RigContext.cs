@@ -38,6 +38,7 @@ namespace RoomPlanner.EditorTools
         public Material WallMat, WallEdgeMat, FloorMat;
         public Material PanelMat, RimMat, BtnMat, ActiveMat;
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat;
+        public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
     }
 }
 #endif

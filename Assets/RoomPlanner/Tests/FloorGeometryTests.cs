@@ -6,6 +6,20 @@ namespace RoomPlanner.Tests
 {
     public class FloorGeometryTests
     {
+        // These tests pin the exact mesh STRUCTURE; vertex-AO subdivision legitimately
+        // adds vertices, so isolate that independent option here (AOShadingTests owns it).
+        private bool _savedAO;
+
+        [SetUp]
+        public void DisableVertexAO()
+        {
+            _savedAO = RoomPlanner.Core.MeshShading.VertexAO;
+            RoomPlanner.Core.MeshShading.VertexAO = false;
+        }
+
+        [TearDown]
+        public void RestoreVertexAO() => RoomPlanner.Core.MeshShading.VertexAO = _savedAO;
+
         [Test]
         public void Build_MakesBoxAndStoresCorners()
         {

@@ -35,6 +35,7 @@ namespace RoomPlanner.EditorTools
             rig.AddComponent<RigMarker>();
             ctx.Rig = rig;
             EnsureLighting(rig);
+            ctx.Ssao = EnsureSsaoFeature();
             ctx.Raycaster = rig.AddComponent<SceneRaycaster>();
             ctx.Pointer = rig.AddComponent<PointerProvider>();
             ctx.Input = rig.AddComponent<MeasureInput>();
@@ -105,6 +106,56 @@ namespace RoomPlanner.EditorTools
             RenderSettings.ambientSkyColor = new Color(0.58f, 0.62f, 0.70f);
             RenderSettings.ambientEquatorColor = new Color(0.47f, 0.48f, 0.50f);
             RenderSettings.ambientGroundColor = new Color(0.32f, 0.31f, 0.29f);
+        }
+
+        /// <summary>
+        /// SSAO renderer feature on the URP renderer asset (design/04): created once,
+        /// inactive by default, toggled at runtime from the Paint settings. Source=Depth
+        /// with AfterOpaque, so our custom shader needs no extra passes or keywords.
+        /// </summary>
+        private static Object EnsureSsaoFeature()
+        {
+            const string path = "Assets/Settings/URP-Renderer.asset";
+            var data = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.ScriptableRendererData>(path);
+            if (data == null)
+            {
+                Debug.LogWarning("[Setup] URP renderer asset not found — SSAO toggle unavailable");
+                return null;
+            }
+
+            foreach (var sub in AssetDatabase.LoadAllAssetsAtPath(path))
+                if (sub is UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion existing)
+                    return existing;
+
+            var feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion>();
+            feature.name = "SSAO";
+            AssetDatabase.AddObjectToAsset(feature, data);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId);
+
+            var so = new SerializedObject(data);
+            var list = so.FindProperty("m_RendererFeatures");
+            list.arraySize++;
+            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = feature;
+            var map = so.FindProperty("m_RendererFeatureMap");
+            map.arraySize++;
+            map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
+            so.ApplyModifiedProperties();
+
+            var fso = new SerializedObject(feature);
+            fso.FindProperty("m_Active").boolValue = false;                    // opt-in
+            var settings = fso.FindProperty("m_Settings");
+            settings.FindPropertyRelative("Source").enumValueIndex = 1;        // Depth
+            settings.FindPropertyRelative("Downsample").boolValue = true;
+            settings.FindPropertyRelative("AfterOpaque").boolValue = true;     // mobile-cheap
+            settings.FindPropertyRelative("Intensity").floatValue = 1.2f;
+            settings.FindPropertyRelative("Radius").floatValue = 0.25f;
+            settings.FindPropertyRelative("DirectLightingStrength").floatValue = 0.25f;
+            fso.ApplyModifiedProperties();
+
+            EditorUtility.SetDirty(data);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Setup] SSAO renderer feature created (inactive)");
+            return feature;
         }
 
         public static void EnsureLayerName(int layer, string name)

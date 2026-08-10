@@ -47,6 +47,8 @@ namespace RoomPlanner.Tools
         [SerializeField] private MeasureInput input;
         [SerializeField] private ToolManager manager;
         [SerializeField] private SceneModel sceneModel;
+        [SerializeField] private RoomPlanner.Walls.WallGraphRenderer walls;
+        [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
 
         private static readonly (string Name, Color Color)[] Presets =
         {
@@ -74,8 +76,27 @@ namespace RoomPlanner.Tools
             _settings ??= new SettingsSchema()
                 .Cycle("color", "Color", () => Presets[_preset].Name,
                     () => _preset = (_preset + 1) % Presets.Length)
-                .Cycle("clear", "Original look", () => "apply", ClearHovered);
+                .Cycle("clear", "Original look", () => "apply", ClearHovered)
+                .Cycle("vao", "Vertex AO", () => Core.MeshShading.VertexAO ? "On" : "Off", ToggleVertexAO)
+                .Cycle("ssao", "SSAO",
+                    () => ssaoFeature == null ? "—" : ssaoFeature.isActive ? "On" : "Off",
+                    ToggleSsao);
             return _settings;
+        }
+
+        /// <summary>Baked-AO switch: flips the global flag and rebuilds every mesh once.</summary>
+        private void ToggleVertexAO()
+        {
+            Core.MeshShading.VertexAO = !Core.MeshShading.VertexAO;
+            if (walls != null && walls.Graph != null)
+                foreach (var s in walls.Graph.Segments) walls.RebuildSegment(s);
+            foreach (var f in TeleportCommand.CollectFloors()) f.Rebuild();
+            foreach (var st in TeleportCommand.CollectStairs()) st.Rebuild();
+        }
+
+        private void ToggleSsao()
+        {
+            if (ssaoFeature != null) ssaoFeature.SetActive(!ssaoFeature.isActive);
         }
 
         public void OnActivate() { }

@@ -277,8 +277,20 @@
     с мягкими тенями (idempotent в SetupRig), ambient поднят (в passthrough чёрные
     тени читаются как дыры); URP-ассет: soft shadows on, дистанция теней 25 м.
     UI/линии/маркеры/стекло — осознанно Unlit
-  - [ ] Проверка на устройстве (перф теней на Quest 3 — если просядет, first fallback:
-    shadowDistance 12 м, hard shadows)
+  - [~] **Вершинное AO (настройкой) + SSAO (включаемый)** (заказ 2026-08-10):
+    свой шейдер `RoomPlanner/LitVertexAO` (ambient × vertex-color; **ревью экспертом**:
+    исправлен Quest-специфичный `_SHADOWS_SOFT_MEDIUM` — на устройстве URP молча меняет
+    ключевые слова мягких теней; shadow-fade оверлоад; ShadowClamping); стены — плинтусная
+    тень, полы — затемнение к контуру/вырезам (+midpoint-субдивизия верхней грани ≤0.5 м —
+    без неё прямоугольный пол затемнялся бы целиком), лестницы — у основания; земля и
+    MEP-меши — на обычном Lit (нет vertex-color → риск чёрного); тумблеры **Vertex AO**
+    (пересборка мешей) и **SSAO** (URP-фича Depth+AfterOpaque, создаётся Setup'ом,
+    по умолчанию выкл) — в настройках Pnt
+  - [x] **Headless-скриншоты**: `CiTools.RenderShots` (batchmode БЕЗ -nographics) —
+    импорт IFC из `RP_SHOT_IFC` → PNG-ракурсы в `Build/shots`; публикация на GitHub
+    релизом (`shots-2026-08-10`); это же — инструмент самопроверки света/AO
+  - [ ] Проверка на устройстве (перф теней/SSAO на Quest 3 — если просядет: shadowDistance
+    12 м, hard shadows, SSAO держать выключенным)
 - [~] **I13 — Персистентность v0** (см. `06-project-format.md`): формат `ProjectData` v1
   (JSON, только параметры; исключение — MEP-меши, у них параметров нет), `ProjectStore`
   Capture/Apply (загрузка переиспользует BuildScene), **автосейв** на паузу/выход +

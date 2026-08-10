@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Walls
 {
@@ -220,10 +221,15 @@ namespace RoomPlanner.Walls
             Vector3 O(float t, float y) => P(t, y, 1f);
             Vector3 M(float t, float y) => P(t, y, 0.5f);
 
+            var colors = new List<Color>();
+
             int Vert(Vector3 p, float u, float vv)
             {
                 v.Add(p);
                 uv.Add(new Vector2(u, vv));
+                // vertex AO: skirting shadow by height above the wall base (design/04)
+                float ao = MeshShading.HeightAO(p.y - baseY);
+                colors.Add(new Color(ao, ao, ao, 1f));
                 return v.Count - 1;
             }
 
@@ -381,6 +387,7 @@ namespace RoomPlanner.Walls
             _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(glass, 1);
             _mesh.SetTriangles(joinery, 2);
@@ -560,10 +567,13 @@ namespace RoomPlanner.Walls
             int m = s.Count;
             var v = new List<Vector3>(m * 4);
             var uv = new List<Vector2>(m * 4);
+            var colors = new List<Color>(m * 4);
             var tris = new List<int>();
             var ev = new List<Vector3>(m * 4);
             var ei = new List<int>();
             Vector3 up = Vector3.up * height;
+            // vertex AO: skirting shadow — darker at the floor contact line (design/04)
+            float aoBottom = MeshShading.HeightAO(0f), aoTop = MeshShading.HeightAO(height);
 
             // Reverses winding when the footprint is mirrored (oSign < 0) so faces stay outward.
             void AddQuad(int a, int b, int c, int d)
@@ -589,6 +599,10 @@ namespace RoomPlanner.Walls
                 v.Add(s[j].Inner); v.Add(s[j].Outer); v.Add(s[j].Inner + up); v.Add(s[j].Outer + up);
                 uv.Add(new Vector2(u, vBottom)); uv.Add(new Vector2(u, vBottom));
                 uv.Add(new Vector2(u, vTop)); uv.Add(new Vector2(u, vTop));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
                 ev.Add(s[j].Inner); ev.Add(s[j].Outer); ev.Add(s[j].Inner + up); ev.Add(s[j].Outer + up);
                 // verticals
                 ei.Add(j * 4 + 0); ei.Add(j * 4 + 2);
@@ -622,6 +636,7 @@ namespace RoomPlanner.Walls
             _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(new List<int>(), 1);
             _mesh.SetTriangles(new List<int>(), 2);
