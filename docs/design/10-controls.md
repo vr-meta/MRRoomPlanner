@@ -71,8 +71,9 @@ Status (readout). Смещение — стиком. Разрешение на �
 (±25 см, «auto» = тайл каталога, H по умолчанию = квадрат) + **Gloss**
 (auto/0–100 %, шаг 10 %); триггер по стене/полу/лестнице — применить (отменяемо),
 **Original look** (кнопка-ластик) — снять отделку с объекта под прицелом.
-Страница **Rendering** (gear на панели снапов): Vertex AO, SSAO, **Sun shadows**
+Страница **Rendering** (gear на панели снапов): Vertex AO, **Sun shadows**
 (карта теней), **Cast shadows (all)** (отбрасывание теней всеми элементами).
+SSAO снят после трёх проверок на девайсе (мазня в Multiview — issue #15).
 B — возврат в Select.
 **Инспектор Import («Imp», IFC из Revit — `18-ifc-import.md`):** **IFC file**
 (Select-список `.ifc` из Download/Documents шлема и папки приложения), **Load IFC**

@@ -677,11 +677,13 @@ namespace RoomPlanner.Tools
 
         private SettingsSchema RenderSettingsSchema()
         {
+            // NOTE: no SSAO row. Three attempts on device (2026-08-11) all smeared —
+            // even with our DepthNormals pass the AO flies with the head on Quest
+            // Multiview (frame-late depth for fullscreen effects). Findings + retry
+            // conditions live in the gh issue; Vertex AO is the shipped AO story.
             _renderSchema ??= new SettingsSchema()
                 .Header("rhead", "Rendering")
                 .Toggle("vao", "Vertex AO", () => Core.MeshShading.VertexAO, _ => ToggleVertexAO())
-                .Toggle("ssao", "SSAO",
-                    () => ssaoFeature != null && ssaoFeature.isActive, _ => ToggleSsao())
                 .Toggle("sunsh", "Sun shadows",
                     () => sunLight != null && sunLight.shadows != LightShadows.None,
                     _ => ToggleSunShadows())
