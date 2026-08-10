@@ -5,7 +5,9 @@
         "RoomPlanner.Core",
         "RoomPlanner.Editing",
         "Unity.TextMeshPro",
-        "Oculus.VR"
+        "Oculus.VR",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

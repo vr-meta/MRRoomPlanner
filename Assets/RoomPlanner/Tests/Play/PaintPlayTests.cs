@@ -1,146 +1,137 @@
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
-using RoomPlanner.Core;
+using UnityEngine.TestTools;
 using RoomPlanner.Editing;
-using RoomPlanner.Paint;
-using RoomPlanner.Walls;
+using RoomPlanner.Floors;
+using RoomPlanner.Tools;
 
 namespace RoomPlanner.Tests.Play
 {
     /// <summary>
-    /// PlayMode coverage for wall painting (design/04 v1): the undoable stroke command,
-    /// highlight/paint interplay through the real Selectable, and the tool schema.
+    /// Paint v1 (design/04): paint is the object's OWN color — it survives hover/select
+    /// tints, only dresses the body material on multi-material walls, and undoes cleanly.
     /// </summary>
     public class PaintPlayTests
     {
         private readonly List<GameObject> _spawned = new();
-        private SceneModel _model;
+        private static readonly Color Terracotta = new(0.77f, 0.39f, 0.23f);
 
-        [SetUp]
-        public void SetUp()
+        private GameObject Track(GameObject go)
         {
-            var go = new GameObject("SceneModelTest");
             _spawned.Add(go);
-            _model = go.AddComponent<SceneModel>();
+            return go;
         }
 
         [TearDown]
         public void Cleanup()
         {
-            foreach (var go in _spawned) if (go != null) Object.Destroy(go);
+            foreach (var go in _spawned) if (go != null) Object.DestroyImmediate(go);
             _spawned.Clear();
-            foreach (var m in _mats) if (m != null) Object.Destroy(m);
-            _mats.Clear();
         }
 
-        private readonly List<Material> _mats = new();
-
-        private Wall MakeWall()
+        private (Selectable sel, MeshRenderer renderer) MakeSlab()
         {
-            var go = new GameObject("Wall");
-            _spawned.Add(go);
+            var go = Track(new GameObject("Slab"));
             go.AddComponent<MeshFilter>();
-            var renderer = go.AddComponent<MeshRenderer>();
-            // two slots like the real wall prefab (surface + glass) — paint targets index 0
-            var shader = Shader.Find("Universal Render Pipeline/Unlit");
-            if (shader == null) shader = Shader.Find("Standard");
-            var a = new Material(shader);
-            var b = new Material(shader);
-            _mats.Add(a); _mats.Add(b);
-            renderer.sharedMaterials = new[] { a, b };
-            var wall = go.AddComponent<Wall>();
-            wall.Build(new List<Vector3> { Vector3.zero, new(3f, 0f, 0f) },
-                0.2f, 2.7f, WallOffsetMode.Outer, WallJoin.Miter, new Vector3(0f, 0f, 1f));
-            go.AddComponent<Selectable>();
-            _model.Register(go.GetComponent<Selectable>());
-            return wall;
+            var mr = go.AddComponent<MeshRenderer>();
+            var slab = go.AddComponent<Floor>();
+            var sel = go.AddComponent<Selectable>();
+            slab.BuildOutline(new List<Vector3>
+            {
+                new(0f, 0f, 0f), new(2f, 0f, 0f), new(2f, 0f, 2f), new(0f, 0f, 2f),
+            }, 0f, 0.2f, 5f, 0f, 0f, 0f);
+            return (sel, mr);
         }
 
-        private static Color BlockColor(Wall wall)
+        private static Color BlockColor(Renderer r)
         {
             var mpb = new MaterialPropertyBlock();
-            wall.GetComponent<MeshRenderer>().GetPropertyBlock(mpb, 0);
+            r.GetPropertyBlock(mpb);
             return mpb.GetColor("_BaseColor");
         }
 
-        [Test]
-        public void PaintCommand_UndoRestoresBareConcrete()
+        private static void AssertColor(Color expected, Color actual, string why)
         {
-            var wall = MakeWall();
-            var sel = wall.GetComponent<Selectable>();
-
-            _model.History.Execute(new PaintCommand(sel, wall, afterHas: true, PaintPalette.ColorAt(3)));
-            Assert.IsTrue(wall.HasPaint);
-
-            _model.History.Undo();
-            Assert.IsFalse(wall.HasPaint, "the wall had never been painted before the stroke");
-            _model.History.Redo();
-            Assert.IsTrue(wall.HasPaint);
-            Assert.AreEqual(PaintPalette.ColorAt(3), wall.PaintColor);
+            Assert.AreEqual(expected.r, actual.r, 0.01f, why);
+            Assert.AreEqual(expected.g, actual.g, 0.01f, why);
+            Assert.AreEqual(expected.b, actual.b, 0.01f, why);
         }
 
-        [Test]
-        public void PaintCommand_UndoRestoresPreviousColor()
+        [UnityTest]
+        public IEnumerator PaintSurvivesHighlightRoundTrip()
         {
-            var wall = MakeWall();
-            var sel = wall.GetComponent<Selectable>();
-            wall.SetPaint(PaintPalette.ColorAt(0));
+            var (sel, renderer) = MakeSlab();
+            yield return null;
 
-            _model.History.Execute(new PaintCommand(sel, wall, afterHas: true, PaintPalette.ColorAt(5)));
-            Assert.AreEqual(PaintPalette.ColorAt(5), wall.PaintColor);
-            _model.History.Undo();
-            Assert.AreEqual(PaintPalette.ColorAt(0), wall.PaintColor, "undo = previous color, not concrete");
-        }
+            sel.SetPaint(Terracotta);
+            AssertColor(Terracotta, BlockColor(renderer), "painted");
 
-        [Test]
-        public void ClearCommand_IsUndoableToo()
-        {
-            var wall = MakeWall();
-            var sel = wall.GetComponent<Selectable>();
-            wall.SetPaint(PaintPalette.ColorAt(2));
+            sel.SetHighlight(HighlightState.Hover);
+            AssertColor(Color.Lerp(Terracotta, UiColors.Hover, 0.30f), BlockColor(renderer),
+                "hover tint lerps from the PAINT, not the material");
 
-            _model.History.Execute(new PaintCommand(sel, wall, afterHas: false, Color.white));
-            Assert.IsFalse(wall.HasPaint);
-            _model.History.Undo();
-            Assert.IsTrue(wall.HasPaint);
-            Assert.AreEqual(PaintPalette.ColorAt(2), wall.PaintColor);
-        }
-
-        [Test]
-        public void HighlightCycle_PreservesPaint()
-        {
-            var wall = MakeWall();
-            var sel = wall.GetComponent<Selectable>();
-            var paint = PaintPalette.ColorAt(6);
-            wall.SetPaint(paint);
-
-            sel.SetHighlight(HighlightState.Selected);
-            Assert.AreNotEqual(paint, BlockColor(wall), "selection must be visible over paint");
             sel.SetHighlight(HighlightState.None);
-            Assert.AreEqual(paint, BlockColor(wall), "un-highlighting restores paint, not concrete (P1.4)");
+            AssertColor(Terracotta, BlockColor(renderer), "paint stays after the highlight");
+            Assert.IsTrue(sel.IsPainted);
         }
 
-        [Test]
-        public void PaintTool_SchemaAndIdentity()
+        [UnityTest]
+        public IEnumerator PaintCommandUndoRestoresOriginalLook()
         {
-            var go = new GameObject("Paint");
-            _spawned.Add(go);
-            var tool = go.AddComponent<PaintController>();
+            var (sel, renderer) = MakeSlab();
+            var history = new RoomPlanner.Core.EditHistory();
+            yield return null;
 
-            Assert.AreEqual("paint", tool.Id);
-            Assert.AreEqual("Paint", tool.PaletteLabel);
-            var schema = tool.GetSettings();
-            CollectionAssert.AreEqual(new[] { "pcolor", "pact" },
-                schema.Fields.Select(f => f.Id).ToArray());
+            history.Execute(new PaintCommand(sel, Terracotta));
+            Assert.IsTrue(sel.IsPainted);
 
-            string first = schema.Fields[0].Value();
-            schema.Fields[0].Increase();
-            Assert.AreNotEqual(first, schema.Fields[0].Value(), "color row cycles the catalog");
-            Assert.AreEqual("Paint", schema.Fields[1].Value());
-            schema.Fields[1].Increase();
-            Assert.AreEqual("Clear", schema.Fields[1].Value());
+            history.Undo();
+            Assert.IsFalse(sel.IsPainted, "never painted before — back to the material");
+            var mpb = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(mpb);
+            Assert.IsTrue(mpb.isEmpty, "no property block left behind");
+
+            history.Redo();
+            AssertColor(Terracotta, BlockColor(renderer), "redo repaints");
+        }
+
+        [UnityTest]
+        public IEnumerator SecondPaintUndoesToTheFirst()
+        {
+            var (sel, _) = MakeSlab();
+            var history = new RoomPlanner.Core.EditHistory();
+            yield return null;
+
+            history.Execute(new PaintCommand(sel, Terracotta));
+            history.Execute(new PaintCommand(sel, Color.white));
+            history.Undo();
+            AssertColor(Terracotta, sel.Paint, "undo of a repaint returns the previous paint");
+        }
+
+        [UnityTest]
+        public IEnumerator MultiMaterialBody_PaintsOnlySubmeshZero()
+        {
+            var go = Track(new GameObject("Wall"));
+            go.AddComponent<MeshFilter>();
+            var mr = go.AddComponent<MeshRenderer>();
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            mr.sharedMaterials = new[]
+            {
+                new Material(shader), new Material(shader), new Material(shader),
+            };
+            var sel = go.AddComponent<Selectable>();
+            yield return null;
+
+            sel.SetPaint(Terracotta);
+            var mpb = new MaterialPropertyBlock();
+            mr.GetPropertyBlock(mpb, 0);
+            AssertColor(Terracotta, mpb.GetColor("_BaseColor"), "body painted");
+            mr.GetPropertyBlock(mpb, 1);
+            Assert.IsTrue(mpb.isEmpty, "glass untouched");
+            mr.GetPropertyBlock(mpb, 2);
+            Assert.IsTrue(mpb.isEmpty, "joinery untouched");
         }
     }
 }

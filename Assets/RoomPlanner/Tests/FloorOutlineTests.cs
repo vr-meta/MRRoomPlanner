@@ -16,6 +16,19 @@ namespace RoomPlanner.Tests
     /// </summary>
     public class FloorOutlineTests
     {
+        // Structure-pinning tests run with vertex-AO subdivision off (see FloorGeometryTests).
+        private bool _savedAO;
+
+        [SetUp]
+        public void DisableVertexAO()
+        {
+            _savedAO = RoomPlanner.Core.MeshShading.VertexAO;
+            RoomPlanner.Core.MeshShading.VertexAO = false;
+        }
+
+        [TearDown]
+        public void RestoreVertexAO() => RoomPlanner.Core.MeshShading.VertexAO = _savedAO;
+
         private const float Thick = 0.2f;
 
         private static Vector3 P(float x, float z) => new Vector3(x, 0f, z);

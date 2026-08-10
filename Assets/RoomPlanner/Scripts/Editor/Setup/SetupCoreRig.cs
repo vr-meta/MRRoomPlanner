@@ -34,6 +34,8 @@ namespace RoomPlanner.EditorTools
             var rig = new GameObject("MeasureRig");
             rig.AddComponent<RigMarker>();
             ctx.Rig = rig;
+            EnsureLighting(rig);
+            ctx.Ssao = EnsureSsaoFeature();
             ctx.Raycaster = rig.AddComponent<SceneRaycaster>();
             ctx.Pointer = rig.AddComponent<PointerProvider>();
             ctx.Input = rig.AddComponent<MeasureInput>();
@@ -65,6 +67,97 @@ namespace RoomPlanner.EditorTools
 
         /// <summary>Give the layer a name in TagManager if it has none — the rig relies on
         /// layer 6 being 'Selectable'; on a fresh project it would silently stay unnamed.</summary>
+        /// <summary>
+        /// One directional light with soft shadows + a lifted ambient (design/04 realism
+        /// pass): surfaces are Lit now, and without a light they render black. Under the
+        /// rig, so re-running Setup never duplicates it. Ambient is flat and fairly bright —
+        /// in passthrough the "sky" is the user's real room, so pitch-black shadows read
+        /// as holes, not shading.
+        /// </summary>
+        private static void EnsureLighting(GameObject rig)
+        {
+            foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (l.type == LightType.Directional) Object.DestroyImmediate(l.gameObject);
+
+            var go = new GameObject("Sun");
+            go.transform.SetParent(rig.transform, false);
+            go.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.color = new Color(1f, 0.97f, 0.92f);   // warm daylight
+            light.intensity = 1.15f;
+            light.shadows = LightShadows.Soft;
+            light.shadowStrength = 0.55f;                // soft interior shading, not noir
+
+            // A weak cool shadowless fill from the opposite side — the poor man's bounce
+            // light: walls facing away from the sun still read as surfaces, not voids.
+            var fillGo = new GameObject("Fill");
+            fillGo.transform.SetParent(rig.transform, false);
+            fillGo.transform.rotation = Quaternion.Euler(30f, 145f, 0f);
+            var fill = fillGo.AddComponent<Light>();
+            fill.type = LightType.Directional;
+            fill.color = new Color(0.78f, 0.84f, 0.95f);
+            fill.intensity = 0.35f;
+            fill.shadows = LightShadows.None;
+
+            // Trilight ambient (sky brighter than ground) — a cheap GI stand-in that gives
+            // ceilings/floors different base shading even where no light reaches.
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.58f, 0.62f, 0.70f);
+            RenderSettings.ambientEquatorColor = new Color(0.47f, 0.48f, 0.50f);
+            RenderSettings.ambientGroundColor = new Color(0.32f, 0.31f, 0.29f);
+        }
+
+        /// <summary>
+        /// SSAO renderer feature on the URP renderer asset (design/04): created once,
+        /// inactive by default, toggled at runtime from the Paint settings. Source=Depth
+        /// with AfterOpaque, so our custom shader needs no extra passes or keywords.
+        /// </summary>
+        private static Object EnsureSsaoFeature()
+        {
+            const string path = "Assets/Settings/URP-Renderer.asset";
+            var data = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.ScriptableRendererData>(path);
+            if (data == null)
+            {
+                Debug.LogWarning("[Setup] URP renderer asset not found — SSAO toggle unavailable");
+                return null;
+            }
+
+            foreach (var sub in AssetDatabase.LoadAllAssetsAtPath(path))
+                if (sub is UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion existing)
+                    return existing;
+
+            var feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion>();
+            feature.name = "SSAO";
+            AssetDatabase.AddObjectToAsset(feature, data);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out _, out long localId);
+
+            var so = new SerializedObject(data);
+            var list = so.FindProperty("m_RendererFeatures");
+            list.arraySize++;
+            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = feature;
+            var map = so.FindProperty("m_RendererFeatureMap");
+            map.arraySize++;
+            map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
+            so.ApplyModifiedProperties();
+
+            var fso = new SerializedObject(feature);
+            fso.FindProperty("m_Active").boolValue = false;                    // opt-in
+            var settings = fso.FindProperty("m_Settings");
+            settings.FindPropertyRelative("Source").enumValueIndex = 1;        // Depth
+            settings.FindPropertyRelative("Downsample").boolValue = true;
+            settings.FindPropertyRelative("AfterOpaque").boolValue = true;     // mobile-cheap
+            settings.FindPropertyRelative("Intensity").floatValue = 1.2f;
+            settings.FindPropertyRelative("Radius").floatValue = 0.25f;
+            settings.FindPropertyRelative("DirectLightingStrength").floatValue = 0.25f;
+            fso.ApplyModifiedProperties();
+
+            EditorUtility.SetDirty(data);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Setup] SSAO renderer feature created (inactive)");
+            return feature;
+        }
+
         public static void EnsureLayerName(int layer, string name)
         {
             var assets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");

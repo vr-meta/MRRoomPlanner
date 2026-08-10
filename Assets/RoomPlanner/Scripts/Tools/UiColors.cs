@@ -19,7 +19,7 @@ namespace RoomPlanner.Tools
         public static readonly Color ButtonBg = FromHex(0x292E3D);
         public static readonly Color ButtonHoverBg = FromHex(0x3A4256);
         public static readonly Color ButtonDisabledBg = FromHex(0x1A1E28);
-        public static readonly Color LabelLight = FromHex(0xE9EDF5);
+        public static readonly Color LabelLight = FromHex(0xFFFFFF);   // full white — brightness feedback 2026-08-10
         public static readonly Color LabelDark = FromHex(0x10131A);
         public const float DisabledLabelAlpha = 0.25f;
 

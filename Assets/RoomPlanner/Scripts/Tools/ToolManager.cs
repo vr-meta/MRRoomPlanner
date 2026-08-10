@@ -31,7 +31,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private BlueprintController blueprint;
         [SerializeField] private RoomPlanner.Import.ImportController importTool;
         [SerializeField] private RoomPlanner.Electrical.ElectricController electric;
-        [SerializeField] private RoomPlanner.Paint.PaintController paint;
+        [SerializeField] private PaintController paint;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
         [SerializeField] private int offsetMode = 0;  // 0 Outer, 1 Center, 2 Inner
@@ -46,6 +46,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private float level = 0f;         // working floor level Y (storeys); Quest floor ≈ 0
         [SerializeField] private bool scanOn = true;       // show/hide the scanned room mesh (EffectMesh)
         [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
+        [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         // NOTE: plan placement (scale/rotation/offset) lives in BlueprintController — the
         // shared store here holds only genuinely cross-tool parameters.
 
@@ -117,8 +118,9 @@ namespace RoomPlanner.Tools
             // drag is accumulating its delta (replaying history mid-drag corrupts the total).
             if (sceneModel != null && (select == null || !select.IsDragging))
             {
-                if (input.UndoPressed()) { sceneModel.History.Undo(); RefreshMenu(); }
-                else if (input.RedoPressed()) { sceneModel.History.Redo(); RefreshMenu(); }
+                // Undoing/redoing a teleport moves the model — the virtual ground follows.
+                if (input.UndoPressed()) { sceneModel.History.Undo(); UpdateGroundLevel(); RefreshMenu(); }
+                else if (input.RedoPressed()) { sceneModel.History.Redo(); UpdateGroundLevel(); RefreshMenu(); }
             }
 
             Ray ray = pointer.GetRay();
@@ -155,15 +157,20 @@ namespace RoomPlanner.Tools
             if (!overMenu && sceneModel != null && input.TeleportPressed()
                 && (select == null || !select.IsDragging))
             {
+                // Slabs AND stair treads are teleport targets — aiming a step is how you
+                // walk down to a lower storey (design/18 I12).
                 if (sceneModel.TryPick(ray, out var picked, out var point)
-                    && picked is Selectable sel && sel.Kind == SelectableKind.Floor)
+                    && picked is Selectable sel
+                    && (sel.Kind == SelectableKind.Floor || sel.Kind == SelectableKind.Stair))
                 {
                     var head = Camera.main != null ? Camera.main.transform.position : ray.origin;
                     var delta = BuildingNav.TeleportDelta(point, head);
                     sceneModel.History.Execute(new TeleportCommand(
                         GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
                         TeleportCommand.CollectFloors(), delta,
-                        TeleportCommand.CollectStairs()));
+                        TeleportCommand.CollectStairs(),
+                        TeleportCommand.CollectMep()));
+                    UpdateGroundLevel();
                     input.Pulse(0.4f, 0.02f);
                 }
             }
@@ -291,8 +298,9 @@ namespace RoomPlanner.Tools
                     cam.clearFlags = CameraClearFlags.SolidColor;
                     cam.backgroundColor = Color.clear;               // passthrough shows through
                 }
-                else if (RenderSettings.skybox != null)
+                else if (skyMat != null)
                 {
+                    RenderSettings.skybox = skyMat;                  // real environment: daylight sky
                     cam.clearFlags = CameraClearFlags.Skybox;
                 }
                 else
@@ -312,6 +320,24 @@ namespace RoomPlanner.Tools
                 _ground.GetComponent<Renderer>().sharedMaterial = groundMat;
             }
             if (_ground != null) _ground.SetActive(!on);
+            UpdateGroundLevel();
+        }
+
+        /// <summary>
+        /// Keep the virtual ground UNDER the whole model: after teleporting up a storey the
+        /// lower floors sink below zero, and a ground plane parked at −2 cm would hide them —
+        /// which is exactly "can't see storeys through the stairwell hole" (design/18 I12).
+        /// </summary>
+        private void UpdateGroundLevel()
+        {
+            if (_ground == null) return;
+            float min = -0.02f;
+            foreach (var f in TeleportCommand.CollectFloors())
+                min = Mathf.Min(min, f.Level - f.Thickness);
+            foreach (var s in TeleportCommand.CollectStairs())
+                min = Mathf.Min(min, s.Base.y);
+            var p = _ground.transform.position;
+            _ground.transform.position = new Vector3(p.x, min - 0.3f, p.z);
         }
 
         public void SetActiveTool(int index)

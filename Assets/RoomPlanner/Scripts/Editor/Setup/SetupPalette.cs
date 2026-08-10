@@ -33,6 +33,19 @@ namespace RoomPlanner.EditorTools
             var toolSize = new Vector2(0.045f, 0.05f);
             float stepX = 0.0485f;                                  // centered row
             float startX = -stepX * (tools.Length - 1) * 0.5f;
+            // Full-word hints for the abbreviated labels (hover tooltip, feedback 2026-08-10).
+            string TooltipFor(ITool t) => t == null ? "" : t.Id switch
+            {
+                "select" => "Select & move objects",
+                "measure" => "Tape measure",
+                "wall" => "Draw walls",
+                "floor" => "Draw floor slabs",
+                "blueprint" => "Floor plan underlay",
+                "import" => "Import IFC (Revit)",
+                "paint" => "Paint surfaces",
+                _ => t.PaletteLabel,
+            };
+
             for (int i = 0; i < tools.Length; i++)
             {
                 string label = tools[i] != null ? tools[i].PaletteLabel : $"T{i}";
@@ -40,6 +53,7 @@ namespace RoomPlanner.EditorTools
                     MenuAction.SelectTool, new Vector3(startX + i * stepX, 0.045f, 0f), toolSize,
                     ctx.BtnMat, ctx.ActiveMat, withActiveMark: true, toolIndex: i,
                     kind: MenuButtonKind.Radio);
+                toolButtons[i].Tooltip = TooltipFor(tools[i]);
             }
 
             // ---- global snap toggles (Toggle kind: strip + LED, not the radio inversion) ----
@@ -54,6 +68,17 @@ namespace RoomPlanner.EditorTools
                 new Vector3(0.046f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
             var scanBtn = SetupAssets.MakeMenuButton(root.transform, "BtnScan", "Scan", MenuAction.ToggleScan,
                 new Vector3(0.092f, -0.03f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat, true, kind: MenuButtonKind.Toggle);
+            snapCornerBtn.Tooltip = "Snap to corners";
+            snapEdgeBtn.Tooltip = "Snap to wall edges";
+            snapGridBtn.Tooltip = "Snap to 5 cm grid";
+            snapAngleBtn.Tooltip = "Angle snap for walls";
+            scanBtn.Tooltip = "Room scan on / virtual world off";
+
+            // hover tooltip strip under the buttons
+            var tooltip = SetupAssets.MakeTextChild(root.transform, "Tooltip", "",
+                new Vector2(0.20f, 0.024f));
+            tooltip.rectTransform.localPosition = new Vector3(0f, -0.066f, 0f);
+            tooltip.gameObject.SetActive(false);
 
             var so = new SerializedObject(menu);
             Transform leftAnchor = SetupCoreRig.FindLeftControllerAnchor();
@@ -67,9 +92,10 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("snapGridBtn").objectReferenceValue = snapGridBtn;
             so.FindProperty("snapAngleBtn").objectReferenceValue = snapAngleBtn;
             so.FindProperty("scanBtn").objectReferenceValue = scanBtn;
+            so.FindProperty("tooltipLabel").objectReferenceValue = tooltip;
             so.ApplyModifiedProperties();
 
-            root.transform.localScale = Vector3.one * 1.4f; // bigger, readable text
+            root.transform.localScale = Vector3.one * 1.55f; // bigger, readable text (feedback 2026-08-10)
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.MenuLayer);
             return menu;
         }

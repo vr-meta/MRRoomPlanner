@@ -27,6 +27,7 @@ namespace RoomPlanner.Import
         [SerializeField] private FloorController floors;
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private Material stairMat;
+        [SerializeField] private Material plumbingMat;
 
         private const int SelectableLayer = 6;   // picked by Select, ignored by the surface raycaster
 
@@ -35,8 +36,10 @@ namespace RoomPlanner.Import
         private string _status = "pick file";
         private SettingsSchema _settings;
 
-        // Everything the LAST import created, per storey — drives the visibility filter.
+        // Everything the LAST import created, per storey — drives the visibility filter
+        // and lets a repeated Load REPLACE the previous building instead of stacking two.
         private readonly List<(Selectable view, int storey)> _created = new();
+        private readonly List<WallSegment> _importedSegments = new();
         private ImportedBuilding _building;
         private int _storeyFilter = -1;   // -1 = show all storeys
 
@@ -48,7 +51,8 @@ namespace RoomPlanner.Import
             _settings ??= new SettingsSchema()
                 .Cycle("file", "IFC file", SelectedFileLabel, NextFile)
                 .Cycle("load", "Load", () => _status, Load)
-                .Cycle("storey", "Storey", StoreyLabel, NextStorey);
+                .Cycle("storey", "Storey", StoreyLabel, NextStorey)
+                .Cycle("new", "New project", () => "reset all", NewProject);
             return _settings;
         }
 
@@ -135,15 +139,17 @@ namespace RoomPlanner.Import
             var graph = walls != null ? walls.Graph : null;
             if (graph == null || floors == null) { _status = "rig not wired"; return; }
 
+            RemovePreviousImport();
+
             _building = building;
-            _created.Clear();
             _storeyFilter = -1;
 
             var touched = new HashSet<WallNode>();
-            var segments = new List<(WallSegment seg, int storey)>();
+            var segments = new List<(WallSegment seg, int storey, int wallIndex)>();
             var wallSegments = new List<List<WallSegment>>();   // per imported wall, for openings
-            foreach (var iw in building.Walls)
+            for (int wi = 0; wi < building.Walls.Count; wi++)
             {
+                var iw = building.Walls[wi];
                 var ownSegments = new List<WallSegment>();
                 wallSegments.Add(ownSegments);
                 for (int i = 0; i + 1 < iw.Path.Count; i++)
@@ -154,22 +160,30 @@ namespace RoomPlanner.Import
                     if (seg == null) continue;                 // degenerate stretch
                     seg.Thickness = Mathf.Max(0.01f, iw.Thickness);
                     seg.Height = Mathf.Max(0.05f, iw.Height);
-                    // The IFC axis IS the centerline — never offset to a face.
-                    seg.Offset = WallOffsetMode.Center;
+                    // The IFC axis IS the centerline — never offset to a face. Project
+                    // files carry the user's actual settings as overrides.
+                    seg.Offset = iw.OffsetOverride >= 0 ? (WallOffsetMode)iw.OffsetOverride : WallOffsetMode.Center;
+                    if (iw.JoinOverride >= 0) seg.Join = (WallJoin)iw.JoinOverride;
+                    if (iw.SideSignOverride != 0f) seg.SideSign = iw.SideSignOverride;
+                    seg.BaseHeight = iw.BaseHeight;
                     touched.Add(a);
                     touched.Add(b);
-                    segments.Add((seg, iw.StoreyIndex));
+                    segments.Add((seg, iw.StoreyIndex, wi));
                     ownSegments.Add(seg);
+                    _importedSegments.Add(seg);
                 }
             }
             int openingCount = AttachOpenings(building, wallSegments);
             walls.Sync();                                      // one view per new segment
             foreach (var n in touched) walls.RebuildAround(n); // joints need all neighbours
-            foreach (var (seg, storey) in segments)
+            for (int i = 0; i < segments.Count; i++)
             {
-                var view = walls.ViewOf(seg);
-                if (view != null)
-                    _created.Add((view.GetComponent<Selectable>(), storey));
+                var view = walls.ViewOf(segments[i].seg);
+                if (view == null) continue;
+                var sel = view.GetComponent<Selectable>();
+                _created.Add((sel, segments[i].storey));
+                var src = building.Walls[segments[i].wallIndex];
+                if (src.HasPaint && sel != null) sel.SetPaint(src.PaintColor);
             }
             int wallCount = segments.Count;
 
@@ -180,7 +194,9 @@ namespace RoomPlanner.Import
                 if (f == null) continue;
                 foreach (var hole in slab.Holes)
                     if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
-                _created.Add((f.GetComponent<Selectable>(), slab.StoreyIndex));
+                var slabSel = f.GetComponent<Selectable>();
+                if (slab.HasPaint && slabSel != null) slabSel.SetPaint(slab.PaintColor);
+                _created.Add((slabSel, slab.StoreyIndex));
                 slabCount++;
             }
 
@@ -193,23 +209,47 @@ namespace RoomPlanner.Import
                 var mr = go.AddComponent<MeshRenderer>();
                 if (stairMat != null) mr.sharedMaterial = stairMat;
                 var stair = go.AddComponent<RoomPlanner.Stairs.Stair>();
-                stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth);
+                stair.Build(st.Base, st.YawDeg, st.Width, st.Risers, st.RiserHeight, st.TreadDepth,
+                    st.Open ? RoomPlanner.Stairs.StairKind.Open : RoomPlanner.Stairs.StairKind.Solid);
                 var sel = go.AddComponent<Selectable>();
+                if (st.HasPaint) sel.SetPaint(st.PaintColor);
                 if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, st.StoreyIndex));
                 stairCount++;
+            }
+
+            int mepCount = 0;
+            foreach (var mep in building.Plumbing)
+            {
+                var go = new GameObject($"Plumbing {mep.Name}");
+                go.transform.SetParent(transform, false);
+                go.transform.position = mep.Origin;
+                var mesh = new Mesh { name = "MepMesh" };
+                mesh.SetVertices(mep.Vertices);
+                mesh.SetTriangles(mep.Triangles, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = go.AddComponent<MeshRenderer>();
+                if (plumbingMat != null) mr.sharedMaterial = plumbingMat;
+                go.AddComponent<MepView>();
+                // Selectable only for the hide/show machinery (undo, storey filter) — no
+                // collider, so it is invisible to picking and never registered for it.
+                var sel = go.AddComponent<Selectable>();
+                _created.Add((sel, mep.StoreyIndex));
+                mepCount++;
             }
 
             // One undo entry for the whole import (objects are already live → Record).
             if (sceneModel != null && _created.Count > 0)
                 sceneModel.History.Record(new ImportBatchCommand(CollectSelectables()));
 
-            int skipped = building.SkippedWalls + building.SkippedColumns
-                + building.SkippedSlabs + building.SkippedOpenings + building.SkippedStairs;
-            _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st"
+            int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs
+                + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
+            _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
-            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, "
-                + $"{openingCount} openings, {holeCount} holes, {stairCount} stairs, skipped {skipped}");
+            Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
+                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
         }
 
         /// <summary>
@@ -245,10 +285,75 @@ namespace RoomPlanner.Import
                     Width = op.Width,
                     Height = op.Height,
                     SillHeight = op.Sill,
+                    IsDoor = op.IsDoor,
                 });
                 count++;
             }
             return count;
+        }
+
+        /// <summary>
+        /// Tear down what the PREVIOUS import created — a repeated Load replaces the
+        /// building instead of stacking a second one (headset feedback 2026-08-10).
+        /// User-drawn geometry is untouched.
+        /// </summary>
+        private void RemovePreviousImport()
+        {
+            foreach (var seg in _importedSegments)
+                if (seg != null) walls.RemoveSegment(seg);   // renderer unregisters + destroys views
+            _importedSegments.Clear();
+            foreach (var (sel, _) in _created)
+            {
+                if (sel == null) continue;                   // wall views died with their segments
+                if (sceneModel != null) sceneModel.Unregister(sel);
+                Destroy(sel.gameObject);
+            }
+            _created.Clear();
+            // the old batch command would replay against destroyed objects — drop it
+            if (sceneModel != null) sceneModel.History.PurgeWhere(c => c is ImportBatchCommand);
+        }
+
+        /// <summary>Full reset (inspector "New project" row): clear the scene AND delete the
+        /// autosave, or yesterday's building would resurrect on the next launch.</summary>
+        public void NewProject()
+        {
+            ClearScene();
+            try
+            {
+                if (System.IO.File.Exists(ProjectAutosave.DefaultPath))
+                    System.IO.File.Delete(ProjectAutosave.DefaultPath);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[Import] could not delete autosave: {e.Message}");
+            }
+            _status = "new project";
+        }
+
+        /// <summary>
+        /// Remove EVERYTHING buildable from the scene (project load starts clean): the wall
+        /// graph with its views, every slab, stair and MEP fixture, plus the history —
+        /// commands referencing destroyed objects must never replay.
+        /// </summary>
+        public void ClearScene()
+        {
+            var graph = walls != null ? walls.Graph : null;
+            if (graph != null)
+            {
+                graph.Clear();
+                walls.Sync();                       // drops every orphaned view
+            }
+            foreach (var f in TeleportCommand.CollectFloors())
+                if (f != null) Destroy(f.gameObject);
+            foreach (var s in TeleportCommand.CollectStairs())
+                if (s != null) Destroy(s.gameObject);
+            foreach (var m in TeleportCommand.CollectMep())
+                if (m != null) Destroy(m.gameObject);
+            _created.Clear();
+            _importedSegments.Clear();
+            _building = null;
+            _storeyFilter = -1;
+            if (sceneModel != null) sceneModel.History.Clear();
         }
 
         private List<ISelectable> CollectSelectables()

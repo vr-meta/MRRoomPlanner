@@ -20,7 +20,16 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("floors").objectReferenceValue = ctx.FloorTool;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             so.FindProperty("stairMat").objectReferenceValue = ctx.StairMat;
+            so.FindProperty("plumbingMat").objectReferenceValue = ctx.PlumbingMat;
             so.ApplyModifiedProperties();
+
+            // persistence v0: autosave on pause/quit, restore on launch (design/06)
+            var autosave = ctx.Rig.AddComponent<ProjectAutosave>();
+            var aso = new SerializedObject(autosave);
+            aso.FindProperty("walls").objectReferenceValue = ctx.Rig.GetComponent<WallGraphRenderer>();
+            aso.FindProperty("import").objectReferenceValue = ctx.Import;
+            aso.FindProperty("blueprint").objectReferenceValue = ctx.Blueprint;
+            aso.ApplyModifiedProperties();
         }
     }
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Walls
 {
@@ -139,68 +140,6 @@ namespace RoomPlanner.Walls
             _collider.sharedMesh = _mesh.vertexCount > 0 ? _mesh : null;
         }
 
-        // ---- paint (design/04, v1): a per-wall tint over the shared concrete material.
-        // A MaterialPropertyBlock on submesh 0 only — the shared material asset stays
-        // untouched (no leaked instances) and window glass (submesh 1) keeps its look.
-        // The block lives on the renderer, so it survives mesh rebuilds by itself. ----
-
-        private static readonly int PaintBaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int PaintColorId = Shader.PropertyToID("_Color");
-        private static MaterialPropertyBlock _paintScratch;
-        private MeshRenderer _renderer;
-
-        public bool HasPaint { get; private set; }
-        public Color PaintColor { get; private set; } = Color.white;
-
-        public void SetPaint(Color color)
-        {
-            HasPaint = true;
-            PaintColor = color;
-            ApplyPaintBlock();
-        }
-
-        /// <summary>Back to the bare shared material (concrete).</summary>
-        public void ClearPaint()
-        {
-            HasPaint = false;
-            ApplyPaintBlock();
-        }
-
-        /// <summary>(Re)apply the plain paint block — also the restore path when a highlight
-        /// tint ends (the Selectable calls this instead of erasing the paint).</summary>
-        public void ApplyPaintBlock()
-        {
-            var r = PaintRenderer();
-            if (r == null) return;
-            if (!HasPaint) { r.SetPropertyBlock(null, 0); return; }
-            WritePaintBlock(r, PaintColor);
-        }
-
-        /// <summary>Highlight over paint: a per-material block overrides the renderer-wide
-        /// tint the Selectable uses, so a painted face must get the lerped color written
-        /// into ITS block or hover/selection would be invisible on it.</summary>
-        public void ApplyPaintHighlight(Color stateColor, float strength)
-        {
-            if (!HasPaint) return;   // no per-material block → the renderer-wide tint shows
-            var r = PaintRenderer();
-            if (r != null) WritePaintBlock(r, Color.Lerp(PaintColor, stateColor, strength));
-        }
-
-        private MeshRenderer PaintRenderer()
-        {
-            if (_renderer == null) _renderer = GetComponent<MeshRenderer>();
-            return _renderer;
-        }
-
-        private static void WritePaintBlock(MeshRenderer r, Color color)
-        {
-            _paintScratch ??= new MaterialPropertyBlock();
-            _paintScratch.Clear();
-            _paintScratch.SetColor(PaintBaseColorId, color);
-            _paintScratch.SetColor(PaintColorId, color);
-            r.SetPropertyBlock(_paintScratch, 0);
-        }
-
         /// <summary>
         /// Draw ONE graph segment, with its ends shaped by whatever meets it at each node
         /// (<see cref="WallMesh"/>). Replaces the polyline path for graph-backed walls; the
@@ -269,18 +208,28 @@ namespace RoomPlanner.Walls
             var uv = new List<Vector2>();
             var tris = new List<int>();
             var glass = new List<int>();
+            var joinery = new List<int>();   // frames + door leaves (submesh 2)
             var ev = new List<Vector3>();
             var ei = new List<int>();
             float baseY = a.Inner.y;
+            float thickness = Mathf.Max((a.Outer - a.Inner).magnitude, MinSize);
 
-            Vector3 I(float t, float y) => Vector3.Lerp(a.Inner, b.Inner, t) + Vector3.up * y;
-            Vector3 O(float t, float y) => Vector3.Lerp(a.Outer, b.Outer, t) + Vector3.up * y;
-            Vector3 M(float t, float y) => (I(t, y) + O(t, y)) * 0.5f;
+            // d = fraction across the thickness: 0 = inner surface, 1 = outer
+            Vector3 P(float t, float y, float d) => Vector3.Lerp(
+                Vector3.Lerp(a.Inner, b.Inner, t), Vector3.Lerp(a.Outer, b.Outer, t), d) + Vector3.up * y;
+            Vector3 I(float t, float y) => P(t, y, 0f);
+            Vector3 O(float t, float y) => P(t, y, 1f);
+            Vector3 M(float t, float y) => P(t, y, 0.5f);
+
+            var colors = new List<Color>();
 
             int Vert(Vector3 p, float u, float vv)
             {
                 v.Add(p);
                 uv.Add(new Vector2(u, vv));
+                // vertex AO: skirting shadow by height above the wall base (design/04)
+                float ao = MeshShading.HeightAO(p.y - baseY);
+                colors.Add(new Color(ao, ao, ao, 1f));
                 return v.Count - 1;
             }
 
@@ -313,6 +262,18 @@ namespace RoomPlanner.Walls
             void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
                 Face(tris, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t), VV(y1));
 
+            // A free-standing joinery block (frame bar / door leaf): all six faces, each
+            // reusing the orientation of the corresponding verified wall-face pattern.
+            void Box(float t0, float t1, float y0, float y1, float d0, float d1)
+            {
+                Face(joinery, P(t0, y0, d0), P(t0, y1, d0), P(t1, y1, d0), P(t1, y0, d0), U(t0), VV(y0), U(t1), VV(y1));
+                Face(joinery, P(t0, y1, d1), P(t0, y0, d1), P(t1, y0, d1), P(t1, y1, d1), U(t0), VV(y1), U(t1), VV(y0));
+                Face(joinery, P(t0, y1, d0), P(t0, y1, d1), P(t1, y1, d1), P(t1, y1, d0), U(t0), VV(y1), U(t1), VV(y1));
+                Face(joinery, P(t0, y0, d1), P(t0, y0, d0), P(t1, y0, d0), P(t1, y0, d1), U(t0), VV(y0), U(t1), VV(y0));
+                Face(joinery, P(t0, y0, d1), P(t0, y1, d1), P(t0, y1, d0), P(t0, y0, d0), U(t0), VV(y0), U(t0), VV(y1));
+                Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1), VV(y1));
+            }
+
             void EdgeRect(System.Func<float, float, Vector3> at, float t0, float t1, float y0, float y1)
             {
                 int e0 = ev.Count;
@@ -331,7 +292,7 @@ namespace RoomPlanner.Walls
                 float ys = Mathf.Clamp(op.SillHeight, 0f, height - 0.02f);
                 float yh = Mathf.Clamp(op.SillHeight + op.Height, ys + 0.02f, height);
                 if (t1 - t0 < 1e-3f) continue;
-                ops.Add((t0, t1, ys, yh, ys > 0.01f));
+                ops.Add((t0, t1, ys, yh, !op.IsDoor));
             }
             ops.Sort((x, y) => x.t0.CompareTo(y.t0));
             for (int i = ops.Count - 1; i > 0; i--)
@@ -383,6 +344,29 @@ namespace RoomPlanner.Walls
                         U(op.t1), VV(op.ys), U(op.t0), VV(op.yh));
                 }
 
+                // ---- joinery (design/18 I12): a frame hugging the reveal; doors get a leaf
+                float frameT = Mathf.Min(0.06f / Mathf.Max(centerlineLength, MinSize),
+                                         (op.t1 - op.t0) * 0.25f);        // 60 mm legs
+                float frameY = Mathf.Min(0.06f, (op.yh - op.ys) * 0.25f); // 60 mm head/sill bars
+                float frameHalf = Mathf.Min(0.05f, thickness * 0.45f) / thickness;
+                float fd0 = 0.5f - frameHalf, fd1 = 0.5f + frameHalf;
+
+                Box(op.t0, op.t0 + frameT, op.ys, op.yh, fd0, fd1);           // left leg
+                Box(op.t1 - frameT, op.t1, op.ys, op.yh, fd0, fd1);           // right leg
+                Box(op.t0 + frameT, op.t1 - frameT, op.yh - frameY, op.yh, fd0, fd1); // head
+                if (op.hasGlass)
+                {
+                    Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.ys + frameY, fd0, fd1); // sill board
+                }
+                else
+                {
+                    // door leaf: fills the frame, thinner than the wall, closed for now —
+                    // hinging/opening is a Phase D interaction
+                    float leafHalf = Mathf.Min(0.02f, thickness * 0.2f) / thickness;
+                    Box(op.t0 + frameT, op.t1 - frameT, op.ys, op.yh - frameY,
+                        0.5f - leafHalf, 0.5f + leafHalf);
+                }
+
                 cursor = op.t1;
             }
             if (cursor < 1f)          // final pier (or the whole wall if all openings clipped)
@@ -400,11 +384,13 @@ namespace RoomPlanner.Walls
             EdgeRect(I, 0f, 1f, 0f, height);
             EdgeRect(O, 0f, 1f, 0f, height);
 
-            _mesh.subMeshCount = 2;
+            _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(glass, 1);
+            _mesh.SetTriangles(joinery, 2);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 
@@ -581,10 +567,13 @@ namespace RoomPlanner.Walls
             int m = s.Count;
             var v = new List<Vector3>(m * 4);
             var uv = new List<Vector2>(m * 4);
+            var colors = new List<Color>(m * 4);
             var tris = new List<int>();
             var ev = new List<Vector3>(m * 4);
             var ei = new List<int>();
             Vector3 up = Vector3.up * height;
+            // vertex AO: skirting shadow — darker at the floor contact line (design/04)
+            float aoBottom = MeshShading.HeightAO(0f), aoTop = MeshShading.HeightAO(height);
 
             // Reverses winding when the footprint is mirrored (oSign < 0) so faces stay outward.
             void AddQuad(int a, int b, int c, int d)
@@ -610,6 +599,10 @@ namespace RoomPlanner.Walls
                 v.Add(s[j].Inner); v.Add(s[j].Outer); v.Add(s[j].Inner + up); v.Add(s[j].Outer + up);
                 uv.Add(new Vector2(u, vBottom)); uv.Add(new Vector2(u, vBottom));
                 uv.Add(new Vector2(u, vTop)); uv.Add(new Vector2(u, vTop));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+                colors.Add(new Color(aoBottom, aoBottom, aoBottom, 1f));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
+                colors.Add(new Color(aoTop, aoTop, aoTop, 1f));
                 ev.Add(s[j].Inner); ev.Add(s[j].Outer); ev.Add(s[j].Inner + up); ev.Add(s[j].Outer + up);
                 // verticals
                 ei.Add(j * 4 + 0); ei.Add(j * 4 + 2);
@@ -638,13 +631,15 @@ namespace RoomPlanner.Walls
             ei.Add(0); ei.Add(1); ei.Add(2); ei.Add(3);
             ei.Add(e + 0); ei.Add(e + 1); ei.Add(e + 2); ei.Add(e + 3);
 
-            // Submesh 1 is the window glass — empty here, but always present so a renderer
-            // configured with [wall, glass] materials is valid for every wall.
-            _mesh.subMeshCount = 2;
+            // Submeshes 1/2 are window glass and joinery — empty here, but always present
+            // so a renderer configured with [wall, glass, joinery] is valid for every wall.
+            _mesh.subMeshCount = 3;
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(tris, 0);
             _mesh.SetTriangles(new List<int>(), 1);
+            _mesh.SetTriangles(new List<int>(), 2);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
 

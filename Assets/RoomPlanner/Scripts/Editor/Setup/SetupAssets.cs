@@ -41,13 +41,23 @@ namespace RoomPlanner.EditorTools
             // BlueprintController replaces the texture as soon as a plan is loaded.
             ctx.FloorMat = CreateFloorMat("Floor_Top", new Color(0.78f, 0.78f, 0.76f), concreteTex);
 
-            // virtual ground for the scan-off mode (design/18 I10) — muted, not attention-grabbing
-            ctx.GroundMat = CreateMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
+            // virtual ground for the scan-off mode (design/18 I10) — muted; PLAIN lit:
+            // the Unity plane primitive has no vertex colors for the AO shader
+            ctx.GroundMat = CreatePlainLitMat("Env_Ground", new Color(0.24f, 0.27f, 0.24f));
+            // procedural sky for the scan-off mode and render shots — as an ASSET so the
+            // skybox shader survives build stripping
+            ctx.SkyMat = CreateSkyMat("Env_Sky");
 
             // window glass (wall submesh 1, design/18 I8) — pale blue, mostly transparent
             ctx.GlassMat = CreateBadgeMat("Wall_Glass", new Color(0.65f, 0.82f, 0.95f, 0.22f), null);
+            // door leaves + frames (wall submesh 2, design/18 I12) — warm wood tone, lit
+            ctx.JoineryMat = CreateSurfaceMat("Wall_Joinery", new Color(0.55f, 0.42f, 0.30f), null);
             // stairs share the concrete look of walls/floors until painting lands
             ctx.StairMat = CreateSurfaceMat("Stair_Surface", new Color(0.80f, 0.79f, 0.77f), concreteTex);
+            // plumbing fixtures wear their MEP layer color (design/07); double-sided —
+            // fixture Breps arrive with arbitrary winding quality. Plain lit: imported
+            // meshes carry no vertex colors for the AO shader.
+            ctx.PlumbingMat = CreatePlainLitMat("MEP_Plumbing", UiColors.LayerPlumbing);
 
             // Electrical layer (design/19): wires graphite, not pure black — #000 reads as a
             // hole on passthrough; fixtures near-white, so they read as trade plastic.
@@ -159,22 +169,56 @@ namespace RoomPlanner.EditorTools
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
+        /// <summary>Procedural daylight sky (built-in Skybox/Procedural works under URP).</summary>
+        private static Material CreateSkyMat(string name)
+        {
+            var shader = Shader.Find("Skybox/Procedural");
+            if (shader == null) return null;
+            var mat = new Material(shader);
+            if (mat.HasProperty("_AtmosphereThickness")) mat.SetFloat("_AtmosphereThickness", 0.85f);
+            if (mat.HasProperty("_SkyTint")) mat.SetColor("_SkyTint", new Color(0.55f, 0.65f, 0.78f));
+            if (mat.HasProperty("_GroundColor")) mat.SetColor("_GroundColor", new Color(0.35f, 0.35f, 0.34f));
+            if (mat.HasProperty("_Exposure")) mat.SetFloat("_Exposure", 1.15f);
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>Lit material WITHOUT vertex AO — ground, MEP meshes.</summary>
+        private static Material CreatePlainLitMat(string name, Color color)
+        {
+            var mat = new Material(LitShader());
+            SetColor(mat, color);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+            TameSpecular(mat);
+            return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
         private static Material CreateFloorMat(string name, Color color, Texture2D tex = null)
         {
-            var mat = new Material(UnlitShader());
+            var mat = new Material(AOShader());
             SetColor(mat, color);
             ApplyTexture(mat, tex);
             if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+            TameSpecular(mat);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
         }
 
         /// <summary>Opaque textured surface (walls). UVs are metric, so tiling stays at 1.</summary>
         private static Material CreateSurfaceMat(string name, Color tint, Texture2D tex)
         {
-            var mat = new Material(UnlitShader());
+            var mat = new Material(AOShader());
             SetColor(mat, tint);
             ApplyTexture(mat, tex);
+            TameSpecular(mat);
             return SaveMaterial(mat, $"{MatDir}/{name}.mat");
+        }
+
+        /// <summary>Matte building surfaces: no smooth plastic sheen on concrete/wood.</summary>
+        private static void TameSpecular(Material mat)
+        {
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
+            if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 0f);
+            if (mat.HasProperty("_EnvironmentReflections")) mat.SetFloat("_EnvironmentReflections", 0f);
         }
 
         private static void ApplyTexture(Material mat, Texture2D tex)
@@ -277,6 +321,24 @@ namespace RoomPlanner.EditorTools
             return s != null ? s : Shader.Find("Standard");
         }
 
+        /// <summary>Plain lit shader — for lit surfaces WITHOUT baked vertex colors
+        /// (ground plane, MEP fixture meshes): the AO shader would read missing vertex
+        /// color as black on some drivers.</summary>
+        private static Shader LitShader()
+        {
+            Shader s = Shader.Find("Universal Render Pipeline/Lit");
+            return s != null ? s : UnlitShader();
+        }
+
+        /// <summary>Lit + baked vertex-AO shader for OUR procedural surfaces (walls,
+        /// floors, stairs, joinery) — their builders always write vertex colors
+        /// (design/04 realism pass). UI, lines and markers stay unlit on purpose.</summary>
+        private static Shader AOShader()
+        {
+            Shader s = Shader.Find("RoomPlanner/LitVertexAO");
+            return s != null ? s : LitShader();
+        }
+
         // ---- UI factory ----
 
         public static void RemoveCollider(GameObject go)
@@ -374,9 +436,10 @@ namespace RoomPlanner.EditorTools
             // shrinks to unreadable — panels are scaled up on top of this (see Setup*).
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             tmp.enableAutoSizing = true;
-            // readability floor (UX v2 P1.5): auto-sizing is a clamp, not a shrink-to-fit
-            tmp.fontSizeMin = size.y * 0.78f;
-            tmp.fontSizeMax = size.y * 0.9f;
+            // readability floor (UX v2 P1.5, raised per headset feedback 2026-08-10):
+            // auto-sizing is a clamp, not a shrink-to-fit
+            tmp.fontSizeMin = size.y * 0.88f;
+            tmp.fontSizeMax = size.y * 1.02f;
             return tmp;
         }
     }

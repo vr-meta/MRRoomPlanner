@@ -223,6 +223,11 @@ namespace RoomPlanner.Floors
                 return;
             }
 
+            // Vertex AO needs interior vertices to carry the gradient: a plain rectangle
+            // triangulates into corner vertices only, and rim shading would flood the
+            // whole slab. Refine until edges are ≤0.5 m (a handful of verts per room).
+            if (MeshShading.VertexAO) SubdivideForShading(faceVerts, tris, 0.5f, 4);
+
             int n = faceVerts.Count;
             float top = level, bot = level - _thickness;
             // Negative scale = mirrored plan (legit); near-zero is guarded inside BlueprintMath.
@@ -238,20 +243,29 @@ namespace RoomPlanner.Floors
             // the rim into a soft round edge instead of a crisp one.
             var v = new List<Vector3>(n * 6);
             var uv = new List<Vector2>(n * 6);
+            var colors = new List<Color>(n * 6);
             var t = new List<int>();
 
-            // --- top face 0..n-1: UV from the blueprint placement, so the plan aligns across slabs
+            // --- top face 0..n-1: UV from the blueprint placement, so the plan aligns across slabs.
+            // Vertex AO: the top darkens toward the outline and hole rims — the contact
+            // shadow of the walls that stand there (design/04, MeshShading).
             for (int i = 0; i < n; i++)
             {
                 var p = new Vector3(faceVerts[i].x, top, faceVerts[i].z);
                 v.Add(p);
                 uv.Add(BlueprintMath.WorldToPlanUV(p, placement));
+                float d = MeshShading.DistanceToRingXZ(pts, p);
+                foreach (var hole in _holes)
+                    d = Mathf.Min(d, MeshShading.DistanceToRingXZ(hole, p));
+                float ao = MeshShading.EdgeAO(d);
+                colors.Add(new Color(ao, ao, ao, 1f));
             }
             // --- bottom face n..2n-1: metric UV in the ground plane
             for (int i = 0; i < n; i++)
             {
                 v.Add(new Vector3(faceVerts[i].x, bot, faceVerts[i].z));
                 uv.Add(new Vector2(faceVerts[i].x / TileMeters, faceVerts[i].z / TileMeters));
+                colors.Add(Color.white);
             }
 
             // Winding: a counter-clockwise ring (as Polygon defines it) triangulates with its
@@ -269,13 +283,14 @@ namespace RoomPlanner.Floors
 
             // --- sides: four fresh vertices per edge, U running around the perimeter in metres
             // (per-edge rather than per-corner, so the closing edge has no UV seam)
-            AddSideWalls(pts, v, uv, t, top, bot);
+            AddSideWalls(pts, v, uv, colors, t, top, bot);
             // Hole walls come from rings wound the OTHER way, so the same quad order makes them
             // face INTO the hole — which is outward from the solid, exactly as required.
-            foreach (var hole in _holes) AddSideWalls(Polygon.ToClockwise(hole), v, uv, t, top, bot);
+            foreach (var hole in _holes) AddSideWalls(Polygon.ToClockwise(hole), v, uv, colors, t, top, bot);
 
             _mesh.SetVertices(v);
             _mesh.SetUVs(0, uv);
+            _mesh.SetColors(colors);
             _mesh.SetTriangles(t, 0);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
@@ -287,8 +302,58 @@ namespace RoomPlanner.Floors
             }
         }
 
+        /// <summary>
+        /// Midpoint-subdivide triangles whose edges exceed maxEdge (long edges only, so
+        /// small slabs stay untouched). Neighbouring color T-junctions are possible where
+        /// a short-edged triangle borders a split one — invisible under the texture and
+        /// far cheaper than constrained re-triangulation.
+        /// </summary>
+        private static void SubdivideForShading(List<Vector3> v, List<int> t, float maxEdge, int iterations)
+        {
+            float maxSqr = maxEdge * maxEdge;
+            for (int it = 0; it < iterations; it++)
+            {
+                var mid = new Dictionary<(int, int), int>();
+                var nt = new List<int>(t.Count);
+
+                int Mid(int a, int b)
+                {
+                    var key = a < b ? (a, b) : (b, a);
+                    if (!mid.TryGetValue(key, out int m))
+                    {
+                        m = v.Count;
+                        v.Add((v[a] + v[b]) * 0.5f);
+                        mid[key] = m;
+                    }
+                    return m;
+                }
+
+                for (int i = 0; i + 2 < t.Count; i += 3)
+                {
+                    int a = t[i], b = t[i + 1], c = t[i + 2];
+                    bool longAb = (v[a] - v[b]).sqrMagnitude > maxSqr;
+                    bool longBc = (v[b] - v[c]).sqrMagnitude > maxSqr;
+                    bool longCa = (v[c] - v[a]).sqrMagnitude > maxSqr;
+                    if (!longAb && !longBc && !longCa)
+                    {
+                        nt.Add(a); nt.Add(b); nt.Add(c);
+                        continue;
+                    }
+                    int ab = Mid(a, b), bc = Mid(b, c), ca = Mid(c, a);
+                    nt.Add(a); nt.Add(ab); nt.Add(ca);
+                    nt.Add(ab); nt.Add(b); nt.Add(bc);
+                    nt.Add(ca); nt.Add(bc); nt.Add(c);
+                    nt.Add(ab); nt.Add(bc); nt.Add(ca);
+                }
+
+                t.Clear();
+                t.AddRange(nt);
+                if (mid.Count == 0) break;
+            }
+        }
+
         private static void AddSideWalls(List<Vector3> ring, List<Vector3> v, List<Vector2> uv,
-            List<int> t, float top, float bot)
+            List<Color> colors, List<int> t, float top, float bot)
         {
             int n = ring.Count;
             float run = 0f;
@@ -307,6 +372,8 @@ namespace RoomPlanner.Floors
                 v.Add(new Vector3(b.x, top, b.z)); uv.Add(new Vector2(uB, vTop));
                 v.Add(new Vector3(b.x, bot, b.z)); uv.Add(new Vector2(uB, vBot));
                 v.Add(new Vector3(a.x, bot, a.z)); uv.Add(new Vector2(uA, vBot));
+                colors.Add(Color.white); colors.Add(Color.white);
+                colors.Add(Color.white); colors.Add(Color.white);
 
                 Quad(t, baseIndex, baseIndex + 1, baseIndex + 2, baseIndex + 3);   // outward
             }

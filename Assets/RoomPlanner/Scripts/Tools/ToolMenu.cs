@@ -36,12 +36,20 @@ namespace RoomPlanner.Tools
 
         private void Awake() => _baseScale = transform.localScale;
 
+        [SerializeField] private TMPro.TMP_Text tooltipLabel;   // full-word hint under the palette
+
         public void Highlight(MenuButton b)
         {
             if (_hi == b) return;
             if (_hi != null) _hi.SetHighlight(false);
             _hi = b;
             if (_hi != null) _hi.SetHighlight(true);
+            if (tooltipLabel != null)
+            {
+                string tip = _hi != null ? _hi.Tooltip : null;
+                tooltipLabel.gameObject.SetActive(!string.IsNullOrEmpty(tip));
+                tooltipLabel.text = tip ?? string.Empty;
+            }
         }
 
         public void Refresh(int activeTool, bool snapCorner, bool snapEdge, bool snapGrid, bool snapAngle, bool scanOn)

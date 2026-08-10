@@ -114,6 +114,17 @@ namespace RoomPlanner.Tests.Play
                 Base = new Vector3(1f, 0f, 1f), YawDeg = 0f, Width = 1f,
                 Risers = 3, RiserHeight = 0.2f, TreadDepth = 0.25f, StoreyIndex = 0,
             });
+            var basin = new ImportedMep
+            {
+                Name = "Basin", Origin = new Vector3(4f, 0.8f, 4f), StoreyIndex = 0,
+            };
+            basin.Vertices.AddRange(new[]
+            {
+                new Vector3(-0.2f, 0f, -0.2f), new Vector3(0.2f, 0f, -0.2f),
+                new Vector3(0.2f, 0f, 0.2f), new Vector3(-0.2f, 0f, 0.2f),
+            });
+            basin.Triangles.AddRange(new[] { 0, 1, 2, 0, 2, 3 });
+            b.Plumbing.Add(basin);
             return b;
         }
 
@@ -141,7 +152,11 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, stairs.Length, "the flight became a parametric Stair");
             Assert.AreEqual(3, stairs[0].Risers);
 
-            StringAssert.Contains("2w 1s 1o 1h 1st", import.Status);
+            var mep = Object.FindObjectsByType<MepView>(FindObjectsSortMode.None);
+            Assert.AreEqual(1, mep.Length, "the plumbing fixture arrived");
+            Assert.AreEqual(new Vector3(4f, 0.8f, 4f), mep[0].transform.position);
+
+            StringAssert.Contains("2w 1s 1o 1h 1st 1p", import.Status);
         }
 
         [UnityTest]

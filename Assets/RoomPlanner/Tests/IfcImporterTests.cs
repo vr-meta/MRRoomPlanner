@@ -142,6 +142,24 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void ImportsPlumbingTerminalAsBakedMesh()
+        {
+            // Washbasin #30058 (cyrillic name decodes) — the only MEP the export carries.
+            Assert.AreEqual(1, Building.Plumbing.Count);
+            Assert.AreEqual(0, Building.SkippedMep);
+            var mep = Building.Plumbing[0];
+            Assert.Greater(mep.Vertices.Count, 100, "a real fixture Brep");
+            Assert.AreEqual(0, mep.Triangles.Count % 3);
+            Assert.Greater(mep.Triangles.Count, 0);
+            StringAssert.Contains("Умывальник", mep.Name, "unicode directives decoded");
+            // local verts are baked around the origin — bbox centre sits at zero
+            Vector3 min = mep.Vertices[0], max = mep.Vertices[0];
+            foreach (var p in mep.Vertices) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+            Assert.AreEqual(0f, ((min + max) * 0.5f).magnitude, 1e-3);
+            Assert.Less((max - min).magnitude, 3f, "a washbasin, not a building");
+        }
+
+        [Test]
         public void ImportsDoorAndWindowOpenings()
         {
             // Wall #481 hosts a passage door; wall #189 an exterior door AND a window.

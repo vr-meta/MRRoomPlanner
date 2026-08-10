@@ -14,7 +14,10 @@ namespace RoomPlanner.Walls
         public float AlongFraction = 0.5f;   // 0..1 from A to B
         public float Width = 0.9f;
         public float Height = 2.1f;
-        public float SillHeight;             // 0 for a door, ~0.9 for a window
+        public float SillHeight;             // 0 for doors AND floor-to-ceiling windows
+        /// <summary>Doors get a leaf, windows get glass. Comes from the IFC type — a sill
+        /// heuristic fails on panoramic windows, which also start at the floor.</summary>
+        public bool IsDoor;
     }
 
     /// <summary>

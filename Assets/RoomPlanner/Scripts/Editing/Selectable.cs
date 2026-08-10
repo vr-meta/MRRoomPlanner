@@ -110,60 +110,80 @@ namespace RoomPlanner.Editing
             }
         }
 
+        // ---- paint (design/04 v1): the user's own color for the BODY of the object ----
+
+        private bool _painted;
+        private Color _paint;
+
+        public bool IsPainted { get { Resolve(); return _painted; } }
+        public Color Paint { get { Resolve(); return _paint; } }
+
+        /// <summary>The color the body shows when not highlighted (paint, or the material's own).</summary>
+        public Color BaseBodyColor { get { Resolve(); return _painted ? _paint : _ownColors[0]; } }
+
+        /// <summary>Paint the object's body (submesh 0 of the first renderer — glass and
+        /// joinery keep their look). Callers own undo via PaintCommand.</summary>
+        public void SetPaint(Color color)
+        {
+            Resolve();
+            _painted = true;
+            _paint = color;
+            ApplyVisual();
+        }
+
+        /// <summary>Back to the material's own color.</summary>
+        public void ClearPaint()
+        {
+            Resolve();
+            _painted = false;
+            ApplyVisual();
+        }
+
         public void SetHighlight(HighlightState state)
         {
             Resolve();
             if (_state == state) return;
             _state = state;
-            ApplyHighlight();
+            ApplyVisual();
         }
 
-        /// <summary>Re-apply the CURRENT highlight state — needed after an external repaint
-        /// (a paint stroke, undo/redo) overwrote the tinted per-material block while the
-        /// state itself did not change (so SetHighlight would early-out).</summary>
-        public void ReapplyHighlight()
+        /// <summary>
+        /// One writer for the renderer property blocks: base color = paint (if any),
+        /// lerped toward the state color while highlighted. The first renderer is the
+        /// BODY — on multi-material bodies (walls: wall/glass/joinery) only material 0
+        /// takes the block, so glass stays glass whatever the paint or highlight.
+        /// </summary>
+        private void ApplyVisual()
         {
-            Resolve();
-            ApplyHighlight();
-        }
-
-        private void ApplyHighlight()
-        {
-            HighlightState state = _state;
             if (_renderers == null) return;
+            bool tint = _state != HighlightState.None;
+            Color stateColor = _state == HighlightState.Selected ? RoomPlanner.Tools.UiColors.Selected
+                                                                 : RoomPlanner.Tools.UiColors.Hover;
+            float t = _state == HighlightState.Selected ? SelectTint : HoverTint;
 
-            bool tint = state != HighlightState.None;
-            Color stateColor = state == HighlightState.Selected ? RoomPlanner.Tools.UiColors.Selected
-                                                                : RoomPlanner.Tools.UiColors.Hover;
-            float t = state == HighlightState.Selected ? SelectTint : HoverTint;
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var r = _renderers[i];
                 if (r == null) continue;
-                if (tint)
+                Color own = i == 0 && _painted ? _paint : _ownColors[i];
+                bool needBlock = tint || (i == 0 && _painted);
+                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
+
+                if (needBlock)
                 {
-                    // Lerp toward the state color instead of repainting — the object keeps
-                    // its identity (own material/paint stays visible under the tint).
-                    Color c = Color.Lerp(_ownColors[i], stateColor, t);
-                    r.GetPropertyBlock(_mpb);
+                    Color c = tint ? Color.Lerp(own, stateColor, t) : own;
+                    _mpb.Clear();
                     _mpb.SetColor(BaseColorId, c);
                     _mpb.SetColor(ColorId, c);
                     _mpb.SetColor(FaceColorId, c);   // TMP text (measurement badge) uses _FaceColor
-                    r.SetPropertyBlock(_mpb);
+                    if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
+                    else r.SetPropertyBlock(_mpb);
                 }
                 else
                 {
-                    r.SetPropertyBlock(null);   // restore the material's own color
+                    if (bodyOnly) r.SetPropertyBlock(null, 0);
+                    else r.SetPropertyBlock(null);   // restore the material's own color
                 }
-            }
-
-            // Painted walls carry a per-material block (submesh 0) that OVERRIDES the
-            // renderer-wide tint above — sync it, or hover/selection is invisible on paint
-            // and un-highlighting would erase the paint (design/04 + UX v2 P1.4).
-            if (_wall != null)
-            {
-                if (tint) _wall.ApplyPaintHighlight(stateColor, t);
-                else _wall.ApplyPaintBlock();
             }
         }
 

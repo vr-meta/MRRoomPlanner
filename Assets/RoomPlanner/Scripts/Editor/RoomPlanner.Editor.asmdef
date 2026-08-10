@@ -5,7 +5,9 @@
         "RoomPlanner.App",
         "RoomPlanner.Core",
         "RoomPlanner.Editing",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [
         "Editor"

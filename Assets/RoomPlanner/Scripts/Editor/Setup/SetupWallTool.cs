@@ -11,7 +11,7 @@ namespace RoomPlanner.EditorTools
     {
         public static void Build(RigContext ctx)
         {
-            Wall wallPrefab = CreateWallPrefab(ctx.WallMat, ctx.WallEdgeMat, ctx.GlassMat);
+            Wall wallPrefab = CreateWallPrefab(ctx.WallMat, ctx.WallEdgeMat, ctx.GlassMat, ctx.JoineryMat);
 
             ctx.WallTool = ctx.Rig.AddComponent<WallController>();
 
@@ -43,12 +43,12 @@ namespace RoomPlanner.EditorTools
             so.ApplyModifiedProperties();
         }
 
-        private static Wall CreateWallPrefab(Material mat, Material edgeMat, Material glassMat)
+        private static Wall CreateWallPrefab(Material mat, Material edgeMat, Material glassMat, Material joineryMat)
         {
             var root = new GameObject("Wall");
             root.AddComponent<MeshFilter>();
-            // submesh 0 = the wall itself, submesh 1 = window glass (empty without openings)
-            root.AddComponent<MeshRenderer>().sharedMaterials = new[] { mat, glassMat };
+            // submesh 0 = wall, 1 = window glass, 2 = frames/door leaves (empty without openings)
+            root.AddComponent<MeshRenderer>().sharedMaterials = new[] { mat, glassMat, joineryMat };
             var wall = root.AddComponent<Wall>();
             root.AddComponent<WallParameters>();   // per-instance rows in the inspector (B4)
             root.AddComponent<WallHandles>();      // draggable node handles (B5)

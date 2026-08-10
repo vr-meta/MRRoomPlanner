@@ -71,7 +71,7 @@ namespace RoomPlanner.EditorTools
 
             // 1.3 (was 1.8): with the raised font floor the panel stops dominating the FOV
             // (UX v2 P0.4) while text stays ≥ ~0.7° at 65 cm.
-            panelRoot.transform.localScale = Vector3.one * 1.3f;
+            panelRoot.transform.localScale = Vector3.one * 1.45f;   // readability (feedback 2026-08-10)
             SetupAssets.SetLayerRecursively(root, SetupCoreRig.MenuLayer);
             panelRoot.SetActive(false); // shown when a tool with settings becomes active
             return inspector;

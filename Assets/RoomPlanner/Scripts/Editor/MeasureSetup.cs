@@ -74,6 +74,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("electric").objectReferenceValue = ctx.Electric;
             so.FindProperty("paint").objectReferenceValue = ctx.Paint;
             so.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
+            so.FindProperty("skyMat").objectReferenceValue = ctx.SkyMat;
             so.ApplyModifiedProperties();
         }
     }
