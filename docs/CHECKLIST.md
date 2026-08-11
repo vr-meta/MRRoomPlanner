@@ -750,6 +750,25 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   (`design/24`, `design/10`, аудит 06 §Р2) + PR (Closes #52). Хвост: проверка в
   шлеме — комнаты на импортированном здании, стены после T-heal
 
+## 2v. Публикация репозитория: CI-сборка APK, README, public (2026-08-13)
+
+- [x] P1. Текстуры в git: CC0-набор (ambientCG, ~140 МБ jpg) и процедурная керамика
+  `TilesBaked` закоммичены **с .meta** (GUID'ы зашиты в сцену — CI собирает из чистого
+  чекаута без Download Textures/SetupRig). Ламинат остался вне git (несвободные
+  исходники) — `.gitignore` сужен до `Textures/Laminate/*.png(.meta)`
+- [x] P2. GitHub Actions `.github/workflows/build-apk.yml`: game-ci/unity-builder@v4,
+  `buildMethod: CiTools.BuildAndroid` (тот же единый путь сборки, что локально — с
+  жёстким исключением дубля libopenxr_loader.so), кэш Library, артефакт APK.
+  CI-сборка — без ламината (Laminate-таб падает в цвет)
+- [x] P3. `ci/release.ps1` — полный релиз локально: гард на наличие бейка ламината →
+  BuildAndroid → `gh release create` с APK. Релиз v1.0.0 опубликован
+- [x] P4. README переписан на английский: фичи, sideload-инструкция из Releases
+  (Developer Mode / SideQuest / MQDH / adb), controls, build from source, CI-секреты,
+  licensing notes (код — all rights reserved; CC0-текстуры; ламинат — только в APK)
+- [x] P5. Репозиторий переведён в public
+- [ ] P6. Секреты CI (`UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD`) — добавить
+  вручную (game.ci/docs/github/activation) и проверить зелёный прогон Actions
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

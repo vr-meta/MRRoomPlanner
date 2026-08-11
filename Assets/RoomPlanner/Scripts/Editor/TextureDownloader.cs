@@ -154,7 +154,11 @@ namespace RoomPlanner.EditorTools
             if (dirty) imp.SaveAndReimport();
         }
 
-        /// <summary>The binaries stay OUT of git — only this downloader reproduces them.</summary>
+        /// <summary>Historic guard from when texture binaries stayed out of git. Since
+        /// 2026-08-13 the CC0 set is committed (with .meta — the scene pins the GUIDs;
+        /// CI builds from a clean checkout) and .gitignore only excludes the laminate
+        /// bakes, whose sources are not redistributable. The Contains() check below
+        /// matches that laminate section, so nothing is ever re-appended.</summary>
         private static void EnsureGitIgnore()
         {
             string gi = Path.Combine(Directory.GetCurrentDirectory(), ".gitignore");

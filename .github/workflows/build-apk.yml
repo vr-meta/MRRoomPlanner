@@ -1,0 +1,66 @@
+name: Build APK
+
+# Builds the Quest APK headless with GameCI on every push to main.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   UNITY_LICENSE  - full contents of your Unity_lic.ulf (see https://game.ci/docs/github/activation)
+#   UNITY_EMAIL    - Unity account e-mail
+#   UNITY_PASSWORD - Unity account password
+#
+# Note: the laminate materials are baked from proprietary plank scans that cannot be
+# redistributed, so CI builds ship without them (the Laminate tab falls back to plain
+# color). Full-content release APKs are built locally via ci/release.ps1.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Quest APK (Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # The Unity Android editor image plus Library need more room than the
+      # default runner has free — drop the big preinstalled toolchains.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Android-${{ hashFiles('Packages/packages-lock.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-Android-
+
+      # CiTools.BuildAndroid is the same single build path used locally: it also
+      # hard-excludes the duplicate libopenxr_loader.so, which is mandatory for a
+      # freshly imported Library (see docs/CHECKLIST.md, "Решённые проблемы").
+      - name: Build with Unity
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: Android
+          buildMethod: RoomPlanner.EditorTools.CiTools.BuildAndroid
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRRoomPlanner-apk
+          path: Build/MRRoomPlanner.apk
+          if-no-files-found: error
+          retention-days: 30
