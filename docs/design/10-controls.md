@@ -86,6 +86,11 @@ B — возврат в Select.
 (кнопка; статус — readout «Nw Ms (K skip)»), **Storey** (Select: All/L1/L2/… — фильтр
 видимости по этажам), **New project** — деструктивная кнопка (удержание 0.5 с).
 Весь импорт — один Undo. B — возврат в Select.
+**Инспектор Projects («Proj», #58 — `06-project-format.md` §«Проекты v1»):** Readout
+**Current**, **Project** (Select-список; открытый помечен «•»), **Open** (автосейв
+текущего → загрузка выбранного), **Save** (первый раз выделяет имя «Project N»),
+**New project** и **Delete selected** (деструктивные, удержание 0.5 с), Status
+(readout). Слот радиала — бывший резерв Heating. B — возврат в Select.
 
 **Инспектор Electric («Elec» — `19-electrical.md`):** **табы с иконками**
 Outlet / Switch / Wire / Box / Panel (розетка/клавиша/провод/распредкоробка/щиток),

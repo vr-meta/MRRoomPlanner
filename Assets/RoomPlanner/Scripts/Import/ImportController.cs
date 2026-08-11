@@ -54,15 +54,14 @@ namespace RoomPlanner.Import
 
         public SettingsSchema GetSettings()
         {
-            // v2 (design/20 §2): Select lists for files/storeys, Load is a button,
-            // "New project" is DESTRUCTIVE — hold 0.5 s to fire, no accidental resets.
+            // v2 (design/20 §2): Select lists for files/storeys, Load is a button.
+            // Import is import-only (#58): "New project" moved to the Projects tool.
             _settings ??= new SettingsSchema()
                 .Select("file", "IFC file", FileOptions, () => Mathf.Max(0, _fileIndex), SelectFile)
                 .Action("load", "Load IFC", "folder", Load)
                 .Select("storey", "Storey", StoreyOptions,
                     () => _storeyFilter + 1, i => SetStoreyFilter(i - 1))
-                .Readout("status", "Status", () => _status)
-                .Action("new", "New project", "trash", NewProject, destructive: true);
+                .Readout("status", "Status", () => _status);
             return _settings;
         }
 
@@ -458,8 +457,9 @@ namespace RoomPlanner.Import
             if (sceneModel != null) sceneModel.History.PurgeWhere(c => c is ImportBatchCommand);
         }
 
-        /// <summary>Full reset (inspector "New project" row): clear the scene AND delete the
-        /// autosave, or yesterday's building would resurrect on the next launch.</summary>
+        /// <summary>Full reset (the Projects tool's "New project" action, #58): clear the
+        /// scene AND delete the unnamed autosave, or yesterday's building would resurrect
+        /// on the next launch. Named project files are not touched.</summary>
         public void NewProject()
         {
             ClearScene();

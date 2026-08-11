@@ -34,6 +34,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private RoomPlanner.Electrical.ElectricController electric;
         [SerializeField] private PaintController paint;
         [SerializeField] private RoomPlanner.Walls.OpeningsController openings;
+        [SerializeField] private RoomPlanner.Import.ProjectsController projects;
         [SerializeField] private TeleportLocomotion locomotion;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
@@ -117,7 +118,9 @@ namespace RoomPlanner.Tools
             ("blueprint", "blueprint", "Blueprint", new Color(0.54f, 0.82f, 0.78f)),  // Blueprint
             ("import", "import-file", "Import", new Color(0.91f, 0.93f, 0.96f)),
             ("electric", "electric-plug", "Electric", new Color(1f, 0.79f, 0.30f)),   // Electrical
-            (null, "radiator", "Heating", Color.gray),
+            // Heating's reserve slot went to Projects (#58) — heating will ship as a
+            // tab of a future MEP tool (07-mep-layers), not as its own radial sector.
+            ("projects", "folder", "Projects", new Color(0.91f, 0.93f, 0.96f)),
             (null, "pipe", "Plumbing", Color.gray),
             ("paint", "paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f)),       // Interior
         };
@@ -126,9 +129,9 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (the radial's fixed slot table above maps tools to compass positions).
-            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects };
 
-            Debug.Log($"[Tools] v12 registry: {_tools.Length} tools, radial={(radial != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
+            Debug.Log($"[Tools] v13 registry: {_tools.Length} tools, radial={(radial != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)
                 if (t != null) t.OnDeactivate();
             _active = 0;

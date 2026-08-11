@@ -7,9 +7,11 @@ using RoomPlanner.Walls;
 namespace RoomPlanner.Import
 {
     /// <summary>
-    /// Persistence v0 (docs/design/06): the scene autosaves to ONE project file whenever
-    /// the app pauses or quits (Quest apps are killed silently — pause IS the exit), and
-    /// restores it on the next launch. No buttons: the room is simply still there.
+    /// Persistence (docs/design/06): the scene autosaves whenever the app pauses or
+    /// quits (Quest apps are killed silently — pause IS the exit) and restores on the
+    /// next launch. Since «Проекты v1» (#58) the autosave targets the OPEN project's
+    /// file (ProjectPaths.CurrentSavePath); an unnamed scene keeps the legacy
+    /// autosave.rp.json. No buttons needed: the room is simply still there.
     /// </summary>
     public class ProjectAutosave : MonoBehaviour
     {
@@ -18,39 +20,53 @@ namespace RoomPlanner.Import
         [SerializeField] private BlueprintController blueprint;
         [SerializeField] private bool autoload = true;
 
-        private const string FileName = "autosave.rp.json";
-
-        public static string DefaultPath => Path.Combine(Application.persistentDataPath, FileName);
+        public static string DefaultPath => ProjectPaths.AutosavePath;
 
         private void Start()
         {
-            if (autoload) TryLoad(DefaultPath);
+            if (autoload) LoadCurrent();
+        }
+
+        /// <summary>Launch restore: the project that was open, else the unnamed
+        /// autosave. A missing/broken named file demotes the session to unnamed.</summary>
+        private void LoadCurrent()
+        {
+            if (ProjectPaths.HasCurrent && TryLoad(ProjectPaths.CurrentSavePath)) return;
+            if (ProjectPaths.HasCurrent) ProjectPaths.CurrentName = "";
+            TryLoad(ProjectPaths.AutosavePath);
         }
 
         private void OnApplicationPause(bool paused)
         {
-            if (paused) Save(DefaultPath);
+            if (paused) Save(ProjectPaths.CurrentSavePath);
         }
 
-        private void OnApplicationQuit() => Save(DefaultPath);
+        private void OnApplicationQuit() => Save(ProjectPaths.CurrentSavePath);
 
-        public void Save(string path)
+        /// <summary>True when the file was written; false for an empty scene (an empty
+        /// scene must not wipe yesterday's work — e.g. pause on the permission dialog)
+        /// or an I/O failure. Explicit Save in the Projects tool relies on this to
+        /// avoid allocating a name for nothing.</summary>
+        public bool Save(string path)
         {
             try
             {
                 var data = ProjectStore.Capture(walls, blueprint);
-                // an empty scene must not wipe yesterday's work (e.g. pause on the permission dialog)
                 if (data.Walls.Count == 0 && data.Floors.Count == 0
                     && data.Stairs.Count == 0 && data.Plumbing.Count == 0
                     && data.Fixtures.Count == 0 && data.Wires.Count == 0
-                    && data.Measures.Count == 0) return;
+                    && data.Measures.Count == 0) return false;
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 ProjectFileIO.WriteAtomic(path, data.ToJson());
                 Debug.Log($"[Project] saved {data.Walls.Count}w {data.Floors.Count}f "
                     + $"{data.Stairs.Count}st {data.Plumbing.Count}p → {path}");
+                return true;
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"[Project] save failed: {e}");
+                return false;
             }
         }
 
