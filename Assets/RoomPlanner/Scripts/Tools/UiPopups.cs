@@ -339,10 +339,10 @@ namespace RoomPlanner.Tools
             tmp.color = Color.white;
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = size;
-            tmp.enableAutoSizing = true;
-            // same factors as InspectorPanel.MakeText (TMP world glyph ≈ fontSize × 0.15)
-            tmp.fontSizeMin = size.y * 2.6f;
-            tmp.fontSizeMax = size.y * 3.3f;
+            // fixed size + ellipsis, same rationale as InspectorPanel.MakeText (issue #55)
+            tmp.enableAutoSizing = false;
+            tmp.fontSize = size.y * 2.9f;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
             return tmp;
         }
 

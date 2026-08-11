@@ -518,14 +518,13 @@ namespace RoomPlanner.EditorTools
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Color.white;
             tmp.enableWordWrapping = false;
-            // allow text to use the full width of its cell, and keep a high floor so it never
-            // shrinks to unreadable — panels are scaled up on top of this (see Setup*).
+            // allow text to use the full width of its cell
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
-            tmp.enableAutoSizing = true;
-            // TMP world glyph ≈ fontSize × 0.15 (measured on ui-shots renders) — the
-            // ×2.6–3.3 regime matches the v2 inspector text (design/20, UX v2 P1.5)
-            tmp.fontSizeMin = size.y * 2.6f;
-            tmp.fontSizeMax = size.y * 3.3f;
+            // fixed size + ellipsis, same rationale as InspectorPanel.MakeText (issue #55):
+            // TMP auto-fit on sub-unit world-space rects sporadically rendered labels giant
+            tmp.enableAutoSizing = false;
+            tmp.fontSize = size.y * 2.9f;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
             return tmp;
         }
     }
