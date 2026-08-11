@@ -8,7 +8,7 @@ using RoomPlanner.Stairs;
 namespace RoomPlanner.Tools
 {
     /// <summary>
-    /// The ground datum and gravity (docs/design/25-ground.md, issue #59). Two jobs:
+    /// The ground datum and gravity (docs/design/26-ground.md, issue #59). Two jobs:
     ///
     /// • <b>Ground</b> — the level the building stands on, DERIVED from the model (the
     ///   lowest live slab/flight), never stored: teleporting moves the model, so a stored

@@ -229,7 +229,7 @@ namespace RoomPlanner.Tools
             // the left hand while open — an active aim cancels instead of fighting it.
             if (locomotion != null) locomotion.Tick(radial != null && radial.IsOpen, scanOn);
 
-            // Gravity (design/25): with the scan off GroundService drops the rig itself; in
+            // Gravity (design/26): with the scan off GroundService drops the rig itself; in
             // passthrough the camera must stay put, so the MODEL comes to the feet instead.
             // Never recorded — gravity is navigation, not an edit (undo would fight it).
             if (ground != null && ground.Tick(scanOn, out Vector3 settle))
@@ -507,7 +507,7 @@ namespace RoomPlanner.Tools
             if (sceneModel == null) return;
             var head = Camera.main != null ? Camera.main.transform.position : point + Vector3.up;
             // Feet, not a hard zero: after walking up a flight with the scan off the rig
-            // stands above zero, and the aimed spot must arrive at THAT level (design/25).
+            // stands above zero, and the aimed spot must arrive at THAT level (design/26).
             float footY = ground != null ? ground.FootY : 0f;
             ShiftModel(BuildingNav.TeleportDelta(point, head, footY), record: true);
             if (input != null) input.Pulse(0.4f, 0.02f);
@@ -516,7 +516,7 @@ namespace RoomPlanner.Tools
         /// <summary>
         /// Move the whole model by a delta. <paramref name="record"/> = the act belongs in
         /// history (teleport — X must always take you home); gravity settles pass false,
-        /// see design/25 «Гравитация НЕ пишется в историю».
+        /// see design/26 «Гравитация НЕ пишется в историю».
         /// </summary>
         public void ShiftModel(Vector3 delta, bool record)
         {
@@ -620,7 +620,7 @@ namespace RoomPlanner.Tools
                 }
             }
 
-            // The virtual ground belongs to GroundService now (design/25): it derives the
+            // The virtual ground belongs to GroundService now (design/26): it derives the
             // level from the model, so it stays under the whole building after a teleport
             // up a storey AND after an import — the old copy here only refreshed on
             // teleport/undo, which is why an imported house hung above the plane.

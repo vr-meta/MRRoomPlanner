@@ -9,7 +9,7 @@ using RoomPlanner.Tools;
 namespace RoomPlanner.Tests.Play
 {
     /// <summary>
-    /// Ground datum and gravity on real components (design/25-ground.md, issue #59):
+    /// Ground datum and gravity on real components (design/26-ground.md, issue #59):
     /// the ground is derived from the live model, deleting the slab under your feet settles
     /// you onto the next surface down, and walking is refused into ledges taller than a step.
     /// </summary>

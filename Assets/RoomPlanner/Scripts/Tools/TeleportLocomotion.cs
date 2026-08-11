@@ -79,7 +79,7 @@ namespace RoomPlanner.Tools
             if (_arc.Count < 2) { HideAim(); return; }
 
             // walk the parabola segment by segment; the first surface hit ends the arc, and
-            // only a slab, a stair tread or the GROUND makes it a valid landing (design/25 —
+            // only a slab, a stair tread or the GROUND makes it a valid landing (design/26 —
             // the ground is a first-class surface, the same rule as A-tap otherwise)
             _hasTarget = false;
             int last = _arc.Count - 1;
@@ -190,7 +190,7 @@ namespace RoomPlanner.Tools
             // Horizontal only — the vertical is gravity's job (GroundService drops the rig
             // off a slab edge and lifts it onto a tread). The one thing refused here is a
             // ledge too tall to step onto: that is what keeps the walker out of the solid
-            // body of a stair flight instead of gliding through it (design/25 §4).
+            // body of a stair flight instead of gliding through it (design/26 §4).
             if (ground != null)
             {
                 Vector3 feet = cam.transform.position + step;

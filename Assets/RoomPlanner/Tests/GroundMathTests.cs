@@ -6,7 +6,7 @@ using UnityEngine;
 namespace RoomPlanner.Tests
 {
     /// <summary>
-    /// Ground datum, support lookup and falling (design/25-ground.md, issue #59).
+    /// Ground datum, support lookup and falling (design/26-ground.md, issue #59).
     /// </summary>
     public class GroundMathTests
     {

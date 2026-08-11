@@ -811,7 +811,7 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   на файл текущего проекта; «New project» уехал из Import; тесты `ProjectCatalogTests`
   + `ProjectsToolPlayTests` (полный жизненный цикл через реальные виджеты схемы);
   EditMode 451/451, PlayMode 144/144. Хвост: проверка на шлеме
-- [~] AB2. **Земля + гравитация + хождение** (#59, дизайн: `design/25-ground.md`):
+- [~] AB2. **Земля + гравитация + хождение** (#59, дизайн: `design/26-ground.md`):
   опорная плоскость земли (низший этаж садится на неё, а не на высоту пользователя),
   осадка модели при исчезновении опоры (удаление/undo/смена проекта), вертикаль в
   плавном ходе (сход с плиты — на поверхность ниже). Фигурка от третьего лица —
@@ -836,7 +836,7 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
     `MeasureSetup` (`groundMat` переехал из `ToolManager`), `GroundGravityPlayTests`
     (осадка при удалении плиты под ногами, кулдаун, падение рэйга, шаг на подиум,
     вето на уступ, дыра лестничного марша), `setup` headless + прогон,
-    синхронизированы `25-ground.md`, `21-locomotion.md`, `design/README.md`.
+    синхронизированы `26-ground.md`, `21-locomotion.md`, `design/README.md`.
     После merge main (#58/#60/#61) — SetupRig + **EditMode 475/475, PlayMode 159/159**
   - [ ] **G5 — проверка на устройстве**: комфорт падения, ходьба по лестнице,
     отсутствие тошноты при вертикали (headless не видно)
@@ -849,13 +849,15 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   импорт без маркера садится в координатах файла — на его нижний этаж пользователя
   опускает гравитация. Разница на толщину плиты (`Anchor` = низ плиты, `GroundY` =
   верх) само-согласуется после пересчёта датума
-- [~] AB4. **Тесты действий** (#61, растущий список): + `PaintGesturePlayTests`
-  (триггер по плите = один PaintCommand + undo, промах и blocked не красят) и
-  `WallGesturePlayTests` (два клика = сегмент с живым вью, B рвёт цепочку) — через
-  реальные Tick с FakeInput/FakePointer; Projects-инструмент гоняется через реальные
-  виджеты схемы (`ProjectsToolPlayTests`). Осталось: виджеты инспектора
-  (степпер-автоповтор, деструктив-холд, попапы), провода, радиал, телепорт;
-  каждый новый фикс взаимодействия — с таким регрессионным тестом
+- [~] AB4. **Тесты действий** (#61, растущий список; **карта — `design/25-action-
+  test-matrix.md`**): жестовые тесты через реальные контроллеры — `PaintGesture`
+  (триггер = 1 PaintCommand + undo; промах/blocked не красят), `WallGesture` (два
+  клика = сегмент, B рвёт цепочку), `WidgetGesture` (деструктив-холд 0.5 с ровно
+  один раз + ранний отпуск молчит, степпер-автоповтор, слайдер = 1 CommitNumber —
+  через настоящий `ToolManager.Update`), `NavGesture` (A-тап телепорт + X/Y
+  undo/redo; virtual-швы Teleport*/Undo/Redo в `MeasureInput`), `ProjectsTool`
+  (жизненный цикл через виджеты схемы). Осталось (см. матрицу): жесты розетки/
+  провода, постановка проёма, контур пола, ластик Paint, радиал, портал
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
@@ -912,7 +914,14 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
   только за счёт инкрементального состояния Library/Bee). Решение: в
   `CiTools.ExcludeDuplicateOpenXRLoaders` дополнительно жёстко выключать Android-
   платформу дублей (`SetCompatibleWithPlatform(Android,false)+SaveAndReimport`) —
-  персистится в .meta кэша пакета.
+  персистится в .meta кэша пакета. **Этого оказалось мало (2026-08-11)**: пакет
+  `com.unity.xr.openxr` живёт в `Library/PackageCache` и **immutable** — там
+  `SaveAndReimport` no-op, `.meta` так и остаётся с `Exclude Android: 0`, и экспорт
+  снова кладёт `openxr_loader.aar` рядом с `OVRPlugin.aar`. Рабочее решение —
+  `Editor/AndroidOpenXRLoaderFix.cs` (`IPostGenerateGradleAndroidProject`): вырезает
+  aar и строку `implementation(name: 'openxr_loader', …)` уже из **сгенерированного**
+  gradle-проекта, до запуска gradle. Проверять по `unityLibrary/build.gradle` —
+  дубля там быть не должно.
 - [x] **Worktree без бинарников**: gitignored-ассеты (Textures/*.jpg+meta) не приезжают
   с веткой — перед батчем скопировать из основного чекаута (`robocopy /E`), иначе
   FinishLibrary соберётся пустой. Первый батч в worktree = полный импорт Library

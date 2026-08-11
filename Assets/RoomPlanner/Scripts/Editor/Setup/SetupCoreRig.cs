@@ -60,7 +60,7 @@ namespace RoomPlanner.EditorTools
             BuildLocomotion(ctx, rig);
         }
 
-        /// <summary>Ground datum + gravity (design/25-ground.md). Owns the virtual ground
+        /// <summary>Ground datum + gravity (design/26-ground.md). Owns the virtual ground
         /// plane that used to live inside ToolManager.</summary>
         private static void BuildGround(RigContext ctx, GameObject rig)
         {

@@ -46,7 +46,7 @@ namespace RoomPlanner.Core
     }
 
     /// <summary>
-    /// Ground and gravity math (docs/design/25-ground.md, issue #59): where the walkable
+    /// Ground and gravity math (docs/design/26-ground.md, issue #59): where the walkable
     /// surface under a pair of feet is, and how fast you drop towards it. Pure functions —
     /// the scene-side cache and the rig/model shifting live in Tools/GroundService.
     ///

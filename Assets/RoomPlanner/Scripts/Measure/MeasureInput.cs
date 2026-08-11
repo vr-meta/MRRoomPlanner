@@ -29,7 +29,7 @@ namespace RoomPlanner.Measure
 
         /// <summary>LEFT index trigger held — aims the teleport portal arc
         /// (`21-locomotion.md`); release fires the jump. Editor: G.</summary>
-        public bool TeleportAimHeld()
+        public virtual bool TeleportAimHeld()
         {
 #if UNITY_EDITOR
             if (Input.GetKey(KeyCode.G)) return true;
@@ -47,7 +47,7 @@ namespace RoomPlanner.Measure
         }
 
         /// <summary>Undo — X (Button.Three, left hand). Editor: Ctrl+Z.</summary>
-        public bool UndoPressed()
+        public virtual bool UndoPressed()
         {
 #if UNITY_EDITOR
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
@@ -57,7 +57,7 @@ namespace RoomPlanner.Measure
         }
 
         /// <summary>Redo — Y (Button.Four, left hand). Editor: Ctrl+Y.</summary>
-        public bool RedoPressed()
+        public virtual bool RedoPressed()
         {
 #if UNITY_EDITOR
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
@@ -68,7 +68,7 @@ namespace RoomPlanner.Measure
 
         /// <summary>A just pressed (Button.One, right hand). Editor: T. Short press =
         /// teleport, 0.35 s hold = tool radial — ToolManager owns the timing.</summary>
-        public bool TeleportPressed()
+        public virtual bool TeleportPressed()
         {
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.T)) return true;
@@ -77,7 +77,7 @@ namespace RoomPlanner.Measure
         }
 
         /// <summary>A still held — the hold-vs-tap discriminator for the radial.</summary>
-        public bool TeleportHeld()
+        public virtual bool TeleportHeld()
         {
 #if UNITY_EDITOR
             if (Input.GetKey(KeyCode.T)) return true;
