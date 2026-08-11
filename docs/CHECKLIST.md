@@ -767,6 +767,35 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   `SelectGesturePlayTests` ×4 — тап-выбор без сдвига (#46), тап-toggle,
   драг двери одной записью undo, драг объекта
 
+## 2z. Публикация репозитория: CI-сборка APK, README, public (2026-08-13)
+
+- [x] P1. Текстуры в git: CC0-набор (ambientCG, ~140 МБ jpg) и процедурная керамика
+  `TilesBaked` закоммичены **с .meta** (GUID'ы зашиты в сцену — CI собирает из чистого
+  чекаута без Download Textures/SetupRig). Ламинат остался вне git (несвободные
+  исходники) — `.gitignore` сужен до `Textures/Laminate/*.png(.meta)`
+- [x] P2. GitHub Actions `.github/workflows/build-apk.yml`: game-ci/unity-builder@v4,
+  `buildMethod: CiTools.BuildAndroid` (тот же единый путь сборки, что локально — с
+  жёстким исключением дубля libopenxr_loader.so), кэш Library, артефакт APK.
+  CI-сборка — без ламината (Laminate-таб падает в цвет)
+- [x] P3. `ci/release.ps1` — полный релиз локально: гард на наличие бейка ламината →
+  BuildAndroid → `gh release create` с APK. Релиз v1.0.0 опубликован
+- [x] P4. README переписан на английский: фичи, sideload-инструкция из Releases
+  (Developer Mode / SideQuest / MQDH / adb), controls, build from source, CI-секреты,
+  licensing notes (код — all rights reserved; CC0-текстуры; ламинат — только в APK)
+- [x] P5. Репозиторий переведён в public
+- [ ] P6. Секреты CI (`UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD`) — добавить
+  вручную (game.ci/docs/github/activation) и проверить зелёный прогон Actions
+
+## 2aa. Фиксы UI по фидбеку шлема 2026-08-13
+
+- [x] W1. Гигантские буквы в меню (issue #55, спорадика с 2026-08-11): TMP-автосайзинг
+  сломан на world-space тексте с прямоугольниками <1 юнита (пере-фит на каждом
+  SetActive панели) — во всех фабриках текста меню (`InspectorPanel`/`UiPopups`/
+  `SetupAssets`) автосайзинг выключен, фиксированный `fontSize = высота ячейки × 2.9`
+  (та же видимая величина), длинные подписи — многоточие (`Ellipsis`). Радиал так
+  работал с самого начала — и не глючил. SetupRig + EditMode 440/440, PlayMode
+  138/138. Хвост: подтвердить в шлеме, что спорадика ушла
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._

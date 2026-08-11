@@ -42,13 +42,12 @@ ci-shots/
 # other agents work trees (embedded repos)
 .claude/worktrees/
 
-# CC0 textures — restored via RoomPlanner > Download Textures
-Assets/RoomPlanner/Textures/**/*.jpg
-Assets/RoomPlanner/Textures/**/*.jpg.meta
-
-# baked laminate (sources in D:\Maps are NOT CC0) — restored via RoomPlanner > Bake Laminate
-Assets/RoomPlanner/Textures/**/*.png
-Assets/RoomPlanner/Textures/**/*.png.meta
+# Baked laminate stays OUT of git: the source plank scans are proprietary (not CC0),
+# so their derivatives cannot be redistributed. Rebuilt via RoomPlanner > Bake Laminate.
+# The CC0 set (ambientCG) and our procedural ceramic bakes ARE committed — with .meta,
+# because the scene references their GUIDs (CI builds straight from a clean checkout).
+Assets/RoomPlanner/Textures/Laminate/*.png
+Assets/RoomPlanner/Textures/Laminate/*.png.meta
 
 # temporary IFC samples (github.com/youshengCode/IfcSampleFiles)
 TestData/

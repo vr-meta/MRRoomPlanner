@@ -532,7 +532,7 @@ namespace RoomPlanner.Tools
         {
             var cap = MakeCaption(f.Id + "Hdr", f.Caption.ToUpperInvariant(), y);
             cap.color = UiTokens.LabelDim;
-            cap.fontSizeMax = UiTokens.RowHeight * 1.8f;   // ≈0.8° caps (TMP ×0.15 rule)
+            cap.fontSize = UiTokens.RowHeight * 1.8f;   // ≈0.8° caps (TMP ×0.15 rule)
             var line = MakePlate(rowsRoot, f.Id + "Rule",
                 new Vector3(PanelLayout.ContentWidth * 0.20f, y, 0f),
                 PanelLayout.ContentWidth * 0.55f, 0.001f, 0.0005f, insetMaterial);
@@ -643,12 +643,14 @@ namespace RoomPlanner.Tools
             tmp.color = Color.white;
             tmp.enableWordWrapping = false;
             tmp.rectTransform.sizeDelta = new Vector2(size.x, size.y);
-            tmp.enableAutoSizing = true;
-            // TMP world glyph ≈ fontSize × 0.15 (measured on the ui-shots renders):
-            // ×2.6–3.3 of the cell height lands row text at ~1.1–1.3° at 0.65 m —
-            // the readable regime; the previous ×0.8–0.95 rendered ~4× too small
-            tmp.fontSizeMin = size.y * 2.6f;
-            tmp.fontSizeMax = size.y * 3.3f;
+            // Fixed size, NO auto-sizing (issue #55): TMP auto-fit misbehaves on
+            // world-space text with sub-unit rects — re-fits on every panel SetActive
+            // sporadically rendered labels gigantic. ×2.9 of the cell height sits in
+            // the old ×2.6–3.3 band (~1.2° at 0.65 m, TMP world glyph ≈ fontSize × 0.15);
+            // long labels (file names) truncate with an ellipsis instead of spilling.
+            tmp.enableAutoSizing = false;
+            tmp.fontSize = size.y * 2.9f;
+            tmp.overflowMode = TextOverflowModes.Ellipsis;
             return tmp;
         }
 
