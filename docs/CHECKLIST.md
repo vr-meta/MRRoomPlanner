@@ -883,7 +883,14 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
   только за счёт инкрементального состояния Library/Bee). Решение: в
   `CiTools.ExcludeDuplicateOpenXRLoaders` дополнительно жёстко выключать Android-
   платформу дублей (`SetCompatibleWithPlatform(Android,false)+SaveAndReimport`) —
-  персистится в .meta кэша пакета.
+  персистится в .meta кэша пакета. **Этого оказалось мало (2026-08-11)**: пакет
+  `com.unity.xr.openxr` живёт в `Library/PackageCache` и **immutable** — там
+  `SaveAndReimport` no-op, `.meta` так и остаётся с `Exclude Android: 0`, и экспорт
+  снова кладёт `openxr_loader.aar` рядом с `OVRPlugin.aar`. Рабочее решение —
+  `Editor/AndroidOpenXRLoaderFix.cs` (`IPostGenerateGradleAndroidProject`): вырезает
+  aar и строку `implementation(name: 'openxr_loader', …)` уже из **сгенерированного**
+  gradle-проекта, до запуска gradle. Проверять по `unityLibrary/build.gradle` —
+  дубля там быть не должно.
 - [x] **Worktree без бинарников**: gitignored-ассеты (Textures/*.jpg+meta) не приезжают
   с веткой — перед батчем скопировать из основного чекаута (`robocopy /E`), иначе
   FinishLibrary соберётся пустой. Первый батч в worktree = полный импорт Library
