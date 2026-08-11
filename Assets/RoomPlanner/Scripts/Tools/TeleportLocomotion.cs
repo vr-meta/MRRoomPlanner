@@ -20,6 +20,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private MeasureInput input;
         [SerializeField] private SceneModel sceneModel;
         [SerializeField] private ToolManager manager;
+        [SerializeField] private GroundService ground;
         [SerializeField] private LineRenderer arcLine;
         [SerializeField] private LineRenderer portalRing;
 
@@ -77,26 +78,50 @@ namespace RoomPlanner.Tools
                 TeleportArc.TimeStep, TeleportArc.MaxSamples, _arc);
             if (_arc.Count < 2) { HideAim(); return; }
 
-            // walk the parabola segment by segment; the first surface hit ends the arc,
-            // and only a slab or stair tread makes it a valid landing (same rule as A-tap)
+            // walk the parabola segment by segment; the first surface hit ends the arc, and
+            // only a slab, a stair tread or the GROUND makes it a valid landing (design/25 —
+            // the ground is a first-class surface, the same rule as A-tap otherwise)
             _hasTarget = false;
             int last = _arc.Count - 1;
             for (int i = 1; i < _arc.Count; i++)
             {
                 Vector3 p0 = _arc[i - 1];
-                Vector3 d = _arc[i] - p0;
+                Vector3 p1 = _arc[i];
+                Vector3 d = p1 - p0;
                 float len = d.magnitude;
-                if (len < 1e-5f || sceneModel == null) continue;
-                if (!sceneModel.TryPick(new Ray(p0, d / len), out var picked, out var pt)) continue;
-                if (Vector3.Distance(p0, pt) > len) continue;   // hit beyond this segment
-                _arc[i] = pt;                                    // trim the arc at the surface
-                last = i;
-                if (picked is Selectable sel
-                    && (sel.Kind == SelectableKind.Floor || sel.Kind == SelectableKind.Stair))
+                if (len < 1e-5f) continue;
+
+                Vector3 hit = Vector3.zero;
+                float hitDist = float.PositiveInfinity;
+                bool valid = false;
+
+                if (sceneModel != null
+                    && sceneModel.TryPick(new Ray(p0, d / len), out var picked, out var pt)
+                    && Vector3.Distance(p0, pt) <= len)          // a hit beyond this segment is not ours
                 {
-                    _hasTarget = true;
-                    _target = pt;
+                    hit = pt;
+                    hitDist = Vector3.Distance(p0, pt);
+                    valid = picked is Selectable sel
+                        && (sel.Kind == SelectableKind.Floor || sel.Kind == SelectableKind.Stair);
                 }
+
+                // The ground carries no Selectable (it is a derived datum, not an object),
+                // so the falling arc is intersected with its plane directly.
+                if (ground != null && d.y < 0f)
+                {
+                    float gy = ground.GroundY;
+                    if (p0.y >= gy && p1.y <= gy)
+                    {
+                        Vector3 gp = p0 + d * ((p0.y - gy) / (p0.y - p1.y));
+                        float dist = Vector3.Distance(p0, gp);
+                        if (dist < hitDist) { hit = gp; hitDist = dist; valid = true; }
+                    }
+                }
+
+                if (float.IsPositiveInfinity(hitDist)) continue;
+                _arc[i] = hit;                                   // trim the arc at the surface
+                last = i;
+                if (valid) { _hasTarget = true; _target = hit; }
                 break;
             }
             DrawAim(last);
@@ -160,7 +185,18 @@ namespace RoomPlanner.Tools
             if (fwd.sqrMagnitude < 1e-4f) return;   // looking straight down — no heading
             fwd.Normalize();
             Vector3 right = new(fwd.z, 0f, -fwd.x);
-            rig.position += (fwd * stick.y + right * stick.x) * (MoveSpeed * Time.deltaTime);
+            Vector3 step = (fwd * stick.y + right * stick.x) * (MoveSpeed * Time.deltaTime);
+
+            // Horizontal only — the vertical is gravity's job (GroundService drops the rig
+            // off a slab edge and lifts it onto a tread). The one thing refused here is a
+            // ledge too tall to step onto: that is what keeps the walker out of the solid
+            // body of a stair flight instead of gliding through it (design/25 §4).
+            if (ground != null)
+            {
+                Vector3 feet = cam.transform.position + step;
+                if (!ground.CanStepTo(feet.x, feet.z, rig.position.y)) return;
+            }
+            rig.position += step;
         }
 
         // ---- anchors (resolved lazily, PointerProvider-style — no hard rig wiring) ----
