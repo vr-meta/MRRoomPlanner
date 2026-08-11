@@ -156,6 +156,70 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void THeal_WeldsAPartitionEndingOnTheWallFace()
+        {
+            // The real-scene case (headset feedback): the partition's axis STOPS at the
+            // long wall's face — 10 cm off a 20 cm wall's centreline. The heal must
+            // reach through the wall body, snap the node onto the axis and split.
+            var g = new WallGraph();
+            var longWall = g.AddSegment(
+                g.SnapOrCreateNode(new Vector3(0f, 0f, 0f)),
+                g.SnapOrCreateNode(new Vector3(8f, 0f, 0f)));
+            longWall.Thickness = 0.2f;
+            var faceNode = g.SnapOrCreateNode(new Vector3(4f, 0f, 0.1f));   // on the face
+            var partition = g.AddSegment(faceNode, g.SnapOrCreateNode(new Vector3(4f, 0f, 3f)));
+            partition.Thickness = 0.1f;
+
+            Assert.AreEqual(1, RoomFinder.SplitTJunctions(g), "one weld through the body");
+            Assert.AreEqual(0f, faceNode.Position.z, 1e-3f, "the node snapped onto the centreline");
+            Assert.AreEqual(3, g.Segments.Count, "the long wall split in two");
+            Assert.AreEqual(3, faceNode.Degree, "two halves + the partition share the junction");
+        }
+
+        [Test]
+        public void THeal_SnapRescalesTheParitionsOpenings()
+        {
+            // A door in the partition must keep its WORLD position when the endpoint
+            // stretches onto the target's centreline.
+            var g = new WallGraph();
+            var longWall = g.AddSegment(
+                g.SnapOrCreateNode(new Vector3(0f, 0f, 0f)),
+                g.SnapOrCreateNode(new Vector3(8f, 0f, 0f)));
+            longWall.Thickness = 0.2f;
+            var faceNode = g.SnapOrCreateNode(new Vector3(4f, 0f, 0.1f));
+            var partition = g.AddSegment(faceNode, g.SnapOrCreateNode(new Vector3(4f, 0f, 3.1f)));
+            partition.Openings.Add(new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f,   // door at z = 1.6
+                Kind = OpeningKind.Door,
+            });
+
+            RoomFinder.SplitTJunctions(g);
+            float doorZ = Vector3.Lerp(partition.A.Position, partition.B.Position,
+                partition.Openings[0].AlongFraction).z;
+            Assert.AreEqual(1.6f, doorZ, 1e-3f, "the door kept its world position");
+        }
+
+        [Test]
+        public void THeal_LeavesParallelDoubleWallsAlone()
+        {
+            // A double wall 15 cm away must NOT be welded even though it sits inside
+            // the neighbour's body reach — parallel is not a T (angle guard).
+            var g = new WallGraph();
+            var a = g.AddSegment(
+                g.SnapOrCreateNode(new Vector3(0f, 0f, 0f)),
+                g.SnapOrCreateNode(new Vector3(4f, 0f, 0f)));
+            a.Thickness = 0.3f;   // reach 0.17
+            var b = g.AddSegment(
+                g.SnapOrCreateNode(new Vector3(1f, 0f, 0.15f)),
+                g.SnapOrCreateNode(new Vector3(3f, 0f, 0.15f)));
+            b.Thickness = 0.3f;
+
+            Assert.AreEqual(0, RoomFinder.SplitTJunctions(g), "parallel walls stay separate");
+            Assert.AreEqual(2, g.Segments.Count);
+        }
+
+        [Test]
         public void Inset_ShrinksTheRing_BothWindings()
         {
             var ccw = new List<Vector3>

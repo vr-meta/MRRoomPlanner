@@ -41,34 +41,61 @@ namespace RoomPlanner.Walls
         /// <summary>Nodes within this height band belong to one storey.</summary>
         public const float LevelBand = 0.5f;
 
-        /// <summary>How far a node may sit off a centreline and still count as a T.</summary>
-        public const float TouchTolerance = 0.03f;
+        /// <summary>Extra reach beyond the wall's half thickness when deciding a touch.</summary>
+        public const float TouchMargin = 0.02f;
+
+        /// <summary>Directions closer than ~30° count as parallel — a nearby double
+        /// wall must never be welded into its neighbour.</summary>
+        private const float ParallelDot = 0.866f;   // cos 30°
 
         /// <summary>
-        /// T-heal: split segments at nodes that sit on their centreline mid-span.
-        /// Idempotent; returns the number of splits performed. Openings ride the
-        /// splits with their world positions preserved (WallGraph.SplitWith).
+        /// T-heal: a partition typically ends on the FACE of the wall it runs into —
+        /// its endpoint sits half a thickness off the centreline (headset scene:
+        /// 88 touches at 5–10 cm, zero within 3 cm). A node whose walls CROSS the
+        /// segment's direction and whose position lies inside the segment's body
+        /// (half thickness + margin) gets snapped onto the centreline and the segment
+        /// splits there; opening fractions on every wall at the node are rescaled so
+        /// doors keep their world positions. Idempotent; returns the split count.
         /// </summary>
-        public static int SplitTJunctions(WallGraph g, float tolerance = TouchTolerance)
+        public static int SplitTJunctions(WallGraph g, float extraMargin = TouchMargin)
         {
             if (g == null) return 0;
             int total = 0;
             bool again = true;
             int guard = 0;
-            while (again && guard++ < 32)
+            while (again && guard++ < 64)
             {
                 again = false;
                 var nodes = g.Nodes;
                 for (int ni = 0; ni < nodes.Count && !again; ni++)
                 {
                     var n = nodes[ni];
+                    if (n.Degree == 0) continue;   // an orphan must not cut walls
                     var segs = g.Segments;
                     for (int si = 0; si < segs.Count; si++)
                     {
                         var s = segs[si];
-                        if (s == null || s.A == null || s.B == null) continue;
+                        if (s == null || s.A == null || s.B == null || s.Has(n)) continue;
                         if (Mathf.Abs(s.A.Position.y - n.Position.y) > LevelBand) continue;
-                        if (!g.SplitSegmentWith(s, n, tolerance)) continue;
+
+                        Vector3 a = s.A.Position, b = s.B.Position;
+                        Vector3 dir = b - a; dir.y = 0f;
+                        float len2 = dir.sqrMagnitude;
+                        if (len2 < 1e-8f) continue;
+                        Vector3 toN = n.Position - a; toN.y = 0f;
+                        float t = Vector3.Dot(toN, dir) / len2;
+                        Vector3 onSeg = a + dir * Mathf.Clamp01(t);
+                        Vector3 off = n.Position - onSeg; off.y = 0f;
+
+                        float reach = s.Thickness * 0.5f + extraMargin;
+                        if (off.sqrMagnitude > reach * reach) continue;
+                        // the projection must land mid-span, clear of both ends
+                        float len = Mathf.Sqrt(len2);
+                        if (t * len < reach || (1f - t) * len < reach) continue;
+                        if (!CrossesDirection(n, dir)) continue;   // parallel double wall
+
+                        SnapNodeOntoLine(g, n, new Vector3(onSeg.x, n.Position.y, onSeg.z));
+                        if (!g.SplitSegmentWith(s, n, extraMargin + 0.001f)) continue;
                         total++;
                         again = true;   // the segment list changed — restart the scan
                         break;
@@ -76,6 +103,49 @@ namespace RoomPlanner.Walls
                 }
             }
             return total;
+        }
+
+        /// <summary>At least one wall at the node crosses `dir` by ≥ 30° — the
+        /// signature of a real T, not of a parallel neighbour.</summary>
+        private static bool CrossesDirection(WallNode n, Vector3 dir)
+        {
+            Vector3 d = dir.normalized;
+            foreach (var seg in n.Segments)
+            {
+                Vector3 own = seg.B.Position - seg.A.Position; own.y = 0f;
+                if (own.sqrMagnitude < 1e-8f) continue;
+                if (Mathf.Abs(Vector3.Dot(own.normalized, d)) < ParallelDot) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Move the junction onto the centreline, rescaling opening fractions
+        /// of every attached wall so doors/windows keep their WORLD positions.</summary>
+        private static void SnapNodeOntoLine(WallGraph g, WallNode n, Vector3 target)
+        {
+            Vector3 flat = target - n.Position; flat.y = 0f;
+            if (flat.sqrMagnitude < 1e-10f) return;
+
+            foreach (var seg in n.Segments)
+            {
+                if (seg.Openings.Count == 0) continue;
+                float oldLen = seg.Length;
+                if (oldLen < 1e-4f) continue;
+                Vector3 otherPos = seg.Other(n).Position;
+                float newLen = Vector3.Distance(
+                    new Vector3(otherPos.x, 0f, otherPos.z), new Vector3(target.x, 0f, target.z));
+                if (newLen < 1e-4f) continue;
+                bool movedIsB = seg.B == n;
+                foreach (var o in seg.Openings)
+                {
+                    // anchor at the UNMOVED end: distance from it stays put
+                    float fromA = o.AlongFraction * oldLen;
+                    o.AlongFraction = movedIsB
+                        ? Mathf.Clamp01(fromA / newLen)
+                        : Mathf.Clamp01(1f - (oldLen - fromA) / newLen);
+                }
+            }
+            g.MoveNode(n, target);
         }
 
         /// <summary>All rooms in the graph, every storey. Call on demand (a paint
@@ -159,6 +229,7 @@ namespace RoomPlanner.Walls
                         e = Next(segs, outgoing, e);
                         if (e.SegIndex == start.SegIndex && e.Forward == start.Forward) break;
                     }
+                    PruneSpikes(ring.Polygon);           // spur walk-backs leave A,B,A spikes
                     float signed = ShoelaceXZ(ring.Polygon);
                     if (signed <= 0f) continue;          // the unbounded face
                     if (signed < MinArea) continue;      // numeric junk / spur loops
@@ -211,6 +282,34 @@ namespace RoomPlanner.Walls
                 if (d > bestDelta) { bestDelta = d; best = i; }
             }
             return list[best].e;
+        }
+
+        /// <summary>Remove zero-area spikes (dead-end spur walk-backs: …A,B,A…) and
+        /// consecutive duplicates. Spikes contribute nothing to the area but break
+        /// IsSimple/inset — a ring with a spur inside it would refuse to carve.</summary>
+        private static void PruneSpikes(List<Vector3> poly)
+        {
+            bool changed = true;
+            while (changed && poly.Count >= 3)
+            {
+                changed = false;
+                for (int i = poly.Count - 1; i >= 0 && poly.Count >= 3; i--)
+                {
+                    int prev = (i - 1 + poly.Count) % poly.Count;
+                    int next = (i + 1) % poly.Count;
+                    Vector3 a = poly[prev], b = poly[i], c = poly[next];
+                    if ((a - c).sqrMagnitude < 1e-6f)        // spike tip: A,B,A
+                    {
+                        poly.RemoveAt(i);
+                        changed = true;
+                    }
+                    else if ((a - b).sqrMagnitude < 1e-6f)   // consecutive duplicate
+                    {
+                        poly.RemoveAt(i);
+                        changed = true;
+                    }
+                }
+            }
         }
 
         private static float ShoelaceXZ(List<Vector3> poly)

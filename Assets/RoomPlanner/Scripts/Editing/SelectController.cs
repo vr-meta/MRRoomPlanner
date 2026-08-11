@@ -37,6 +37,14 @@ namespace RoomPlanner.Editing
         private bool _armedStartValid;
         private float _armedPlaneY;
 
+        // Door gesture (issue #50 + headset feedback): tap on a selected door toggles
+        // it, hold/travel slides the OPENING along its wall (the arming pattern again —
+        // a toggle must never fire when the user meant to drag).
+        private Selectable _armedDoor;
+        private bool _armedDoorToggle;   // it was already selected → a tap means toggle
+        private RoomPlanner.Walls.OpeningParameters _doorDrag;
+        private float _doorPlaneY;
+
         public string Id => "select";
         public string PaletteLabel => "Sel";
         public string IconId => "select-cursor";
@@ -65,7 +73,9 @@ namespace RoomPlanner.Editing
             // desync undo from the visible scene.
             EndHandleDrag();          // settle physics + record, never leave a half-applied drag
             EndDrag(record: true);
+            EndDoorDrag();
             _armed = null;            // an armed (not yet engaged) drag simply dissolves
+            _armedDoor = null;
             Deselect();
             SetHover(null);
             UpdateHandles();          // hide handle spheres — stale colliders on layer 6 would
@@ -82,6 +92,8 @@ namespace RoomPlanner.Editing
                 // object teleports to the cursor when the ray comes back from the menu.
                 EndHandleDrag();
                 EndDrag(record: true);
+                EndDoorDrag();
+                _armedDoor = null;
                 SetHover(null);
                 UpdateHandles();
                 if (reticle != null) reticle.gameObject.SetActive(false);
@@ -105,6 +117,59 @@ namespace RoomPlanner.Editing
                     return;
                 }
                 EndHandleDrag();
+            }
+
+            // --- Door drag in progress: slide the opening along its wall ---
+            if (_doorDrag != null)
+            {
+                if (input.ConfirmHeld())
+                {
+                    if (MeasureMath.RayPlaneY(ray, _doorPlaneY, out var cur))
+                    {
+                        _doorDrag.PreviewMove(cur);
+                        if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = cur; }
+                    }
+                    RefreshSelectionText();
+                    return;
+                }
+                EndDoorDrag();
+                return;
+            }
+
+            // --- Armed door (#50 feedback): tap = toggle (when already selected),
+            // hold/travel = drag the opening along its wall ---
+            if (_armedDoor != null)
+            {
+                if (!_armedDoor.IsAlive) _armedDoor = null;
+                else if (input.ConfirmHeld())
+                {
+                    bool engage = Time.time - _armedAt >= DragHoldSeconds;
+                    if (MeasureMath.RayPlaneY(ray, _armedPlaneY, out var cur))
+                    {
+                        if (!_armedStartValid) { _armedStart = cur; _armedStartValid = true; }
+                        else if ((cur - _armedStart).sqrMagnitude
+                                 >= DragEngageDistance * DragEngageDistance) engage = true;
+                    }
+                    if (engage)
+                    {
+                        _doorDrag = _armedDoor.GetComponent<RoomPlanner.Walls.OpeningParameters>();
+                        _doorPlaneY = _armedPlaneY;
+                        _armedDoor = null;
+                        if (_doorDrag != null) _doorDrag.BeginMove();
+                        if (input != null) input.Pulse(0.3f, 0.01f);
+                    }
+                    return;
+                }
+                else
+                {
+                    // early release — a tap; toggles only a door that was already selected
+                    if (_armedDoorToggle && _armedDoor.LeafView != null)
+                    {
+                        _armedDoor.LeafView.Toggle();
+                        input.Pulse(0.4f, 0.02f);
+                    }
+                    _armedDoor = null;
+                }
             }
 
             // --- Armed drag (#46): the selecting tap must never nudge the object. The drag
@@ -200,13 +265,14 @@ namespace RoomPlanner.Editing
                     Select(picked);
                     if (picked is Selectable ps && ps.Kind == SelectableKind.Door)
                     {
-                        // Doors don't arm a drag — the second trigger on a selected
-                        // door swings it open/closed instead (issue #50).
-                        if (again && ps.LeafView != null)
-                        {
-                            ps.LeafView.Toggle();
-                            input.Pulse(0.4f, 0.02f);
-                        }
+                        // Doors arm their own gesture (#50 + feedback): a TAP on an
+                        // already-selected door toggles it, hold/travel drags the
+                        // opening along its wall.
+                        _armedDoor = ps;
+                        _armedDoorToggle = again;
+                        _armedAt = Time.time;
+                        _armedPlaneY = hitPoint.y;
+                        _armedStartValid = MeasureMath.RayPlaneY(ray, _armedPlaneY, out _armedStart);
                     }
                     else
                     {
@@ -315,6 +381,15 @@ namespace RoomPlanner.Editing
             _handleTo = _handleFrom;
             _handlePlaneY = _handleFrom.y;
             if (input != null) input.Pulse(0.4f, 0.05f);
+        }
+
+        private void EndDoorDrag()
+        {
+            if (_doorDrag == null) return;
+            var d = _doorDrag;
+            _doorDrag = null;
+            d.EndMove();   // reverts when invalid/unmoved, else one OpeningMoveCommand
+            RefreshSelectionText();
         }
 
         private void EndHandleDrag()

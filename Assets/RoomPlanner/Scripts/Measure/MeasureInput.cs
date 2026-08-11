@@ -10,7 +10,7 @@ namespace RoomPlanner.Measure
     {
         /// <summary>Place / select / start drag — RIGHT index trigger only (you point with
         /// the right; the left trigger aims the teleport portal since 21-locomotion).</summary>
-        public bool ConfirmPressed()
+        public virtual bool ConfirmPressed()
         {
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.Space)) return true;
@@ -19,7 +19,7 @@ namespace RoomPlanner.Measure
         }
 
         /// <summary>Trigger held — for dragging a point.</summary>
-        public bool ConfirmHeld()
+        public virtual bool ConfirmHeld()
         {
 #if UNITY_EDITOR
             if (Input.GetKey(KeyCode.Space)) return true;
@@ -38,7 +38,7 @@ namespace RoomPlanner.Measure
         }
 
         /// <summary>Cancel / delete / finish chain — B button.</summary>
-        public bool ClearPressed()
+        public virtual bool ClearPressed()
         {
 #if UNITY_EDITOR
             if (Input.GetKeyDown(KeyCode.Backspace)) return true;
@@ -159,14 +159,14 @@ namespace RoomPlanner.Measure
         private float _leftHapticUntil;
 
         /// <summary>Left-controller haptics — radial and palette events (design/20 §4.2).</summary>
-        public void PulseLeft(float amplitude = 0.5f, float duration = 0.02f)
+        public virtual void PulseLeft(float amplitude = 0.5f, float duration = 0.02f)
         {
             OVRInput.SetControllerVibration(1f, amplitude, OVRInput.Controller.LTouch);
             _leftHapticUntil = Time.time + duration;
         }
 
         /// <summary>Короткий вибро-отклик правого контроллера (например, при наведении на кнопку).</summary>
-        public void Pulse(float amplitude = 0.5f, float duration = 0.06f)
+        public virtual void Pulse(float amplitude = 0.5f, float duration = 0.06f)
         {
             OVRInput.SetControllerVibration(1f, amplitude, OVRInput.Controller.RTouch);
             _hapticUntil = Time.time + duration;
