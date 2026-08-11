@@ -23,6 +23,9 @@ namespace RoomPlanner.Import
     {
         [SerializeField] private ToolManager manager;
         [SerializeField] private MeasureInput input;
+        [SerializeField] private PointerProvider pointer;
+        [SerializeField] private SceneRaycaster raycaster;
+        [SerializeField] private LineRenderer markerRing;   // placement target visual (#60)
         [SerializeField] private WallGraphRenderer walls;
         [SerializeField] private FloorController floors;
         [SerializeField] private SceneModel sceneModel;
@@ -84,15 +87,93 @@ namespace RoomPlanner.Import
         {
             RefreshFileList();
             if (_fileIndex < 0 && _files.Count > 0) _fileIndex = 0;
+            if (_hasMarker) ShowMarkerRing();
         }
 
-        public void OnDeactivate() { }
+        public void OnDeactivate()
+        {
+            if (markerRing != null) markerRing.enabled = false;
+        }
 
         public void Tick(bool blocked)
         {
             if (blocked || input == null) return;
-            // B on this tool = Esc back to Select (UX v2 P0.3) — importing has no gesture input.
-            if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
+            if (input.ClearPressed())
+            {
+                // B clears the placement target first; on a bare tool it is Esc (UX v2 P0.3).
+                if (_hasMarker) { ClearMarker(); return; }
+                if (manager != null) manager.ActivateTool("select");
+                return;
+            }
+            // Trigger marks where the imported building will stand (#60).
+            if (pointer != null && input.ConfirmPressed()
+                && TryHitSurface(pointer.GetRay(), out Vector3 point))
+                SetMarker(point);
+        }
+
+        // ---- placement target (#60): trigger marks the spot, Load lands the building there ----
+
+        private bool _hasMarker;
+        private Vector3 _marker;
+        private readonly RaycastHit[] _ownHits = new RaycastHit[8];
+
+        public bool HasMarker => _hasMarker;
+
+        /// <summary>Set the placement target. Public seam for tests and future tools.</summary>
+        public void SetMarker(Vector3 point)
+        {
+            _hasMarker = true;
+            _marker = point;
+            ShowMarkerRing();
+            _status = "target set";
+        }
+
+        public void ClearMarker()
+        {
+            _hasMarker = false;
+            if (markerRing != null) markerRing.enabled = false;
+            _status = "target cleared";
+        }
+
+        private void ShowMarkerRing()
+        {
+            if (markerRing == null) return;
+            const int points = 24;
+            const float radius = 0.35f;
+            markerRing.positionCount = points;
+            for (int i = 0; i < points; i++)
+            {
+                float a = i * Mathf.PI * 2f / points;
+                markerRing.SetPosition(i, _marker
+                    + new Vector3(Mathf.Cos(a) * radius, 0.01f, Mathf.Sin(a) * radius));
+            }
+            markerRing.enabled = true;
+        }
+
+        /// <summary>Scanned room + own selectables (layer 6, which the shared raycaster
+        /// deliberately skips) — nearest of the two wins; same duality as Electric.</summary>
+        private bool TryHitSurface(Ray ray, out Vector3 point)
+        {
+            point = default;
+            Vector3 sp = default;
+            bool haveScan = raycaster != null
+                && raycaster.TryRaycast(ray, out sp, out _, out _);
+            float scanDist = haveScan ? Vector3.Distance(ray.origin, sp) : float.MaxValue;
+            if (haveScan) point = sp;
+
+            float ownDist = float.MaxValue;
+            int n = Physics.RaycastNonAlloc(ray, _ownHits, 10f, 1 << SelectableLayer,
+                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var h = _ownHits[i];
+                if (h.collider == null || h.distance >= ownDist) continue;
+                if (!h.collider.gameObject.activeInHierarchy) continue;
+                if (h.collider.GetComponentInParent<Selectable>() == null) continue;
+                ownDist = h.distance;
+                if (ownDist < scanDist) point = h.point;
+            }
+            return haveScan || ownDist < float.MaxValue;
         }
 
         // ---- file picking (same folders as the Blueprint tool) ----
@@ -145,13 +226,21 @@ namespace RoomPlanner.Import
             if (path == null || !File.Exists(path)) { _status = "no file"; return; }
             try
             {
-                BuildScene(IfcImporter.Import(StepFile.Parse(File.ReadAllText(path))));
+                LoadBuilding(IfcImporter.Import(StepFile.Parse(File.ReadAllText(path))));
             }
             catch (System.Exception e)
             {
                 _status = "parse error";
                 Debug.LogError($"[Import] {path}: {e}");
             }
+        }
+
+        /// <summary>IFC entry: honors the placement marker (#60). Project loads call
+        /// BuildScene directly — a saved scene must NEVER be re-offset.</summary>
+        public void LoadBuilding(ImportedBuilding building)
+        {
+            if (_hasMarker) ImportPlacement.MoveTo(building, _marker);
+            BuildScene(building);
         }
 
         /// <summary>

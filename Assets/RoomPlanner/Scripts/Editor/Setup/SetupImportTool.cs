@@ -13,9 +13,22 @@ namespace RoomPlanner.EditorTools
         {
             ctx.Import = ctx.Rig.AddComponent<ImportController>();
 
+            // placement-target ring (#60): trigger marks where the building will stand
+            var ringGo = new UnityEngine.GameObject("ImportMarkerRing");
+            ringGo.transform.SetParent(ctx.Rig.transform, false);
+            var ring = ringGo.AddComponent<UnityEngine.LineRenderer>();
+            ring.useWorldSpace = true;
+            ring.loop = true;
+            ring.widthMultiplier = 0.02f;
+            ring.sharedMaterial = ctx.LineMat;
+            ring.enabled = false;
+
             var so = new SerializedObject(ctx.Import);
             so.FindProperty("manager").objectReferenceValue = ctx.Manager;
             so.FindProperty("input").objectReferenceValue = ctx.Input;
+            so.FindProperty("pointer").objectReferenceValue = ctx.Pointer;
+            so.FindProperty("raycaster").objectReferenceValue = ctx.Raycaster;
+            so.FindProperty("markerRing").objectReferenceValue = ring;
             so.FindProperty("walls").objectReferenceValue = ctx.Rig.GetComponent<WallGraphRenderer>();
             so.FindProperty("floors").objectReferenceValue = ctx.FloorTool;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
