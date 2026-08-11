@@ -45,6 +45,7 @@ namespace RoomPlanner.Walls
         private MeshFilter _mf;
         private Mesh _mesh;
         private Mesh _edges;
+        private MeshRenderer _edgesRenderer;
         private MeshCollider _collider;
         private readonly List<Vector3> _pts = new();
 
@@ -70,11 +71,22 @@ namespace RoomPlanner.Walls
                 _edges = new Mesh { name = "WallEdges" };
                 edgesFilter.sharedMesh = _edges;
             }
+            RefreshEdgesVisibility();
             if (_collider == null)
             {
                 _collider = GetComponent<MeshCollider>();
                 if (_collider == null) _collider = gameObject.AddComponent<MeshCollider>();
             }
+        }
+
+        /// <summary>Sync the edge-lines overlay with the global
+        /// <see cref="MeshShading.ShowEdges"/> flag — runs on every build and is called
+        /// by the Rendering-page toggle for walls that already exist.</summary>
+        public void RefreshEdgesVisibility()
+        {
+            if (_edgesRenderer == null && edgesFilter != null)
+                _edgesRenderer = edgesFilter.GetComponent<MeshRenderer>();
+            if (_edgesRenderer != null) _edgesRenderer.enabled = MeshShading.ShowEdges;
         }
 
         public void Build(List<Vector3> centerline, float thickness, float height,

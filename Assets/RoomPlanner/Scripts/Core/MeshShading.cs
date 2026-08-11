@@ -14,6 +14,12 @@ namespace RoomPlanner.Core
         /// <summary>Vertex-AO master switch (Paint tool settings row).</summary>
         public static bool VertexAO = true;
 
+        /// <summary>Edge-lines overlay master switch (Rendering page). OFF by default:
+        /// outlined walls stood out against floors/stairs, which draw no edges
+        /// (headset feedback 2026-08-13). Applies to every element that has an edge
+        /// overlay — walls today.</summary>
+        public static bool ShowEdges = false;
+
         /// <summary>Skirting shadow: surfaces darken toward the floor contact line.</summary>
         public static float HeightAO(float metersAboveBase) =>
             VertexAO ? Mathf.Lerp(0.70f, 1f, Mathf.Clamp01(metersAboveBase / 0.45f)) : 1f;

@@ -688,7 +688,8 @@ namespace RoomPlanner.Tools
                     () => sunLight != null && sunLight.shadows != LightShadows.None,
                     _ => ToggleSunShadows())
                 .Toggle("objsh", "Cast shadows (all)",
-                    () => RoomPlanner.Import.MepView.CastShadows, _ => ToggleCastShadows());
+                    () => RoomPlanner.Import.MepView.CastShadows, _ => ToggleCastShadows())
+                .Toggle("edges", "Edges", () => Core.MeshShading.ShowEdges, _ => ToggleEdges());
             return _renderSchema;
         }
 
@@ -708,6 +709,17 @@ namespace RoomPlanner.Tools
                         : import ? UnityEngine.Rendering.ShadowCastingMode.TwoSided
                                  : UnityEngine.Rendering.ShadowCastingMode.On;
             }
+        }
+
+        /// <summary>Edge-lines overlay on every element that has one (walls today).
+        /// Hidden by default: outlined walls stood out against floors/stairs, which
+        /// draw no edges (headset feedback 2026-08-13).</summary>
+        private void ToggleEdges()
+        {
+            Core.MeshShading.ShowEdges = !Core.MeshShading.ShowEdges;
+            foreach (var w in FindObjectsByType<Walls.Wall>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+                w.RefreshEdgesVisibility();
         }
 
         /// <summary>Sun patches through the windows (feedback 2026-08-11) — toggleable
