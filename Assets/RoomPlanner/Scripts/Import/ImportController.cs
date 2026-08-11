@@ -165,6 +165,11 @@ namespace RoomPlanner.Import
             if (graph == null || floors == null) { _status = "rig not wired"; return; }
 
             RemovePreviousImport();
+            // Loading a building REPLACES the scene's electrical layer too — orphaned
+            // outlets and wires hanging inside the new building's walls are worse than
+            // re-wiring (headset feedback 2026-08-12). A project load restores its own
+            // electrics right after this.
+            ClearElectrical();
 
             _building = building;
             _storeyFilter = -1;
@@ -458,14 +463,24 @@ namespace RoomPlanner.Import
         public void NewProject()
         {
             ClearScene();
-            try
+            // The BACKUP must die too: TryLoad falls back to .bak when the main file
+            // is missing, so deleting only the autosave resurrected yesterday's
+            // building on the next launch (headset feedback 2026-08-12 —
+            // "New project ничего не делает").
+            foreach (var path in new[]
             {
-                if (System.IO.File.Exists(ProjectAutosave.DefaultPath))
-                    System.IO.File.Delete(ProjectAutosave.DefaultPath);
-            }
-            catch (System.Exception e)
+                ProjectAutosave.DefaultPath,
+                Core.Project.ProjectFileIO.BackupPath(ProjectAutosave.DefaultPath),
+            })
             {
-                Debug.LogWarning($"[Import] could not delete autosave: {e.Message}");
+                try
+                {
+                    if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"[Import] could not delete {path}: {e.Message}");
+                }
             }
             _status = "new project";
         }
@@ -493,20 +508,25 @@ namespace RoomPlanner.Import
             // hanging" — headset feedback 2026-08-11).
             foreach (var m in TeleportCommand.CollectMeasurements())
                 if (m != null) Destroy(m.gameObject);
-            // The electrical layer is scene content too — "New project" must not leave
-            // orphaned outlets and wires behind (headset feedback 2026-08-10). Only
-            // REGISTERED objects: the parked fixture template and the tool's ghost
-            // preview are not in the model and must survive.
-            if (sceneModel != null)
-                foreach (var item in new List<ISelectable>(sceneModel.Items))
-                    if (item is Selectable s && s.IsAlive
-                        && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
-                        Destroy(s.gameObject);
+            ClearElectrical();
             _created.Clear();
             _importedSegments.Clear();
             _building = null;
             _storeyFilter = -1;
             if (sceneModel != null) sceneModel.History.Clear();
+        }
+
+        /// <summary>Destroy the electrical layer — "New project" and a building load
+        /// must not leave orphaned outlets/wires (headset feedback 2026-08-10/12).
+        /// Only REGISTERED objects: the parked fixture template and the tool's ghost
+        /// preview are not in the model and must survive.</summary>
+        private void ClearElectrical()
+        {
+            if (sceneModel == null) return;
+            foreach (var item in new List<ISelectable>(sceneModel.Items))
+                if (item is Selectable s && s.IsAlive
+                    && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                    Destroy(s.gameObject);
         }
 
         private List<ISelectable> CollectSelectables()

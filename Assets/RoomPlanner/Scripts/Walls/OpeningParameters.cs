@@ -36,6 +36,56 @@ namespace RoomPlanner.Walls
         public ICommand BuildDeleteCommand() =>
             Op == null ? null : new DeleteOpeningCommand(_walls, _seg, Op, _wallSel);
 
+        // ---- Select-tool drag: slide the opening along its wall (headset feedback:
+        // "перемещение двери не работает") — one OpeningMoveCommand per gesture ----
+
+        private float _moveStartFraction;
+        private bool _moving;
+
+        public void BeginMove()
+        {
+            if (Op == null) return;
+            _moveStartFraction = Op.AlongFraction;
+            _moving = true;
+        }
+
+        /// <summary>Live preview: project the cursor onto the wall axis and slide.</summary>
+        public void PreviewMove(Vector3 worldPoint)
+        {
+            if (!_moving || Op == null || _seg == null) return;
+            Vector3 a = _seg.A.Position;
+            Vector3 dir = _seg.B.Position - a; dir.y = 0f;
+            float len = dir.magnitude;
+            if (len < 1e-4f) return;
+            dir /= len;
+            Vector3 flat = worldPoint - a; flat.y = 0f;
+            float half = Op.Width * 0.5f;
+            float c = Mathf.Clamp(Vector3.Dot(flat, dir),
+                half + OpeningMath.MinPier, len - half - OpeningMath.MinPier);
+            Op.AlongFraction = c / len;
+            if (_walls != null) _walls.RebuildSegment(_seg);
+        }
+
+        /// <summary>Settle the gesture: revert when invalid or unmoved, else ONE undo entry.</summary>
+        public void EndMove()
+        {
+            if (!_moving || Op == null || _seg == null) { _moving = false; return; }
+            _moving = false;
+            float len = _seg.Length;
+            bool valid = OpeningMath.CanPlace(_seg, Op.AlongFraction * len, Op.Width,
+                Op.SillHeight + Op.Height, ignore: Op);
+            if (!valid || Mathf.Abs(Op.AlongFraction - _moveStartFraction) < 1e-4f)
+            {
+                Op.AlongFraction = _moveStartFraction;
+                if (_walls != null) _walls.RebuildSegment(_seg);
+                return;
+            }
+            var model = SceneModel.Instance;
+            if (model != null)
+                model.History.Record(new OpeningMoveCommand(
+                    _walls, _seg, Op, _moveStartFraction, Op.AlongFraction, _wallSel));
+        }
+
         public SettingsSchema GetSettings()
         {
             if (_leaf == null) _leaf = GetComponent<OpeningLeafView>();

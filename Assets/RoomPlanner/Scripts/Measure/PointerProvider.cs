@@ -34,7 +34,7 @@ namespace RoomPlanner.Measure
             return null;
         }
 
-        public Ray GetRay()
+        public virtual Ray GetRay()
         {
             var a = ResolveAnchor();
             if (!_logged)
