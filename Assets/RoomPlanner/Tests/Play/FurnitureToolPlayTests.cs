@@ -217,6 +217,91 @@ namespace RoomPlanner.Tests.Play
             StringAssert.Contains("cm", Row(place, "size").Value());
         }
 
+        [UnityTest]
+        public IEnumerator Project_RoundTripsAPlacedPiece()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var view = tool.Spawn(item, new FurniturePose
+            {
+                Position = new Vector3(1.25f, 0f, -0.5f), Yaw = 135f, Valid = true,
+            });
+            _spawned.Add(view.gameObject);
+            var selectable = view.GetComponent<Selectable>();
+            selectable.Id = "furn-1";
+            model.Register(selectable);
+
+            var data = RoomPlanner.Import.ProjectStore.Capture(null, null);
+            Assert.AreEqual(1, data.Furniture.Count, "the piece is captured");
+            Assert.AreEqual("kenney-furniture/loungeSofa", data.Furniture[0].Key);
+            Assert.AreEqual(item.Size, data.Furniture[0].Size);
+
+            // Through JSON and back into an empty scene.
+            var reloaded = RoomPlanner.Core.Project.ProjectData.FromJson(data.ToJson());
+            Assert.NotNull(reloaded, "a v4 file must load");
+            Object.DestroyImmediate(view.gameObject);
+
+            tool.RestoreItem(reloaded.Furniture[0]);
+            float deadline = Time.realtimeSinceStartup + 15f;
+            FurnitureItemView restored = null;
+            while (restored == null && Time.realtimeSinceStartup < deadline)
+            {
+                restored = Object.FindFirstObjectByType<FurnitureItemView>();
+                yield return null;
+            }
+            Assert.NotNull(restored, "the piece must come back");
+            _spawned.Add(restored.gameObject);
+
+            Assert.AreEqual(new Vector3(1.25f, 0f, -0.5f), restored.transform.position);
+            Assert.AreEqual(135f, restored.Yaw, 0.1f);
+            Assert.AreEqual("kenney-furniture/loungeSofa", restored.CatalogKey);
+            Assert.AreEqual("furn-1", restored.GetComponent<Selectable>().Id);
+        }
+
+        [UnityTest]
+        public IEnumerator Project_MissingPack_RestoresAPlaceholderInsteadOfNothing()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("not in any installed collection"));
+            tool.RestoreItem(new RoomPlanner.Core.Project.ProjectFurniture
+            {
+                Key = "gone-pack/mystery-chair", Name = "Mystery chair",
+                Position = new Vector3(2f, 0f, 3f), Yaw = 0f,
+                Size = new Vector3(0.5f, 0.9f, 0.5f),
+            });
+
+            float deadline = Time.realtimeSinceStartup + 15f;
+            FurnitureItemView restored = null;
+            while (restored == null && Time.realtimeSinceStartup < deadline)
+            {
+                restored = Object.FindFirstObjectByType<FurnitureItemView>();
+                yield return null;
+            }
+            Assert.NotNull(restored, "a missing pack must not swallow the object");
+            _spawned.Add(restored.gameObject);
+
+            Assert.AreEqual(new Vector3(2f, 0f, 3f), restored.transform.position);
+            Assert.AreEqual(new Vector3(0.5f, 0.9f, 0.5f), restored.Size, "the placeholder keeps its size");
+            Assert.AreEqual(new Vector3(0.5f, 0.9f, 0.5f), restored.GetComponent<BoxCollider>().size);
+            StringAssert.Contains("Mystery chair", restored.Describe());
+        }
+
         private static SettingField Row(SettingsSchema page, string id)
         {
             foreach (var f in page.Fields) if (f.Id == id) return f;

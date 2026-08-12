@@ -140,15 +140,34 @@ namespace RoomPlanner.Core.Project
         public Vector3 A, B;
     }
 
+    /// <summary>
+    /// A placed catalog item (v4, design/27). The model is NOT stored — only its catalog
+    /// address, so a project stays small and picks up an updated pack. Size travels with
+    /// it anyway: if the pack is gone at load time the piece comes back as a labelled
+    /// placeholder of the right dimensions instead of vanishing silently.
+    /// </summary>
+    [Serializable]
+    public class ProjectFurniture
+    {
+        public string Id;
+        public string Key;                // "collection/item"
+        public string Name;
+        public Vector3 Position;          // bottom centre
+        public float Yaw;
+        public Vector3 Size;              // metres, as placed
+        public int Anchor;                // FurnitureAnchor as int
+    }
+
     [Serializable]
     public class ProjectData
     {
         /// <summary>Current format version. 1 = walls/floors/stairs/MEP only;
         /// 2 = + electrical layer; 3 = per-side wall finishes (issue #34) — in v3
         /// ProjectWall.Finish is the INNER side and FinishB the outer, while a v2
-        /// file's single Finish paints the whole wall. Readers accept anything up
-        /// to this and refuse newer.</summary>
-        public const int CurrentVersion = 3;
+        /// file's single Finish paints the whole wall; 4 = + placed furniture
+        /// (design/27). Readers accept anything up to this and refuse newer — an
+        /// older build silently dropping the furniture would be worse than refusing.</summary>
+        public const int CurrentVersion = 4;
 
         public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();
@@ -159,6 +178,7 @@ namespace RoomPlanner.Core.Project
         public List<ProjectFixture> Fixtures = new();
         public List<ProjectWire> Wires = new();
         public List<ProjectMeasure> Measures = new();
+        public List<ProjectFurniture> Furniture = new();
 
         // blueprint placement travels with the project — the plan image is a file next to it
         public float PlanScale = 5f;

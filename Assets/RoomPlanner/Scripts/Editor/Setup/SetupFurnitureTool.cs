@@ -52,6 +52,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("ghost").objectReferenceValue = ghost;
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
             so.FindProperty("itemsRoot").objectReferenceValue = root.transform;
+            so.FindProperty("placeholderMat").objectReferenceValue = ctx.ProxyMat;
             so.ApplyModifiedProperties();
 
             var mso = new SerializedObject(ctx.Manager);

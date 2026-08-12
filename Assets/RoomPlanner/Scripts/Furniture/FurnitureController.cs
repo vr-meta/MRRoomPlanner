@@ -30,6 +30,7 @@ namespace RoomPlanner.Furniture
         [SerializeField] private Transform reticle;          // shared aim point
         [SerializeField] private LineRenderer ghost;         // footprint rectangle
         [SerializeField] private Transform itemsRoot;        // parent for placed furniture
+        [SerializeField] private Material placeholderMat;    // stands in for a missing pack
 
         private const int SelectableLayer = 6;
         /// <summary>How far around a piece we look for a wall to back onto.</summary>
@@ -330,6 +331,76 @@ namespace RoomPlanner.Furniture
             model.layer = SelectableLayer;
             foreach (var t in model.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = SelectableLayer;
             view.Bind(item, model, library != null ? library.Catalog.Find(item.CollectionId) : null);
+        }
+
+        // ---- project restore (#73) --------------------------------------------------
+
+        /// <summary>
+        /// Recreate a piece from a project file. The catalog may still be loading (the
+        /// library reads manifests asynchronously), so the work is deferred until it is
+        /// ready — and if the pack is genuinely gone the piece comes back as a labelled
+        /// placeholder of the right size, never as a silent hole in the room.
+        /// </summary>
+        public void RestoreItem(Core.Project.ProjectFurniture saved)
+        {
+            if (saved == null || sceneModel == null) return;
+            StartCoroutine(RestoreRoutine(saved));
+        }
+
+        private System.Collections.IEnumerator RestoreRoutine(Core.Project.ProjectFurniture saved)
+        {
+            float deadline = Time.realtimeSinceStartup + 10f;
+            while (library != null && !library.Ready && Time.realtimeSinceStartup < deadline)
+                yield return null;
+
+            var pose = new FurniturePose { Position = saved.Position, Yaw = saved.Yaw, Valid = true };
+            var item = Catalog?.FindItem(saved.Key);
+            FurnitureItemView view;
+
+            if (item != null)
+            {
+                view = Spawn(item, pose);
+            }
+            else
+            {
+                Debug.LogWarning($"[Furniture] {saved.Key} is not in any installed collection — " +
+                                 "restored as a placeholder");
+                view = SpawnPlaceholder(saved, pose);
+            }
+
+            if (view == null) yield break;
+            var selectable = view.GetComponent<Selectable>();
+            if (selectable != null)
+            {
+                if (!string.IsNullOrEmpty(saved.Id)) selectable.Id = saved.Id;
+                sceneModel.Register(selectable);
+            }
+        }
+
+        /// <summary>A grey box the size of the missing piece: the layout survives, and the
+        /// user can see (and move, and delete) what the project expected to be there.</summary>
+        private FurnitureItemView SpawnPlaceholder(Core.Project.ProjectFurniture saved, in FurniturePose pose)
+        {
+            var item = new FurnitureItem
+            {
+                Id = saved.Key, Name = string.IsNullOrEmpty(saved.Name) ? "Missing item" : saved.Name,
+                Size = saved.Size, Anchor = (FurnitureAnchor)saved.Anchor,
+                Category = FurnitureCategory.Decor, Fit = FurnitureFit.Stretch,
+                CollectionId = null, File = null,
+            };
+
+            var view = Spawn(item, pose);
+            if (view == null) return null;
+
+            var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            box.name = "Placeholder";
+            Destroy(box.GetComponent<BoxCollider>());     // the view already owns the pick box
+            box.transform.SetParent(view.transform, false);
+            box.transform.localScale = saved.Size;
+            box.transform.localPosition = new Vector3(0f, saved.Size.y * 0.5f, 0f);
+            box.layer = SelectableLayer;
+            if (placeholderMat != null) box.GetComponent<MeshRenderer>().sharedMaterial = placeholderMat;
+            return view;
         }
 
         // ---- move -------------------------------------------------------------------
