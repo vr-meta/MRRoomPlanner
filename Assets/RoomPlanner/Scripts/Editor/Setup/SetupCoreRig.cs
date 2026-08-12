@@ -56,7 +56,19 @@ namespace RoomPlanner.EditorTools
             if (anchor != null) pso.FindProperty("controllerAnchor").objectReferenceValue = anchor;
             pso.ApplyModifiedProperties();
 
+            BuildGround(ctx, rig);
             BuildLocomotion(ctx, rig);
+        }
+
+        /// <summary>Ground datum + gravity (design/26-ground.md). Owns the virtual ground
+        /// plane that used to live inside ToolManager.</summary>
+        private static void BuildGround(RigContext ctx, GameObject rig)
+        {
+            ctx.Ground = rig.AddComponent<GroundService>();
+            var gso = new SerializedObject(ctx.Ground);
+            gso.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            gso.FindProperty("groundMat").objectReferenceValue = ctx.GroundMat;
+            gso.ApplyModifiedProperties();
         }
 
         /// <summary>Left-hand navigation (design/21-locomotion.md): the portal arc and
@@ -88,6 +100,7 @@ namespace RoomPlanner.EditorTools
             lso.FindProperty("input").objectReferenceValue = ctx.Input;
             lso.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
             lso.FindProperty("manager").objectReferenceValue = ctx.Manager;
+            lso.FindProperty("ground").objectReferenceValue = ctx.Ground;
             lso.FindProperty("arcLine").objectReferenceValue = arc;
             lso.FindProperty("portalRing").objectReferenceValue = ring;
             lso.ApplyModifiedProperties();

@@ -36,6 +36,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private RoomPlanner.Walls.OpeningsController openings;
         [SerializeField] private RoomPlanner.Import.ProjectsController projects;
         [SerializeField] private TeleportLocomotion locomotion;
+        [SerializeField] private GroundService ground;
         [SerializeField] private float wallThickness = 0.2f;
         [SerializeField] private float wallHeight = 2.7f;
         [SerializeField] private int offsetMode = 0;  // 0 Outer, 1 Center, 2 Inner
@@ -51,7 +52,6 @@ namespace RoomPlanner.Tools
         // Scan OFF is the default since 2026-08-10: the main workflow is walking an
         // imported house in the virtual environment, not scanning the real room.
         [SerializeField] private bool scanOn = false;
-        [SerializeField] private Material groundMat;       // virtual ground shown when the scan is off
         [SerializeField] private Material skyMat;          // procedural sky for the scan-off mode
         [SerializeField] private UnityEngine.Rendering.Universal.ScriptableRendererFeature ssaoFeature;
         [SerializeField] private Light sunLight;           // Rendering page: sun-shadows toggle
@@ -219,14 +219,21 @@ namespace RoomPlanner.Tools
             // drag is accumulating its delta (replaying history mid-drag corrupts the total).
             if (sceneModel != null && (select == null || !select.IsDragging))
             {
-                // Undoing/redoing a teleport moves the model — the virtual ground follows.
-                if (input.UndoPressed()) { sceneModel.History.Undo(); UpdateGroundLevel(); RefreshMenu(); }
-                else if (input.RedoPressed()) { sceneModel.History.Redo(); UpdateGroundLevel(); RefreshMenu(); }
+                // Undoing/redoing a teleport moves the model — GroundService notices the
+                // history depth change and re-derives the ground on its next tick.
+                if (input.UndoPressed()) { sceneModel.History.Undo(); RefreshMenu(); }
+                else if (input.RedoPressed()) { sceneModel.History.Redo(); RefreshMenu(); }
             }
 
             // Left-hand navigation (design/21): portal aim + smooth walk. The radial owns
             // the left hand while open — an active aim cancels instead of fighting it.
             if (locomotion != null) locomotion.Tick(radial != null && radial.IsOpen, scanOn);
+
+            // Gravity (design/26): with the scan off GroundService drops the rig itself; in
+            // passthrough the camera must stay put, so the MODEL comes to the feet instead.
+            // Never recorded — gravity is navigation, not an edit (undo would fight it).
+            if (ground != null && ground.Tick(scanOn, out Vector3 settle))
+                ShiftModel(settle, record: false);
 
             Ray ray = pointer.GetRay();
 
@@ -499,17 +506,32 @@ namespace RoomPlanner.Tools
         {
             if (sceneModel == null) return;
             var head = Camera.main != null ? Camera.main.transform.position : point + Vector3.up;
-            var delta = BuildingNav.TeleportDelta(point, head);
-            sceneModel.History.Execute(new TeleportCommand(
+            // Feet, not a hard zero: after walking up a flight with the scan off the rig
+            // stands above zero, and the aimed spot must arrive at THAT level (design/26).
+            float footY = ground != null ? ground.FootY : 0f;
+            ShiftModel(BuildingNav.TeleportDelta(point, head, footY), record: true);
+            if (input != null) input.Pulse(0.4f, 0.02f);
+        }
+
+        /// <summary>
+        /// Move the whole model by a delta. <paramref name="record"/> = the act belongs in
+        /// history (teleport — X must always take you home); gravity settles pass false,
+        /// see design/26 «Гравитация НЕ пишется в историю».
+        /// </summary>
+        public void ShiftModel(Vector3 delta, bool record)
+        {
+            if (sceneModel == null || delta == Vector3.zero) return;
+            var cmd = new TeleportCommand(
                 GetComponent<RoomPlanner.Walls.WallGraphRenderer>(),
                 TeleportCommand.CollectFloors(), delta,
                 TeleportCommand.CollectStairs(),
                 TeleportCommand.CollectMep(),
                 TeleportCommand.CollectFixtures(),
                 TeleportCommand.CollectRoutes(),
-                TeleportCommand.CollectMeasurements()));   // tape stays on the model (feedback 2026-08-10)
-            UpdateGroundLevel();
-            if (input != null) input.Pulse(0.4f, 0.02f);
+                TeleportCommand.CollectMeasurements());   // tape stays on the model (feedback 2026-08-10)
+            if (record) sceneModel.History.Execute(cmd);
+            else cmd.Do();
+            if (ground != null) ground.Invalidate();
         }
 
         /// <summary>Activate a tool by its stable id (e.g. B-on-empty returns to "select").</summary>
@@ -568,8 +590,6 @@ namespace RoomPlanner.Tools
             ApplyEnvironment(on);
         }
 
-        private GameObject _ground;
-
         /// <summary>
         /// Scan OFF now also leaves passthrough: the model stands on a virtual ground in a
         /// plain sky — the "came to design from a plan, not to scan a room" mode
@@ -600,34 +620,11 @@ namespace RoomPlanner.Tools
                 }
             }
 
-            if (!on && _ground == null && groundMat != null)
-            {
-                _ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-                _ground.name = "VirtualGround";
-                // just under Level 0 so slab tops never z-fight with it
-                _ground.transform.position = new Vector3(0f, -0.02f, 0f);
-                _ground.transform.localScale = new Vector3(30f, 1f, 30f);       // 300 × 300 m
-                _ground.GetComponent<Renderer>().sharedMaterial = groundMat;
-            }
-            if (_ground != null) _ground.SetActive(!on);
-            UpdateGroundLevel();
-        }
-
-        /// <summary>
-        /// Keep the virtual ground UNDER the whole model: after teleporting up a storey the
-        /// lower floors sink below zero, and a ground plane parked at −2 cm would hide them —
-        /// which is exactly "can't see storeys through the stairwell hole" (design/18 I12).
-        /// </summary>
-        private void UpdateGroundLevel()
-        {
-            if (_ground == null) return;
-            float min = -0.02f;
-            foreach (var f in TeleportCommand.CollectFloors())
-                min = Mathf.Min(min, f.Level - f.Thickness);
-            foreach (var s in TeleportCommand.CollectStairs())
-                min = Mathf.Min(min, s.Base.y);
-            var p = _ground.transform.position;
-            _ground.transform.position = new Vector3(p.x, min - 0.3f, p.z);
+            // The virtual ground belongs to GroundService now (design/26): it derives the
+            // level from the model, so it stays under the whole building after a teleport
+            // up a storey AND after an import — the old copy here only refreshed on
+            // teleport/undo, which is why an imported house hung above the plane.
+            if (ground != null) ground.SetVisible(!on);
         }
 
         public void SetActiveTool(int index)
