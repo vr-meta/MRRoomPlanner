@@ -119,6 +119,15 @@ namespace RoomPlanner.Tools
 
             float gap = -support;                 // >0 = hanging in the air, <0 = a step up
             if (Mathf.Abs(gap) < SettleThreshold || Time.time < _settleAt) return false;
+
+            // THE STAIR RATCHET (headset 2026-08-13): the user walks their REAL room; a
+            // stair flight in the model happens to lie under that path, and every real
+            // step over it read as "climbed a tread" — the model ratcheted down 17.5 cm
+            // at a time until the user stood above the doors. Stepping UP onto slabs or
+            // treads is therefore a TELEPORT-only move now; passive gravity only ever
+            // drops (walked off an edge) or rescues from below the ground datum.
+            if (gap < 0f && support > _groundY + 1e-3f) return false;
+
             modelShift = new Vector3(0f, gap, 0f);
             _settleAt = Time.time + SettleCooldown;
             Debug.Log($"[Ground] settle dy={gap:0.###} support={support:0.###} " +
@@ -157,22 +166,16 @@ namespace RoomPlanner.Tools
         private void CalibrateTracking(Transform rig)
         {
             if (rig == null) return;
-            if (_scanFloorY.HasValue)
+            // CALIBRATION ON HOLD (diagnostic build): the first live run read the FLOOR
+            // anchor at Y=0.991 — clearly not the walking plane — and sank the user a
+            // metre. Until the anchor dump below explains what MRUK really exposes,
+            // only LOG what a calibration would have done.
+            if (_scanFloorY.HasValue && Mathf.Abs(_scanFloorY.Value) > 0.01f
+                && Time.time >= _nextCalibration)
             {
-                float floorY = _scanFloorY.Value;
-                if (Mathf.Abs(floorY) > 0.01f
-                    && Time.time >= _nextCalibration && _calibrationsInARow < 3)
-                {
-                    _rigHomeY = rig.position.y - floorY;
-                    _nextCalibration = Time.time + 5f;
-                    _calibrationsInARow++;
-                    Debug.Log($"[Ground] tracking floor calibrated: rig home Y={_rigHomeY:0.###} " +
-                        $"(scan floor was at {floorY:0.###}, attempt {_calibrationsInARow})");
-                }
-                else if (Mathf.Abs(floorY) <= 0.01f)
-                {
-                    _calibrationsInARow = 0;   // converged — anchors follow the rig
-                }
+                _nextCalibration = Time.time + 5f;
+                Debug.Log($"[Ground] WOULD calibrate: rig home Y={rig.position.y - _scanFloorY.Value:0.###} " +
+                    $"(scan floor reads {_scanFloorY.Value:0.###})");
             }
             // hold the rig at its home: undoes both pre-#65 gravity drift and anything
             // else that nudges it vertically
@@ -207,19 +210,24 @@ namespace RoomPlanner.Tools
                 return;
             }
             if (Time.time < _nextFloorProbe) return;
-            _nextFloorProbe = Time.time + 3f;
+            _nextFloorProbe = Time.time + 5f;
 
+            // Diagnostic sweep: list EVERY anchor — label, world position, which way its
+            // axes point. The first live probe returned "FLOOR" at Y=0.991 (a metre off
+            // the walking plane), so the pose conventions need to be seen, not assumed.
             foreach (var mb in FindObjectsByType<MonoBehaviour>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 if (mb == null || mb.GetType().Name != "MRUKAnchor") continue;
                 var labelProp = mb.GetType().GetProperty("Label");
                 var label = labelProp != null ? labelProp.GetValue(mb) : null;
+                var t = mb.transform;
+                Debug.Log($"[Ground] anchor '{label}' pos=({t.position.x:0.##}, {t.position.y:0.##}, " +
+                    $"{t.position.z:0.##}) up={t.up.y:0.##} fwd.y={t.forward.y:0.##} " +
+                    $"parentY={(t.parent != null ? t.parent.position.y.ToString("0.##") : "root")}");
                 if (label == null || !label.ToString().Contains("FLOOR")) continue;
-                _scanFloor = mb.transform;
-                _scanFloorY = _scanFloor.position.y;
-                Debug.Log($"[Ground] scan floor found at Y={_scanFloorY:0.###} — foot datum");
-                return;
+                _scanFloor = t;
+                _scanFloorY = t.position.y;
             }
         }
 

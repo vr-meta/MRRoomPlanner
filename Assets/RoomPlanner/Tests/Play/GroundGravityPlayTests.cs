@@ -140,14 +140,11 @@ namespace RoomPlanner.Tests.Play
             yield return null;
 
             Assert.IsFalse(ground.Tick(out _), "the model must not move");
-            Assert.AreEqual(-0.22f, rig.position.y, 1e-3f,
-                "the rig shifts so the scanned floor lands on world zero");
-
-            ground.ScanFloorOverride = 0f;      // anchors ride the tracking space down
-            yield return null;
-            Assert.IsFalse(ground.Tick(out _));
-            Assert.AreEqual(-0.22f, rig.position.y, 1e-3f,
-                "calibration is a one-off — the rig is not moved again");
+            // Calibration is ON HOLD (diagnostic: the live FLOOR anchor read Y=0.991 —
+            // clearly not the walking plane). Until the anchor dump settles the pose
+            // conventions, the rig stays untouched and the offset is only logged.
+            Assert.AreEqual(0f, rig.position.y, 1e-3f,
+                "rig untouched while the calibration is on diagnostic hold");
         }
 
         [UnityTest]
@@ -199,15 +196,18 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
-        public IEnumerator LowLedgeUnderfoot_ModelComesDownAStep()
+        public IEnumerator LowLedgeUnderfoot_IsNotAutoClimbed()
         {
+            // The stair ratchet (headset 2026-08-13): a flight lying under the user's
+            // REAL walking path read every step as "climbed a tread" and ratcheted the
+            // model down 17.5 cm at a time. Stepping UP is teleport-only now — passive
+            // gravity never climbs slabs or treads.
             Slab(0f);
             Slab(0.2f, 1f);                  // a podium under the walker
             var (ground, rig) = MakeRig(0f);
             yield return null;
 
-            Assert.IsTrue(ground.Tick(out Vector3 shift), "podium under the feet = a step up");
-            Assert.AreEqual(-0.2f, shift.y, 1e-4f, "the model comes down so the podium is at the feet");
+            Assert.IsFalse(ground.Tick(out _), "no auto-climb — stepping up is teleport-only");
             Assert.AreEqual(0f, rig.position.y, 1e-4f, "the rig stays on the datum");
         }
 
