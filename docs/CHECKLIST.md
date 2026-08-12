@@ -859,6 +859,42 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   (жизненный цикл через виджеты схемы). Осталось (см. матрицу): жесты розетки/
   провода, постановка проёма, контур пола, ластик Paint, радиал, портал
 
+## 2ac. Мебель: коллекции, каталог, расстановка (эпик #40, дизайн: `design/27-furniture.md`)
+
+Каталог — **набор коллекций** (пак = папка с `collection.json` + `.glb`); источник
+(бандл / кеш / онлайн) для инструмента неразличим. Габариты 1:1 берутся из манифеста,
+модель масштабируется под них. v1 ставит модели без правки (resize — позже).
+
+- [~] **F1 — Core каталог** (#67): написаны `Core/Furniture/FurnitureCatalog.cs`
+  (коллекции/предметы/категории/якоря/`Fit`, реестр с адресацией `collection/item`) и
+  `FurnitureCatalogParser` (отбраковка битых записей со счётчиком и причиной, защита от
+  путей-«побегов» в скачанных манифестах) + `FurnitureCatalogTests`. **Ждёт прогона тестов**
+- [~] **F2 — Core размещение** (#68): написан `Core/Furniture/FurniturePlacement.cs`
+  (`Solve()` для Floor/Wall/Ceiling/Counter, back-to-wall snap 0.35 м с выталкиванием из
+  стены, квантование yaw 15°, `FitScale`/`FitScaleAxes`, `Footprint`) +
+  `FurniturePlacementTests`. **Ждёт прогона тестов**
+- [~] **F3 — бандл-коллекции** (#69): Kenney Furniture Kit (CC0) — 120 курированных
+  моделей в `Assets/StreamingAssets/Furniture/kenney-furniture/` (2 МБ), кураторская
+  таблица реальных размеров/категорий/якорей (`Scripts/Editor/Furniture/*.curation.json`),
+  `FurnitureCatalogBuilder` (меню + headless, ругается на некурированные и отсутствующие
+  модели), лицензии в README, `FurnitureBundledPackTests`. Хвост: пак Quaternius,
+  сверка манифеста с выводом билдера в Unity
+- [ ] **F4 — загрузчик** (#70): `com.unity.cloud.gltfast` в манифесте пакетов,
+  `FurnitureLoader` (StreamingAssets + дисковый кеш, бюджет кадра, честная ошибка),
+  `FurnitureItemView` + `SelectableKind.Furniture`, освобождение мешей в `OnDestroy`
+- [ ] **F5 — инструмент Furn** (#71): `FurnitureController : ITool` (слот радиала 5),
+  панель по дизайн-коду (Tabs Place/Move; Select Collection/Category/Item, Stepper Rotate,
+  Toggle Snap to wall, Readout size/лицензия), призрачный bbox + постановка одной командой,
+  `SetupFurnitureTool` + строка реестра
+- [ ] **F6 — режим Move** (#72): драг по полу для каталожной **и импортированной из IFC**
+  мебели, снап к стене, yaw грипом, одна `MoveCommand` на жест, безопасное прерывание
+- [ ] **F7 — персист** (#73): `ProjectFurniture` в формате проекта, round-trip тест,
+  отсутствующий пак → заглушка с предупреждением
+- [ ] **F8 — онлайн-коллекции** (#74): Poly Pizza API (поиск, скачивание в кеш-коллекцию,
+  лицензия/автор в credits), офлайн — первоклассное состояние
+- [ ] **F9 — проверка на устройстве**: читаемость списков коллекций, точность постановки
+  у стены, комфорт драга (headless не видно)
+
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
 _Дизайн: `docs/design/09-project-structure.md`._
