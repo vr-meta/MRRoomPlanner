@@ -127,6 +127,22 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator ScannedFloor_BecomesTheFootDatum()
+        {
+            // The headset's tracking floor can sit ~20 cm below the real floor (bad
+            // floor calibration, seen live) — the room SCAN knows the truth, so the
+            // slabs settle to the scanned floor level, Layout-style, not to zero.
+            Slab(0f);
+            var (ground, _) = MakeRig(0f);
+            ground.ScanFloorOverride = 0.22f;
+            yield return null;
+
+            Assert.IsTrue(ground.Tick(out Vector3 shift), "slab at 0 vs feet at 0.22 settles");
+            Assert.AreEqual(0.22f, shift.y, 1e-3f, "the model rises: slab top to the scanned floor");
+            Assert.AreEqual(0.22f, ground.FootY, 1e-4f);
+        }
+
+        [UnityTest]
         public IEnumerator Settle_HasACooldown_NoPingPong()
         {
             Slab(-3f);

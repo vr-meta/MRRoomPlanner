@@ -67,16 +67,17 @@ namespace RoomPlanner.Tools
         /// transform that plays its part (feet level = its Y).</summary>
         public Transform RigOverride { get; set; }
 
-        /// <summary>Foot level — the fixed Y = 0 datum since #65 (Tick snaps a drifted
-        /// rig back). Read through the rig so test RigOverrides stay honest.</summary>
-        public float FootY
-        {
-            get
-            {
-                Transform rig = ResolveRig();
-                return rig != null ? rig.position.y : 0f;
-            }
-        }
+        /// <summary>
+        /// Foot level — the fixed datum (#65). The SCANNED floor when the room has one:
+        /// the tracking origin can sit tens of cm off the real floor (headset floor
+        /// calibration — seen live: controller on the real floor rendered ~20 cm above
+        /// our slabs while Meta's Layout, which trusts the scan, sat perfectly), so the
+        /// scan wins over the tracking zero. Without a scan — the tracking floor (0).
+        /// </summary>
+        public float FootY => ScanFloorOverride ?? _scanFloorY ?? 0f;
+
+        /// <summary>Test seam: PlayMode has no MRUK scan to reflect over.</summary>
+        public float? ScanFloorOverride { get; set; }
 
         /// <summary>Show or hide the virtual ground (scan off / passthrough).</summary>
         public void SetVisible(bool on)
@@ -100,6 +101,7 @@ namespace RoomPlanner.Tools
         public bool Tick(out Vector3 modelShift)
         {
             modelShift = Vector3.zero;
+            ProbeScanFloor();
             MaybeRefresh();
 
             Transform rig = ResolveRig();
@@ -119,9 +121,11 @@ namespace RoomPlanner.Tools
             // Feet are under the HEAD: in passthrough the user walks their real room, so
             // the rig's XZ says nothing about where they are standing.
             Vector3 head = cam.transform.position;
-            float support = GroundMath.Support(_slabs, _flights, _groundY, head.x, head.z, 0f);
+            float footY = FootY;
+            float support = GroundMath.Support(_slabs, _flights, _groundY, head.x, head.z, footY);
+            LogStanding(head, support);
 
-            float gap = -support;                 // >0 = hanging in the air, <0 = a step up
+            float gap = footY - support;          // >0 = hanging in the air, <0 = a step up
             if (Mathf.Abs(gap) < SettleThreshold || Time.time < _settleAt) return false;
             modelShift = new Vector3(0f, gap, 0f);
             _settleAt = Time.time + SettleCooldown;
@@ -139,6 +143,47 @@ namespace RoomPlanner.Tools
         {
             float top = GroundMath.Support(_slabs, _flights, _groundY, x, z, footY, BlockHeadroom);
             return top <= footY + GroundMath.StepUp + 1e-3f;
+        }
+
+        // ---- the scanned floor: the real-floor datum (#65 follow-up) ----
+
+        private Transform _scanFloor;      // MRUKAnchor with a FLOOR label, once found
+        private float? _scanFloorY;
+        private float _nextFloorProbe;
+
+        /// <summary>
+        /// Find the scanned floor anchor. Reflection by type name — the same soft MRUK
+        /// dependency as ToolManager.SetScan. Cheap once found (just reads its Y); probed
+        /// every few seconds until then, because the scan spawns asynchronously.
+        /// v1 takes the first FLOOR anchor — multi-room selection can come later.
+        /// </summary>
+        private void ProbeScanFloor()
+        {
+            if (_scanFloor != null)
+            {
+                float y = _scanFloor.position.y;
+                if (_scanFloorY == null || Mathf.Abs(y - _scanFloorY.Value) > 1e-4f)
+                {
+                    _scanFloorY = y;
+                    Debug.Log($"[Ground] scan floor at Y={y:0.###} — foot datum");
+                }
+                return;
+            }
+            if (Time.time < _nextFloorProbe) return;
+            _nextFloorProbe = Time.time + 3f;
+
+            foreach (var mb in FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (mb == null || mb.GetType().Name != "MRUKAnchor") continue;
+                var labelProp = mb.GetType().GetProperty("Label");
+                var label = labelProp != null ? labelProp.GetValue(mb) : null;
+                if (label == null || !label.ToString().Contains("FLOOR")) continue;
+                _scanFloor = mb.transform;
+                _scanFloorY = _scanFloor.position.y;
+                Debug.Log($"[Ground] scan floor found at Y={_scanFloorY:0.###} — foot datum");
+                return;
+            }
         }
 
         /// <summary>The walking surface at a spot — the arc's landing check uses it too.</summary>
@@ -236,6 +281,31 @@ namespace RoomPlanner.Tools
             // IFC files arrive in their own coordinates and can sit far from the origin —
             // follow the content so the 300 m plane is actually under the building.
             _plane.transform.position = new Vector3(_contentCenter.x, y, _contentCenter.y);
+        }
+
+        // ---- standing diagnostics (#65 follow-up: "floating ~20 cm above the floor") ----
+
+        private float _lastLoggedHeadOverSupport = float.MinValue;
+        private float _nextStandLog;
+
+        /// <summary>Throttled stance log: the head height over the support is effectively
+        /// the user's eye height — a value far from human (~1.6–1.9 m) means the TRACKING
+        /// floor and the real floor disagree (headset floor calibration), not our math.
+        /// Logged on change so logcat tells the story without spamming.</summary>
+        private void LogStanding(Vector3 head, float support)
+        {
+            float over = head.y - support;
+            if (Time.time < _nextStandLog
+                && Mathf.Abs(over - _lastLoggedHeadOverSupport) < 0.03f) return;
+            _nextStandLog = Time.time + 2f;
+            _lastLoggedHeadOverSupport = over;
+            string origin = "?";
+            if (OVRManager.instance != null)
+                origin = OVRManager.instance.trackingOriginType.ToString();
+            Debug.Log($"[Ground] stand headY={head.y:0.###} over-support={over:0.###} " +
+                $"support={support:0.###} ground={_groundY:0.###} foot={FootY:0.###} " +
+                $"scanFloor={(_scanFloorY.HasValue ? _scanFloorY.Value.ToString("0.###") : "none")} " +
+                $"origin={origin} at ({head.x:0.#}, {head.z:0.#})");
         }
 
         private Transform ResolveRig()
