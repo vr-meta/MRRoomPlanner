@@ -82,7 +82,16 @@ namespace RoomPlanner.EditorTools
                 : Array.Empty<string>();
 
             if (curations.Length == 0) sb.AppendLine("  no curation tables found in " + CurationDir);
-            foreach (var path in curations) sb.Append(Build(path));
+            var built = new List<string>();
+            foreach (var path in curations)
+            {
+                sb.Append(Build(path));
+                var curation = JsonUtility.FromJson<CurationFile>(File.ReadAllText(path));
+                if (curation != null && !string.IsNullOrEmpty(curation.Collection)) built.Add(curation.Collection);
+            }
+
+            WriteIndex(built);
+            sb.AppendLine($"  index: {built.Count} collection(s) → {IndexPath}");
 
             AssetDatabase.Refresh();
             return sb.ToString();
@@ -157,6 +166,25 @@ namespace RoomPlanner.EditorTools
             if (missing.Count > 0) sb.AppendLine($"    MISSING models ({missing.Count}): {string.Join(", ", missing)}");
             if (unaccounted.Count > 0) sb.AppendLine($"    UNACCOUNTED models ({unaccounted.Count}): {string.Join(", ", unaccounted)}");
             return sb.ToString();
+        }
+
+        public static string IndexPath => (StreamingRoot + "/" + FurnitureIndex.FileName);
+
+        /// <summary>
+        /// StreamingAssets cannot be enumerated at runtime on Android (it lives inside the
+        /// APK), so the packs that ship with the build are listed in an index file the
+        /// loader reads first.
+        /// </summary>
+        private static void WriteIndex(List<string> collections)
+        {
+            var sb = new StringBuilder("{\n  \"Collections\": [ ");
+            for (int i = 0; i < collections.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(Quote(collections[i]));
+            }
+            sb.Append(" ]\n}\n");
+            File.WriteAllText(IndexPath, sb.ToString());
         }
 
         private static FurnitureAnchor AnchorOrFloor(string text) =>

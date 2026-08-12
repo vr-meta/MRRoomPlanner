@@ -4,6 +4,7 @@
     "references": [
         "RoomPlanner.Core",
         "RoomPlanner.Editing",
+        "glTFast",
         "Unity.TextMeshPro",
         "Oculus.VR",
         "Unity.RenderPipelines.Universal.Runtime",

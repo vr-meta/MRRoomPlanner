@@ -879,21 +879,29 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   `FurnitureCatalogBuilder` (меню + headless, ругается на некурированные и отсутствующие
   модели), лицензии в README, `FurnitureBundledPackTests`. Хвост: пак Quaternius,
   сверка манифеста с выводом билдера в Unity
-- [ ] **F4 — загрузчик** (#70): `com.unity.cloud.gltfast` в манифесте пакетов,
-  `FurnitureLoader` (StreamingAssets + дисковый кеш, бюджет кадра, честная ошибка),
-  `FurnitureItemView` + `SelectableKind.Furniture`, освобождение мешей в `OnDestroy`
-- [ ] **F5 — инструмент Furn** (#71): `FurnitureController : ITool` (слот радиала 5),
-  панель по дизайн-коду (Tabs Place/Move; Select Collection/Category/Item, Stepper Rotate,
-  Toggle Snap to wall, Readout size/лицензия), призрачный bbox + постановка одной командой,
-  `SetupFurnitureTool` + строка реестра
-- [ ] **F6 — режим Move** (#72): драг по полу для каталожной **и импортированной из IFC**
-  мебели, снап к стене, yaw грипом, одна `MoveCommand` на жест, безопасное прерывание
+- [x] **F4 — загрузчик** (#70): `com.unity.cloud.gltfast` 6.19.0 в манифесте пакетов;
+  `FurnitureLibrary` (индекс `collections.json` + манифесты через UnityWebRequest — на
+  Android StreamingAssets внутри APK и не перечисляется; дисковый кеш для будущих
+  скачанных паков), `FurnitureLoader` (кеш разобранных glTF по ключу, бюджет
+  треугольников, честная ошибка в `LastError`, `Dispose` в `OnDestroy`),
+  `FurnitureItemView` (масштаб под реальный размер, центрирование по нижнему центру,
+  BoxCollider, per-instance схема) + `SelectableKind.Furniture` в `Selectable`
+- [x] **F5 — инструмент Furn** (#71): `FurnitureController : ITool`, слот радиала 5
+  занят (резерв закрыт), панель по дизайн-коду (Tabs Place/Move; Select Collection/
+  Category/Item, Stepper Rotate 15°, Toggle Snap to wall, Readout size/source),
+  призрачный футпринт (зелёный/Danger), постановка одной `CreateCommand`, модель
+  догружается асинхронно под уже созданный объект; `SetupFurnitureTool` + строка реестра
+- [x] **F6 — режим Move** (#72): драг по собственной плоскости пола для каталожной **и
+  импортированной** мебели, снап к стене восемью пробными лучами (работает и по скан-
+  мешам), yaw грипом по 15°, одна `MoveCommand` + `FurnitureYawCommand` на жест,
+  прерывание при смене таба/инструмента/блокировке панелью
 - [ ] **F7 — персист** (#73): `ProjectFurniture` в формате проекта, round-trip тест,
   отсутствующий пак → заглушка с предупреждением
 - [ ] **F8 — онлайн-коллекции** (#74): Poly Pizza API (поиск, скачивание в кеш-коллекцию,
   лицензия/автор в credits), офлайн — первоклассное состояние
-- [ ] **F9 — проверка на устройстве**: читаемость списков коллекций, точность постановки
-  у стены, комфорт драга (headless не видно)
+- [ ] **F9 — проверка на устройстве**: читаемость списков коллекций (120 позиций в
+  Select — нужен ли поиск), точность постановки у стены, комфорт драга, вид моделей
+  glTFast под URP на Quest (headless не видно)
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 

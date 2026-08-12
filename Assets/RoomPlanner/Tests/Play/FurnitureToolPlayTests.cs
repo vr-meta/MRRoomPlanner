@@ -1,0 +1,236 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using RoomPlanner.Core;
+using RoomPlanner.Core.Furniture;
+using RoomPlanner.Editing;
+using RoomPlanner.Furniture;
+
+namespace RoomPlanner.Tests.Play
+{
+    /// <summary>
+    /// Furniture tool v1 (design/27, issues #70 #71 #72) on real components: the bundled
+    /// library really loads out of StreamingAssets, glTFast really parses a shipped model,
+    /// and a placed piece really measures its curated real-world size. Aiming and dragging
+    /// need a headset — that check stays on the checklist.
+    /// </summary>
+    public class FurnitureToolPlayTests
+    {
+        private readonly List<GameObject> _spawned = new();
+
+        [TearDown]
+        public void Cleanup()
+        {
+            foreach (var go in _spawned) if (go != null) Object.DestroyImmediate(go);
+            _spawned.Clear();
+        }
+
+        private static void SetField(object target, string field, object value) =>
+            target.GetType()
+                .GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(target, value);
+
+        private T Track<T>(T go) where T : Object
+        {
+            if (go is GameObject g) _spawned.Add(g);
+            return go;
+        }
+
+        private IEnumerator MakeLibrary(System.Action<FurnitureLibrary> onReady)
+        {
+            var go = Track(new GameObject("FurnitureLibrary"));
+            var library = go.AddComponent<FurnitureLibrary>();
+            float deadline = Time.realtimeSinceStartup + 20f;
+            while (!library.Ready && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsTrue(library.Ready, "library never finished loading the bundled packs");
+            onReady(library);
+        }
+
+        [UnityTest]
+        public IEnumerator Library_LoadsBundledPack()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            Assert.GreaterOrEqual(library.Catalog.Count, 1, library.Status);
+            var kenney = library.Catalog.Find("kenney-furniture");
+            Assert.NotNull(kenney, "the bundled Kenney pack must be in the catalog");
+            Assert.GreaterOrEqual(kenney.Items.Count, 100);
+            CollectionAssert.IsEmpty(library.Problems, string.Join("; ", library.Problems));
+
+            // The manifest resolves to a real, readable model URL.
+            var sofa = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            Assert.NotNull(sofa);
+            StringAssert.Contains("loungeSofa.glb", library.UrlOf(sofa));
+        }
+
+        [UnityTest]
+        public IEnumerator Loader_ParsesAModel_AndTheItemMeasuresItsRealSize()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var loaderGo = Track(new GameObject("Loader"));
+            var loader = loaderGo.AddComponent<FurnitureLoader>();
+            loader.Bind(library);
+
+            // A carcass with Fit=Stretch: its real 0.60 x 0.85 x 0.60 must be hit exactly,
+            // which is the whole reason the curated sizes exist.
+            var item = library.Catalog.FindItem("kenney-furniture/kitchenCabinet");
+            Assert.NotNull(item);
+            Assert.AreEqual(FurnitureFit.Stretch, item.Fit);
+
+            var host = Track(new GameObject("Piece"));
+            var view = host.AddComponent<FurnitureItemView>();
+
+            var task = loader.InstantiateAsync(item, host.transform);
+            float deadline = Time.realtimeSinceStartup + 30f;
+            while (!task.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsTrue(task.IsCompleted, "glTFast never finished");
+            Assert.IsNull(loader.LastError, loader.LastError);
+            var model = task.Result;
+            Assert.NotNull(model, "the bundled GLB must parse");
+
+            view.Bind(item, model, library.Catalog.Find(item.CollectionId));
+            yield return null;
+
+            var bounds = WorldBounds(host);
+            Assert.AreEqual(item.Size.x, bounds.size.x, 0.02f, "width");
+            Assert.AreEqual(item.Size.y, bounds.size.y, 0.02f, "height");
+            Assert.AreEqual(item.Size.z, bounds.size.z, 0.02f, "depth");
+            Assert.AreEqual(host.transform.position.y, bounds.min.y, 0.02f,
+                "the piece stands ON its origin, not half-sunk through it");
+        }
+
+        [UnityTest]
+        public IEnumerator Place_RegistersAnUndoableSelectableFurniture()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var pose = new FurniturePose { Position = new Vector3(1f, 0f, 2f), Yaw = 90f, Valid = true };
+            var view = tool.Spawn(item, pose);
+            _spawned.Add(view.gameObject);
+
+            Assert.AreEqual(pose.Position, view.transform.position);
+            Assert.AreEqual(90f, view.Yaw, 1e-3f);
+            Assert.AreEqual("kenney-furniture/loungeSofa", view.CatalogKey);
+            StringAssert.Contains("Kenney", view.Credit);
+
+            var selectable = view.GetComponent<Selectable>();
+            Assert.NotNull(selectable);
+            Assert.AreEqual(SelectableKind.Furniture, selectable.Kind);
+            StringAssert.Contains("cm", selectable.Describe());
+
+            var box = view.GetComponent<BoxCollider>();
+            Assert.NotNull(box, "the piece must be pickable right away, before the model streams in");
+            Assert.AreEqual(item.Size, box.size);
+
+            // Delete/undo goes through the history like every other object.
+            model.Register(selectable);
+            model.History.Execute(new DeleteCommand(selectable));
+            Assert.IsTrue(selectable.IsHidden);
+            model.History.Undo();
+            Assert.IsFalse(selectable.IsHidden);
+        }
+
+        [UnityTest]
+        public IEnumerator Move_RecordsOneMoveAndOneRotate_BothUndoable()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var view = tool.Spawn(item, new FurniturePose { Position = Vector3.zero, Yaw = 0f, Valid = true });
+            _spawned.Add(view.gameObject);
+            var selectable = view.GetComponent<Selectable>();
+            model.Register(selectable);
+
+            // What a drag leaves behind: a moved, turned piece plus its two commands.
+            view.MoveBy(new Vector3(0.5f, 0f, 0.25f));
+            view.SetYaw(45f);
+            model.History.Record(new MoveCommand(selectable, new Vector3(0.5f, 0f, 0.25f)));
+            model.History.Record(new FurnitureYawCommand(selectable, view, 0f, 45f));
+
+            model.History.Undo();
+            Assert.AreEqual(0f, view.Yaw, 1e-3f, "the rotation undoes on its own");
+            Assert.AreEqual(new Vector3(0.5f, 0f, 0.25f), view.transform.position);
+
+            model.History.Undo();
+            Assert.AreEqual(Vector3.zero, view.transform.position, "and then the travel");
+
+            model.History.Redo();
+            Assert.AreEqual(new Vector3(0.5f, 0f, 0.25f), view.transform.position);
+        }
+
+        [UnityTest]
+        public IEnumerator Schema_HasPlaceAndMoveTabs_WithoutForbiddenWidgets()
+        {
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+
+            var schema = tool.GetSettings();
+            Assert.AreSame(schema, tool.GetSettings(), "one tabbed root instance");
+            Assert.IsTrue(schema.HasTabs);
+            CollectionAssert.AreEqual(new[] { "Place", "Move" }, schema.Tabs);
+
+            var place = schema.TabPages[0];
+            var kinds = new Dictionary<string, SettingKind>();
+            foreach (var f in place.Fields) kinds[f.Id] = f.Kind;
+
+            Assert.AreEqual(SettingKind.Select, kinds["collection"]);
+            Assert.AreEqual(SettingKind.Select, kinds["category"]);
+            Assert.AreEqual(SettingKind.Select, kinds["item"]);
+            Assert.AreEqual(SettingKind.Stepper, kinds["yaw"]);
+            Assert.AreEqual(SettingKind.Toggle, kinds["snap"]);
+            Assert.AreEqual(SettingKind.Readout, kinds["size"]);
+
+            foreach (var page in schema.TabPages)
+            {
+                Assert.LessOrEqual(page.Fields.Count, 8, "design/20 §3: eight rows is the ceiling");
+                foreach (var f in page.Fields)
+                    Assert.AreNotEqual(SettingKind.Cycle, f.Kind, "design/20 §2: Cycle is banned");
+            }
+
+            // The collection list is the catalog's, and the size readout speaks centimetres.
+            CollectionAssert.Contains(Row(place, "collection").ResolveOptions(), "Kenney Furniture Kit");
+            StringAssert.Contains("cm", Row(place, "size").Value());
+        }
+
+        private static SettingField Row(SettingsSchema page, string id)
+        {
+            foreach (var f in page.Fields) if (f.Id == id) return f;
+            Assert.Fail($"row {id} missing");
+            return null;
+        }
+
+        private static Bounds WorldBounds(GameObject root)
+        {
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            Assert.Greater(renderers.Length, 0, "the loaded model has no renderers");
+            var b = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+            return b;
+        }
+    }
+}

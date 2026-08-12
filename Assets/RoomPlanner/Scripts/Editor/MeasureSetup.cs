@@ -35,6 +35,7 @@ namespace RoomPlanner.EditorTools
             SetupPaintTool.Build(ctx);
             SetupOpeningsTool.Build(ctx);   // after SetupWallTool: needs the graph renderer
             SetupProjectsTool.Build(ctx);   // after SetupImportTool: needs import + autosave
+            SetupFurnitureTool.Build(ctx);  // catalog library + glTF loader + footprint ghost
 
             ToolMenuAndInspector(ctx);
             SetupCoreRig.TryEnableEffectMeshColliders();
