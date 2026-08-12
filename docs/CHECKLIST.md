@@ -946,3 +946,15 @@ _Дизайн: `docs/design/09-project-structure.md`, `02-walls.md`._
 - [x] **`sdkmanager --licenses` зависал** (интерактивный prompt, stdin не проходил).
   Решение: писать файлы лицензий напрямую в `SDK/licenses/` (`android-sdk-license` и др.
   с известными хэшами), затем `sdkmanager` ставит пакеты без запроса.
+- [x] **Война adb-серверов: установка на шлем падала** (`protocol fault`, `unknown host
+  service`, устройство `offline`; сервер v40 мгновенно возрождался с системными правами,
+  `Stop-Process` — Access denied). Виновник — **SuperDisplay** (`C:\Program Files\
+  SuperDisplay\adb\adb.exe`, protocol 40): его служба держит порт 5037 и убивает чужие
+  серверы. Решение: выйти из SuperDisplay (трей → Exit; служба останавливается только
+  от админа), переткнуть USB, ставить любым современным adb. Диагностика: слушателя
+  порта ловить `Get-NetTCPConnection -LocalPort 5037 -State Listen`, бинарники искать
+  `find "C:\Program Files" -name adb.exe`.
+- [x] **Unity-лицензия слетает в batchmode** (exit 198, «No valid Unity Editor license
+  found», `Access token is unavailable`): токен входа протухает. Решение: открыть
+  Unity Hub, войти в Unity ID — batch сразу оживает; сам Hub после этого закрыть
+  (MSIX-процессы мешают только SuperDisplay-диагностике, но держать его незачем).
