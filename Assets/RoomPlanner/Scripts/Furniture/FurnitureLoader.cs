@@ -17,6 +17,9 @@ namespace RoomPlanner.Furniture
     public class FurnitureLoader : MonoBehaviour
     {
         [SerializeField] private FurnitureLibrary library;
+        /// <summary>Shader/material catalog pieces are rendered with — see
+        /// <see cref="FurnitureMaterialGenerator"/> for why glTFast's own is not used.</summary>
+        [SerializeField] private Material materialTemplate;
 
         /// <summary>Per-model triangle ceiling. The bundled CC0 packs sit around 100–1000,
         /// so this only ever bites for downloaded models (#74) — and then it reports
@@ -24,6 +27,7 @@ namespace RoomPlanner.Furniture
         public const int TriangleBudget = 60000;
 
         private readonly Dictionary<string, GltfImport> _imports = new();
+        private readonly List<FurnitureMaterialGenerator> _generators = new();
 
         /// <summary>Why the last load failed, for the panel's readout (null when fine).</summary>
         public string LastError { get; private set; }
@@ -48,7 +52,9 @@ namespace RoomPlanner.Furniture
 
             if (!_imports.TryGetValue(item.Key, out var import) || import == null)
             {
-                import = new GltfImport();
+                var materials = new FurnitureMaterialGenerator(materialTemplate);
+                _generators.Add(materials);
+                import = new GltfImport(materialGenerator: materials);
                 bool ok;
                 try { ok = await import.Load(url); }
                 catch (System.Exception e) { ok = false; LastError = e.Message; }
@@ -130,6 +136,10 @@ namespace RoomPlanner.Furniture
         {
             foreach (var import in _imports.Values) import?.Dispose();
             _imports.Clear();
+            foreach (var g in _generators) g?.Dispose();
+            _generators.Clear();
         }
+
+        public void BindMaterial(Material template) => materialTemplate = template;
     }
 }

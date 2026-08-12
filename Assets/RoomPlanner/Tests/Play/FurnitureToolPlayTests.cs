@@ -218,6 +218,77 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator Loader_UsesTheProjectShader_NotGltFastsOwn()
+        {
+            // Headset feedback 2026-08-12: every placed piece was magenta. glTFast's
+            // shaders are stripped from the build, so materials must come from OUR
+            // template — then there is nothing to strip and furniture is lit like the room.
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var template = new UnityEngine.Material(Shader.Find("Universal Render Pipeline/Lit"));
+            template.name = "TestFurnitureTemplate";
+
+            var loaderGo = Track(new GameObject("Loader"));
+            var loader = loaderGo.AddComponent<FurnitureLoader>();
+            loader.Bind(library);
+            loader.BindMaterial(template);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var host = Track(new GameObject("Piece"));
+            var task = loader.InstantiateAsync(item, host.transform);
+            float deadline = Time.realtimeSinceStartup + 30f;
+            while (!task.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.IsTrue(task.IsCompleted && task.Result != null, loader.LastError);
+
+            var renderers = host.GetComponentsInChildren<Renderer>(true);
+            Assert.Greater(renderers.Length, 0);
+            foreach (var r in renderers)
+                foreach (var m in r.sharedMaterials)
+                {
+                    Assert.NotNull(m, "a null material renders magenta too");
+                    Assert.AreEqual(template.shader, m.shader,
+                        $"{r.name} still uses {m.shader.name} — that shader is stripped from the APK");
+                }
+
+            Object.DestroyImmediate(template);
+        }
+
+        [UnityTest]
+        public IEnumerator Teleport_CarriesFurnitureWithTheModel()
+        {
+            // Headset feedback 2026-08-12: placed pieces "flew with the gaze". Teleport
+            // moves the MODEL, so anything left out of the shift appears to follow the
+            // user — the exact bug outlets and tapes had before.
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var view = tool.Spawn(item, new FurniturePose
+            {
+                Position = new Vector3(2f, 0f, 1f), Yaw = 0f, Valid = true,
+            });
+            _spawned.Add(view.gameObject);
+
+            var delta = new Vector3(-3f, 0.5f, 4f);
+            var cmd = new RoomPlanner.Tools.TeleportCommand(
+                null, null, delta, null, null, null, null, null,
+                RoomPlanner.Tools.TeleportCommand.CollectFurniture());
+
+            cmd.Do();
+            Assert.AreEqual(new Vector3(-1f, 0.5f, 5f), view.transform.position,
+                "furniture travels with the model");
+            cmd.Undo();
+            Assert.AreEqual(new Vector3(2f, 0f, 1f), view.transform.position, "and comes back on undo");
+        }
+
+        [UnityTest]
         public IEnumerator Project_RoundTripsAPlacedPiece()
         {
             FurnitureLibrary library = null;

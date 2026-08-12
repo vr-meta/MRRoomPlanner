@@ -22,6 +22,10 @@ namespace RoomPlanner.EditorTools
             if (loader == null) loader = ctx.Rig.AddComponent<FurnitureLoader>();
             var lso = new SerializedObject(loader);
             lso.FindProperty("library").objectReferenceValue = library;
+            // Catalog models render with the project's lit material, not glTFast's own
+            // shaders: those are stripped from the build (everything came out magenta on
+            // device) and would light differently from the rest of the room anyway.
+            lso.FindProperty("materialTemplate").objectReferenceValue = ctx.FurnitureMat;
             lso.ApplyModifiedProperties();
 
             var tool = ctx.Rig.AddComponent<FurnitureController>();

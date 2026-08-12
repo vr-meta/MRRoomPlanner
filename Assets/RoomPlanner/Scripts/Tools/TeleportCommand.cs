@@ -23,14 +23,17 @@ namespace RoomPlanner.Tools
         private readonly List<RoomPlanner.Electrical.ElectricFixture> _fixtures;
         private readonly List<RoomPlanner.Electrical.WireRoute> _routes;
         private readonly List<RoomPlanner.Measure.Measurement> _measurements;
+        private readonly List<RoomPlanner.Furniture.FurnitureItemView> _furniture;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
             List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null,
             List<RoomPlanner.Electrical.ElectricFixture> fixtures = null,
             List<RoomPlanner.Electrical.WireRoute> routes = null,
-            List<RoomPlanner.Measure.Measurement> measurements = null)
+            List<RoomPlanner.Measure.Measurement> measurements = null,
+            List<RoomPlanner.Furniture.FurnitureItemView> furniture = null)
         {
+            _furniture = furniture;
             _walls = walls;
             _floors = floors;
             _stairs = stairs;
@@ -79,9 +82,28 @@ namespace RoomPlanner.Tools
             if (_measurements != null)
                 foreach (var m in _measurements)
                     if (m != null) m.Set(m.PointA + d, m.PointB + d);
+            // Furniture rides with the model for the same reason (design/27).
+            if (_furniture != null)
+                foreach (var f in _furniture)
+                    if (f != null) f.MoveBy(d);
         }
 
         /// <summary>Every measurement, hidden ones included — same rule as slabs.</summary>
+        /// <summary>
+        /// Every placed piece of furniture, hidden ones included. Furniture is model data
+        /// like walls and outlets: left out of the shift it visually FOLLOWS THE USER
+        /// around the room (headset feedback 2026-08-12 — "они летают за взглядом"),
+        /// which is exactly the bug the electrical layer had.
+        /// </summary>
+        public static List<RoomPlanner.Furniture.FurnitureItemView> CollectFurniture()
+        {
+            var list = new List<RoomPlanner.Furniture.FurnitureItemView>();
+            foreach (var f in Object.FindObjectsByType<RoomPlanner.Furniture.FurnitureItemView>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None))
+                list.Add(f);
+            return list;
+        }
+
         public static List<RoomPlanner.Measure.Measurement> CollectMeasurements()
         {
             var list = new List<RoomPlanner.Measure.Measurement>();

@@ -529,7 +529,8 @@ namespace RoomPlanner.Tools
                 TeleportCommand.CollectMep(),
                 TeleportCommand.CollectFixtures(),
                 TeleportCommand.CollectRoutes(),
-                TeleportCommand.CollectMeasurements());   // tape stays on the model (feedback 2026-08-10)
+                TeleportCommand.CollectMeasurements(),    // tape stays on the model (feedback 2026-08-10)
+                TeleportCommand.CollectFurniture());      // and so does furniture (feedback 2026-08-12)
             if (record) sceneModel.History.Execute(cmd);
             else cmd.Do();
             if (ground != null) ground.Invalidate();
