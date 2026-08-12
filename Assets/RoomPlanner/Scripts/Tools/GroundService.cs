@@ -68,13 +68,14 @@ namespace RoomPlanner.Tools
         public Transform RigOverride { get; set; }
 
         /// <summary>
-        /// Foot level — the fixed datum (#65). The SCANNED floor when the room has one:
-        /// the tracking origin can sit tens of cm off the real floor (headset floor
-        /// calibration — seen live: controller on the real floor rendered ~20 cm above
-        /// our slabs while Meta's Layout, which trusts the scan, sat perfectly), so the
-        /// scan wins over the tracking zero. Without a scan — the tracking floor (0).
+        /// Foot level — the fixed WORLD-ZERO datum (#65). All content heights are
+        /// floor-relative (slab levels, door sills, outlet presets), so the floor must
+        /// BE world zero. When the headset's tracking floor disagrees with the real one
+        /// (bad floor calibration — seen live at ~20 cm), the RIG is calibrated instead
+        /// of lifting the model: raising the model floated every door and outlet above
+        /// the slabs (headset 2026-08-13).
         /// </summary>
-        public float FootY => ScanFloorOverride ?? _scanFloorY ?? 0f;
+        public float FootY => 0f;
 
         /// <summary>Test seam: PlayMode has no MRUK scan to reflect over.</summary>
         public float? ScanFloorOverride { get; set; }
@@ -108,24 +109,15 @@ namespace RoomPlanner.Tools
             var cam = Camera.main;
             if (cam == null) return false;
 
-            // Restore the datum invariant: nothing may move the rig vertically. A drifted
-            // rig (the pre-#65 gravity did that) poisons every later teleport, so it is
-            // snapped back the moment it is seen; the settle below re-seats the model.
-            if (rig != null && Mathf.Abs(rig.position.y) > 1e-4f)
-            {
-                Debug.Log($"[Ground] rig Y drifted to {rig.position.y:0.###} — snapped back to 0");
-                Vector3 p = rig.position;
-                rig.position = new Vector3(p.x, 0f, p.z);
-            }
+            CalibrateTracking(rig);
 
             // Feet are under the HEAD: in passthrough the user walks their real room, so
             // the rig's XZ says nothing about where they are standing.
             Vector3 head = cam.transform.position;
-            float footY = FootY;
-            float support = GroundMath.Support(_slabs, _flights, _groundY, head.x, head.z, footY);
+            float support = GroundMath.Support(_slabs, _flights, _groundY, head.x, head.z, 0f);
             LogStanding(head, support);
 
-            float gap = footY - support;          // >0 = hanging in the air, <0 = a step up
+            float gap = -support;                 // >0 = hanging in the air, <0 = a step up
             if (Mathf.Abs(gap) < SettleThreshold || Time.time < _settleAt) return false;
             modelShift = new Vector3(0f, gap, 0f);
             _settleAt = Time.time + SettleCooldown;
@@ -145,11 +137,51 @@ namespace RoomPlanner.Tools
             return top <= footY + GroundMath.StepUp + 1e-3f;
         }
 
-        // ---- the scanned floor: the real-floor datum (#65 follow-up) ----
+        // ---- tracking calibration: the scanned floor maps onto world zero ----
 
         private Transform _scanFloor;      // MRUKAnchor with a FLOOR label, once found
         private float? _scanFloorY;
         private float _nextFloorProbe;
+        private float _rigHomeY;           // where the rig belongs: 0 until calibrated
+        private float _nextCalibration;
+        private int _calibrationsInARow;
+
+        /// <summary>
+        /// The scanned floor IS the real floor, and world zero is where the content
+        /// lives — so the rig maps the one onto the other with a single static offset.
+        /// Not motion: the #65 invariant holds (nothing moves the rig dynamically), and
+        /// MRUK anchors ride the tracking space, so the scan itself lands on zero too.
+        /// The in-a-row guard stops after 3 attempts in case anchors turn out static
+        /// on some runtime — the log will tell.
+        /// </summary>
+        private void CalibrateTracking(Transform rig)
+        {
+            if (rig == null) return;
+            if (_scanFloorY.HasValue)
+            {
+                float floorY = _scanFloorY.Value;
+                if (Mathf.Abs(floorY) > 0.01f
+                    && Time.time >= _nextCalibration && _calibrationsInARow < 3)
+                {
+                    _rigHomeY = rig.position.y - floorY;
+                    _nextCalibration = Time.time + 5f;
+                    _calibrationsInARow++;
+                    Debug.Log($"[Ground] tracking floor calibrated: rig home Y={_rigHomeY:0.###} " +
+                        $"(scan floor was at {floorY:0.###}, attempt {_calibrationsInARow})");
+                }
+                else if (Mathf.Abs(floorY) <= 0.01f)
+                {
+                    _calibrationsInARow = 0;   // converged — anchors follow the rig
+                }
+            }
+            // hold the rig at its home: undoes both pre-#65 gravity drift and anything
+            // else that nudges it vertically
+            if (Mathf.Abs(rig.position.y - _rigHomeY) > 1e-4f)
+            {
+                Vector3 p = rig.position;
+                rig.position = new Vector3(p.x, _rigHomeY, p.z);
+            }
+        }
 
         /// <summary>
         /// Find the scanned floor anchor. Reflection by type name — the same soft MRUK
@@ -159,6 +191,11 @@ namespace RoomPlanner.Tools
         /// </summary>
         private void ProbeScanFloor()
         {
+            if (ScanFloorOverride.HasValue)
+            {
+                _scanFloorY = ScanFloorOverride;
+                return;
+            }
             if (_scanFloor != null)
             {
                 float y = _scanFloor.position.y;

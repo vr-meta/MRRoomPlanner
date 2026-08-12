@@ -127,19 +127,27 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
-        public IEnumerator ScannedFloor_BecomesTheFootDatum()
+        public IEnumerator ScannedFloor_CalibratesTheRig_ModelStaysPut()
         {
             // The headset's tracking floor can sit ~20 cm below the real floor (bad
-            // floor calibration, seen live) — the room SCAN knows the truth, so the
-            // slabs settle to the scanned floor level, Layout-style, not to zero.
+            // floor calibration, seen live). Content heights are floor-relative (door
+            // sills, outlet presets), so the MODEL must stay at world zero — the RIG
+            // maps the scanned floor onto it with one static offset. Lifting the model
+            // instead floated every door above the slabs (headset 2026-08-13).
             Slab(0f);
-            var (ground, _) = MakeRig(0f);
-            ground.ScanFloorOverride = 0.22f;
+            var (ground, rig) = MakeRig(0f);
+            ground.ScanFloorOverride = 0.22f;   // scan says the real floor is at +0.22
             yield return null;
 
-            Assert.IsTrue(ground.Tick(out Vector3 shift), "slab at 0 vs feet at 0.22 settles");
-            Assert.AreEqual(0.22f, shift.y, 1e-3f, "the model rises: slab top to the scanned floor");
-            Assert.AreEqual(0.22f, ground.FootY, 1e-4f);
+            Assert.IsFalse(ground.Tick(out _), "the model must not move");
+            Assert.AreEqual(-0.22f, rig.position.y, 1e-3f,
+                "the rig shifts so the scanned floor lands on world zero");
+
+            ground.ScanFloorOverride = 0f;      // anchors ride the tracking space down
+            yield return null;
+            Assert.IsFalse(ground.Tick(out _));
+            Assert.AreEqual(-0.22f, rig.position.y, 1e-3f,
+                "calibration is a one-off — the rig is not moved again");
         }
 
         [UnityTest]
