@@ -217,6 +217,67 @@ namespace RoomPlanner.Tests.Play
             StringAssert.Contains("cm", Row(place, "size").Value());
         }
 
+        /// <summary>Right stick pushed to the side, nothing else pressed.</summary>
+        private class StickInput : RoomPlanner.Measure.MeasureInput
+        {
+            public Vector2 Stick;
+            public override Vector2 Thumbstick() => Stick;
+            public override bool ConfirmPressed() => false;
+            public override bool ConfirmHeld() => false;
+            public override bool ClearPressed() => false;
+            public override void Pulse(float amplitude = 0.5f, float duration = 0.06f) { }
+        }
+
+        private class RayPointer : RoomPlanner.Measure.PointerProvider
+        {
+            public Ray Value = new(new Vector3(0f, 2f, 0f), Vector3.down);
+            public override Ray GetRay() => Value;
+        }
+
+        [UnityTest]
+        public IEnumerator Rotate_StickTurnsAPlacedPiece_AsOneUndoableGesture()
+        {
+            // Headset feedback 2026-08-12: "еще бы крутить мебель". The stick turns the
+            // piece under the ray; the whole turn is ONE history entry, recorded when the
+            // stick returns to centre (rules 12 §3.3 — no unrecorded drift).
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var input = rig.AddComponent<StickInput>();
+            var pointer = rig.AddComponent<RayPointer>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+            SetField(tool, "input", input);
+            SetField(tool, "pointer", pointer);
+
+            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var view = tool.Spawn(item, new FurniturePose { Position = Vector3.zero, Yaw = 0f, Valid = true });
+            _spawned.Add(view.gameObject);
+            model.Register(view.GetComponent<Selectable>());
+            yield return null;   // let the collider register with the physics scene
+
+            // Move tab, ray straight down onto the piece.
+            tool.GetSettings().SelectTab(1);
+            input.Stick = new Vector2(1f, 0f);
+            for (int i = 0; i < 10; i++) { tool.Tick(false); yield return null; }
+
+            Assert.Greater(view.Yaw, 0f, "the stick must turn the piece");
+            Assert.AreEqual(0, model.History.UndoCount, "nothing is recorded while the stick is held");
+
+            float turned = view.Yaw;
+            input.Stick = Vector2.zero;
+            tool.Tick(false);
+
+            Assert.AreEqual(1, model.History.UndoCount, "the finished turn is one entry");
+            model.History.Undo();
+            Assert.AreEqual(0f, view.Yaw, 0.01f, "undo returns the original angle");
+            model.History.Redo();
+            Assert.AreEqual(turned, view.Yaw, 0.01f);
+        }
+
         [UnityTest]
         public IEnumerator Loader_UsesTheProjectShader_NotGltFastsOwn()
         {

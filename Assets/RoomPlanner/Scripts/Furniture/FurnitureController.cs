@@ -33,6 +33,11 @@ namespace RoomPlanner.Furniture
         [SerializeField] private Material placeholderMat;    // stands in for a missing pack
 
         private const int SelectableLayer = 6;
+        /// <summary>Stick rotation speed, degrees per second (a full turn in four seconds —
+        /// fast enough to aim a sofa, slow enough to stop on a detent).</summary>
+        private const float RotateSpeed = 90f;
+        /// <summary>Stick deflection that counts as "turning" (below it the stick is idle).</summary>
+        private const float RotateDeadzone = 0.35f;
         /// <summary>How far around a piece we look for a wall to back onto.</summary>
         private const float WallProbe = 1.2f;
         /// <summary>Directions sampled when looking for that wall (every 45°).</summary>
@@ -158,7 +163,7 @@ namespace RoomPlanner.Furniture
 
             var move = new SettingsSchema()
                 .Readout("howmove", "How to", () => "aim furniture · hold Trigger = drag")
-                .Readout("howturn", "Rotate", () => "Grip while dragging = 15° steps")
+                .Readout("howturn", "Rotate", () => "stick ← → turns it · Grip = 15° steps")
                 .Toggle("snapmove", "Snap to wall", () => _snapToWall, v => _snapToWall = v)
                 .Readout("target", "Selected", () =>
                     _dragView != null ? _dragView.Describe() : "—");
@@ -173,6 +178,26 @@ namespace RoomPlanner.Furniture
         private void AdjustYaw(float delta) =>
             _yaw = FurniturePlacement.QuantizeYaw(_yaw + delta, PlacementOptions.DefaultYawStep);
 
+        /// <summary>Degrees to turn this frame from the right stick; 0 when it rests.</summary>
+        private float StickTurn()
+        {
+            float x = input.Thumbstick().x;
+            if (Mathf.Abs(x) < RotateDeadzone) return 0f;
+            return x * RotateSpeed * Time.deltaTime;
+        }
+
+        private float _lastDetent = float.NaN;
+
+        /// <summary>One haptic tick per 15° crossed — the same detent language sliders and
+        /// steppers use, so a turn feels stepped even while it is continuous.</summary>
+        private void PulseOnDetent(float yaw)
+        {
+            float detent = Mathf.Round(yaw / PlacementOptions.DefaultYawStep);
+            if (!float.IsNaN(_lastDetent) && Mathf.Abs(detent - _lastDetent) >= 1f)
+                input.Pulse(0.3f, 0.008f);
+            _lastDetent = detent;
+        }
+
         // ---- tool lifecycle ---------------------------------------------------------
 
         public void OnActivate() { }
@@ -180,6 +205,7 @@ namespace RoomPlanner.Furniture
         public void OnDeactivate()
         {
             EndDrag(record: true);
+            EndRotate(record: true);
             HideAim();
         }
 
@@ -195,6 +221,7 @@ namespace RoomPlanner.Furniture
             if (blocked)
             {
                 EndDrag(record: true);
+                EndRotate(record: true);
                 HideAim();
                 return;
             }
@@ -221,6 +248,18 @@ namespace RoomPlanner.Furniture
                 if (ghost != null) ghost.enabled = false;
                 if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
                 return;
+            }
+
+            // Stick left/right turns the piece before it lands — the panel stepper is the
+            // precise path, the stick is the fast one (design/20 §2: every continuous
+            // manipulation keeps a discrete twin).
+            float turn = StickTurn();
+            if (turn != 0f)
+            {
+                _yaw = FurniturePlacement.Normalize360(_yaw + turn);
+                if (input.SnapHeld())
+                    _yaw = FurniturePlacement.QuantizeYaw(_yaw, PlacementOptions.DefaultYawStep);
+                PulseOnDetent(_yaw);
             }
 
             var pose = Solve(item, hit, normal);
@@ -430,6 +469,11 @@ namespace RoomPlanner.Furniture
             var target = AimedFurniture();
             if (target != null)
             {
+                // Turning without picking it up: aim at the piece and push the stick.
+                float turn = StickTurn();
+                if (turn != 0f) RotateAimed(target, turn);
+                else EndRotate(record: true);
+
                 ShowGhost(new FurniturePose
                 {
                     Position = target.transform.position,
@@ -447,8 +491,43 @@ namespace RoomPlanner.Furniture
                 return;
             }
 
+            EndRotate(record: true);   // the ray left the piece — settle whatever it turned
             if (ghost != null) ghost.enabled = false;
             if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
+        }
+
+        // Rotating a placed piece with the stick. One command per gesture: the turn is
+        // recorded when the stick returns to centre (or the aim leaves), never per frame.
+        private FurnitureItemView _rotView;
+        private float _rotStartYaw;
+
+        private void RotateAimed(FurnitureItemView target, float turn)
+        {
+            if (_rotView != target)
+            {
+                EndRotate(record: true);
+                _rotView = target;
+                _rotStartYaw = target.Yaw;
+            }
+            float yaw = target.Yaw + turn;
+            if (input.SnapHeld()) yaw = FurniturePlacement.QuantizeYaw(yaw, PlacementOptions.DefaultYawStep);
+            target.SetYaw(yaw);
+            PulseOnDetent(target.Yaw);
+        }
+
+        private void EndRotate(bool record)
+        {
+            if (_rotView == null) return;
+            var view = _rotView;
+            float from = _rotStartYaw;
+            _rotView = null;
+            if (view == null || !view) return;
+
+            if (!record) { view.SetYaw(from); return; }
+            if (Mathf.Abs(Mathf.DeltaAngle(from, view.Yaw)) < 1e-3f) return;
+            sceneModel.History.Record(
+                new FurnitureYawCommand(view.GetComponent<Selectable>(), view, from, view.Yaw));
+            input.Pulse(0.5f, 0.02f);
         }
 
         /// <summary>The furniture under the ray — catalog pieces AND imported IFC furniture
@@ -485,8 +564,11 @@ namespace RoomPlanner.Furniture
             var pose = new FurniturePose { Position = target, Yaw = _dragView.Yaw, Valid = true };
             pose.Position.y = _dragPlaneY;
 
+            // The stick keeps turning the piece while it is being carried.
+            float turn = StickTurn();
+            if (turn != 0f) { pose.Yaw = FurniturePlacement.Normalize360(pose.Yaw + turn); PulseOnDetent(pose.Yaw); }
             if (input.SnapHeld())
-                pose.Yaw = FurniturePlacement.QuantizeYaw(_dragView.Yaw, PlacementOptions.DefaultYawStep);
+                pose.Yaw = FurniturePlacement.QuantizeYaw(pose.Yaw, PlacementOptions.DefaultYawStep);
             if (_snapToWall) TrySnapToNearbyWall(ref pose, _dragView.Size);
 
             _dragView.ApplyPose(pose);

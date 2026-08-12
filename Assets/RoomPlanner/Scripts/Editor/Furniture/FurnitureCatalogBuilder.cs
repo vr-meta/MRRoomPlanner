@@ -34,6 +34,9 @@ namespace RoomPlanner.EditorTools
         private class CurationItem
         {
             public string Id;
+            /// <summary>Model file relative to the pack folder; defaults to "&lt;Id&gt;.glb".
+            /// Packs whose assets carry textures (Poly Haven) use "&lt;Id&gt;/&lt;file&gt;.gltf".</summary>
+            public string File;
             public string Name;
             public string Category;
             public string Anchor;
@@ -126,7 +129,8 @@ namespace RoomPlanner.EditorTools
                 if (item == null || string.IsNullOrEmpty(item.Id)) continue;
                 curated.Add(item.Id);
 
-                string file = item.Id + ".glb";
+                string file = string.IsNullOrEmpty(item.File) ? item.Id + ".glb" : item.File;
+                if (!FurnitureCatalogParser.IsSafeFileName(file)) { missing.Add(item.Id + " (unsafe path)"); continue; }
                 if (!File.Exists(Path.Combine(folder, file))) { missing.Add(item.Id); continue; }
                 if (!FurnitureCatalogParser.IsSaneSize(item.Size)) { missing.Add(item.Id + " (bad size)"); continue; }
 

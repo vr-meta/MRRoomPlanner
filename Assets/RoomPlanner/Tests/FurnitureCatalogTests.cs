@@ -78,7 +78,7 @@ namespace RoomPlanner.Tests
                 ""Items"": [
                   { ""Id"":"""", ""File"":""a.glb"", ""Size"":{""x"":1,""y"":1,""z"":1} },
                   { ""Id"":""nofile"", ""Size"":{""x"":1,""y"":1,""z"":1} },
-                  { ""Id"":""escape"", ""File"":""../../secrets.glb"", ""Size"":{""x"":1,""y"":1,""z"":1} },
+                  { ""Id"":""escape"", ""File"":""../secrets.glb"", ""Size"":{""x"":1,""y"":1,""z"":1} },
                   { ""Id"":""flat"", ""File"":""flat.glb"", ""Size"":{""x"":1,""y"":0,""z"":1} },
                   { ""Id"":""huge"", ""File"":""huge.glb"", ""Size"":{""x"":40,""y"":1,""z"":1} },
                   { ""Id"":""weird"", ""File"":""weird.glb"", ""Anchor"":""Roof"", ""Size"":{""x"":1,""y"":1,""z"":1} },
@@ -95,6 +95,22 @@ namespace RoomPlanner.Tests
             CollectionAssert.Contains(report.Problems, "escape: " + FurnitureRejectReason.UnsafeFile);
             CollectionAssert.Contains(report.Problems, "weird: " + FurnitureRejectReason.UnknownAnchor);
             CollectionAssert.Contains(report.Problems, "ok: " + FurnitureRejectReason.DuplicateId);
+        }
+
+        [Test]
+        public void Parse_FileMayLiveInASubfolder_ButNeverOutsideThePack()
+        {
+            // Poly Haven-style packs are one folder per asset (a .gltf next to its
+            // textures), so relative sub-paths are legal — escapes are not.
+            Assert.IsTrue(FurnitureCatalogParser.IsSafeFileName("Sofa_01/Sofa_01_1k.gltf"));
+            Assert.IsTrue(FurnitureCatalogParser.IsSafeFileName("sofa.glb"));
+
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName("../secrets.glb"));
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName("a/../../secrets.glb"));
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName("/etc/passwd"));
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName("C:/Windows/system.glb"));
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName("dir\\file.glb"));
+            Assert.IsFalse(FurnitureCatalogParser.IsSafeFileName(""));
         }
 
         [Test]

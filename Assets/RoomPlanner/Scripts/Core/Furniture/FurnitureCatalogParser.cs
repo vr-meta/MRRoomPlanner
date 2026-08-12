@@ -145,16 +145,19 @@ namespace RoomPlanner.Core.Furniture
         }
 
         /// <summary>
-        /// Model files live directly in the collection folder. Anything with a path
-        /// separator or a "…" escape is refused: a downloaded manifest (#74) must not be
-        /// able to point the loader outside the pack.
+        /// A model file is a path RELATIVE TO THE PACK FOLDER. Sub-folders are allowed —
+        /// a .gltf keeps its textures next to it, so packs are naturally one folder per
+        /// asset — but nothing may leave the pack: no "..", no absolute path, no drive
+        /// letter, no backslash. This is what stops a downloaded manifest (#74) from
+        /// pointing the loader at the rest of the device.
         /// </summary>
         public static bool IsSafeFileName(string file)
         {
             if (string.IsNullOrEmpty(file)) return false;
-            if (file.IndexOf('/') >= 0 || file.IndexOf('\\') >= 0) return false;
+            if (file.IndexOf('\\') >= 0) return false;
             if (file.IndexOf(':') >= 0) return false;
             if (file.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            if (file[0] == '/') return false;
             return true;
         }
 

@@ -120,6 +120,42 @@ namespace RoomPlanner.Tests
                 CollectionAssert.Contains(cats, needed);
         }
 
+        [Test]
+        public void PolyHavenPack_ShipsPhotorealModelsAtTheirOwnScale()
+        {
+            var c = Load("polyhaven-interior", out var report);
+
+            Assert.NotNull(c);
+            Assert.AreEqual("CC0", c.License);
+            Assert.IsFalse(report.HasProblems, report.Problems == null ? "" : string.Join("; ", report.Problems));
+            Assert.GreaterOrEqual(c.Items.Count, 30);
+
+            string folder = Path.Combine(Root, "polyhaven-interior");
+            foreach (var item in c.Items)
+            {
+                // These assets keep their own folder: a .gltf needs its textures next to it.
+                StringAssert.Contains("/", item.File, $"{item.Id} should live in its own folder");
+                Assert.IsTrue(File.Exists(Path.Combine(folder, item.File)), $"{item.Id}: {item.File} missing");
+                // Poly Haven authors in metres, so no size correction is needed at all.
+                Assert.AreEqual(FurnitureFit.Uniform, item.Fit, item.Id);
+                Assert.IsTrue(FurnitureCatalogParser.IsSaneSize(item.Size), $"{item.Id} size {item.Size}");
+                Assert.LessOrEqual(item.Size.y, 2.5f, $"{item.Id} is taller than a room");
+            }
+        }
+
+        [Test]
+        public void Index_ListsEveryBundledPack()
+        {
+            string index = Path.Combine(Root, RoomPlanner.Core.Furniture.FurnitureIndex.FileName);
+            Assert.IsTrue(File.Exists(index), "the loader cannot enumerate StreamingAssets on Android");
+
+            var ids = RoomPlanner.Core.Furniture.FurnitureIndex.Parse(File.ReadAllText(index));
+            CollectionAssert.Contains(ids, KenneyId);
+            CollectionAssert.Contains(ids, "polyhaven-interior");
+            foreach (var id in ids)
+                Assert.IsTrue(Directory.Exists(Path.Combine(Root, id)), $"{id} is indexed but not shipped");
+        }
+
         private static FurnitureItem Item(FurnitureCollection c, string id)
         {
             var item = FindItem(c, id);
