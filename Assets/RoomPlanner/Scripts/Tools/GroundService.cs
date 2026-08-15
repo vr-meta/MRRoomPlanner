@@ -146,6 +146,26 @@ namespace RoomPlanner.Tools
             return top <= footY + GroundMath.StepUp + 1e-3f;
         }
 
+        /// <summary>Falling off any edge is fine within a storey's worth.</summary>
+        public const float MaxWalkDrop = 1.2f;
+
+        /// <summary>
+        /// Smooth-walk gate, RELATIVE edition (#123): compare the support where the
+        /// walker STANDS with the support where the step LANDS. The absolute check
+        /// against FootY blocked every step whenever the model floor sat above the
+        /// tracking zero (the #65 residue) — walking read as a knee-high climb
+        /// everywhere, which is exactly the "двигается на пару сантиметров" symptom.
+        /// </summary>
+        public bool CanWalkTo(Vector3 fromFeet, Vector3 toFeet)
+        {
+            float here = GroundMath.Support(_slabs, _flights, _groundY,
+                fromFeet.x, fromFeet.z, FootY, BlockHeadroom);
+            float there = GroundMath.Support(_slabs, _flights, _groundY,
+                toFeet.x, toFeet.z, FootY, BlockHeadroom);
+            return there - here <= GroundMath.StepUp + 1e-3f
+                && here - there <= MaxWalkDrop;
+        }
+
         // ---- tracking calibration: the scanned floor maps onto world zero ----
 
         private Transform _scanFloor;      // MRUKAnchor with a FLOOR label, once found

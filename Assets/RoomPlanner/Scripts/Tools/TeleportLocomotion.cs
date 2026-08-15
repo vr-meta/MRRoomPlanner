@@ -47,11 +47,25 @@ namespace RoomPlanner.Tools
         /// left hand (stick flick + wheel); scanOn gates smooth locomotion.</summary>
         public void Tick(bool uiCaptured, bool scanOn)
         {
+            // #123 diagnostics: walking reads dead on device — log the whole gate chain
+            // once per 2 s so logcat says which link breaks (remove once diagnosed)
+            if (Time.unscaledTime >= _nextDiagLog)
+            {
+                _nextDiagLog = Time.unscaledTime + 2f;
+                Vector2 st = input != null ? input.LeftThumbstick() : Vector2.zero;
+                object mrukDiag = MrukInstance();
+                bool locked = mrukDiag != null && _mrukLockActiveProp != null
+                    && (bool)_mrukLockActiveProp.GetValue(mrukDiag);
+                Debug.Log($"[Loco] input={(input != null)} ui={uiCaptured} scan={scanOn} "
+                    + $"stick=({st.x:0.00},{st.y:0.00}) rig={(ResolveRig() != null)} cam={(Camera.main != null)} wl={locked}");
+            }
             if (input == null) { CancelAim(); return; }
             if (uiCaptured) { CancelAim(); return; }
             TickAim();
             TickMove(scanOn);
         }
+
+        private float _nextDiagLog;
 
         // ---- portal teleport (hold left trigger → arc, release → jump) ----
 
@@ -195,8 +209,8 @@ namespace RoomPlanner.Tools
                 if (_snapArmed)
                 {
                     _snapArmed = false;
-                    rig.RotateAround(cam.transform.position, Vector3.up,
-                        Mathf.Sign(stick.x) * SnapTurnDeg);
+                    ApplyLocomotion(Vector3.zero, Mathf.Sign(stick.x) * SnapTurnDeg,
+                        cam.transform.position, rig);
                     input.PulseLeft(0.3f, 0.02f);
                 }
             }
@@ -217,12 +231,87 @@ namespace RoomPlanner.Tools
             // MODEL to the feet). The one thing refused here is a ledge too tall to step
             // onto: that is what keeps the walker out of the solid body of a stair flight
             // instead of gliding through it (design/26 §4).
-            if (ground != null)
+            if (ground != null
+                && !ground.CanWalkTo(cam.transform.position, cam.transform.position + step))
+                return;   // a genuine ledge — relative check, see GroundService (#123)
+
+            // Bodies block the walk (feedback: "проходим сквозь лестницы") — smooth
+            // locomotion had no horizontal collision at all, hidden until walking
+            // itself worked. Two short whiskers along the step: chest and knee height;
+            // stair flights, walls and furniture all live on the selectable layer.
+            Vector3 head = cam.transform.position;
+            Vector3 dir = step.normalized;
+            const float Whisker = 0.35f;
+            const int SelectableLayer = 6;
+            if (Physics.Raycast(head, dir, Whisker, 1 << SelectableLayer,
+                    QueryTriggerInteraction.Ignore)
+                || Physics.Raycast(head + Vector3.down * 0.9f, dir, Whisker,
+                    1 << SelectableLayer, QueryTriggerInteraction.Ignore))
+                return;
+
+            ApplyLocomotion(step, 0f, default, rig);
+        }
+
+        // ---- MRUK world lock (#123 root cause): with EnableWorldLock on, MRUK rewrites
+        // the TrackingSpace pose EVERY frame, eating any manual rig motion — walking
+        // "moved a couple of centimeters" (one frame of lag) and snap turns died.
+        // TrackingSpaceOffset is MRUK's official locomotion accumulator, so all stick
+        // motion goes through it whenever the lock is live; the plain rig transform
+        // stays the fallback (editor, no scan, MRUK absent). Reflection keeps the app's
+        // no-hard-Meta-dependency rule (the EffectMesh/MRUKAnchor precedent).
+
+        private static System.Type _mrukType;
+        private static System.Reflection.PropertyInfo _mrukInstanceProp;
+        private static System.Reflection.PropertyInfo _mrukLockActiveProp;
+        private static System.Reflection.FieldInfo _mrukOffsetField;
+        private static bool _mrukProbed;
+
+        private static object MrukInstance()
+        {
+            if (!_mrukProbed)
             {
-                Vector3 feet = cam.transform.position + step;
-                if (!ground.CanStepTo(feet.x, feet.z, ground.FootY)) return;
+                _mrukProbed = true;
+                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    _mrukType = asm.GetType("Meta.XR.MRUtilityKit.MRUK");
+                    if (_mrukType != null) break;
+                }
+                if (_mrukType != null)
+                {
+                    const System.Reflection.BindingFlags S =
+                        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public;
+                    const System.Reflection.BindingFlags I =
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
+                    _mrukInstanceProp = _mrukType.GetProperty("Instance", S);
+                    _mrukLockActiveProp = _mrukType.GetProperty("IsWorldLockActive", I);
+                    _mrukOffsetField = _mrukType.GetField("TrackingSpaceOffset", I);
+                }
             }
-            rig.position += step;
+            return _mrukInstanceProp != null ? _mrukInstanceProp.GetValue(null) : null;
+        }
+
+        /// <summary>One entry point for every stick-driven pose change: a world-space
+        /// translation and/or a yaw around a pivot, routed through the world-lock
+        /// offset when MRUK owns the tracking space, or the rig root otherwise.</summary>
+        private void ApplyLocomotion(Vector3 step, float turnDeg, Vector3 pivot, Transform rig)
+        {
+            object mruk = MrukInstance();
+            if (mruk != null && _mrukLockActiveProp != null && _mrukOffsetField != null
+                && (bool)_mrukLockActiveProp.GetValue(mruk))
+            {
+                var m = (Matrix4x4)_mrukOffsetField.GetValue(mruk);
+                if (turnDeg != 0f)
+                    m = Matrix4x4.Translate(pivot)
+                        * Matrix4x4.Rotate(Quaternion.AngleAxis(turnDeg, Vector3.up))
+                        * Matrix4x4.Translate(-pivot) * m;
+                if (step != Vector3.zero)
+                    m = Matrix4x4.Translate(step) * m;
+                _mrukOffsetField.SetValue(mruk, m);
+                return;
+            }
+            if (rig == null) return;
+            if (turnDeg != 0f) rig.RotateAround(pivot, Vector3.up, turnDeg);
+            if (step != Vector3.zero) rig.position += step;
         }
 
         // ---- anchors (resolved lazily, PointerProvider-style — no hard rig wiring) ----

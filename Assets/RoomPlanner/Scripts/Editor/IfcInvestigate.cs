@@ -50,6 +50,26 @@ namespace RoomPlanner.EditorTools
             sb.AppendLine($"GRAPH nodes={g.Nodes.Count} segs={g.Segments.Count} tSplits={splits} dangling={dangling} rooms={rooms.Count}");
             foreach (var r in rooms)
                 sb.AppendLine($"ROOM level={r.Level:0.##} area={r.Area:0.0} pts={r.Polygon.Count}");
+            // fitting round 3: dark horizontal seams at storey junctions — measure
+            // wall tops against slab bottoms/tops per level
+            var tops = new System.Collections.Generic.SortedDictionary<float, int>();
+            foreach (var w in b.Walls)
+            {
+                if (w.Path.Count < 1) continue;
+                float top = Mathf.Round((w.Path[0].y + w.Height) * 100f) / 100f;
+                tops.TryGetValue(top, out int cnt);
+                tops[top] = cnt + 1;
+            }
+            sb.Append("WALLTOPS:");
+            foreach (var kv in tops) sb.Append($" {kv.Key:0.##}x{kv.Value}");
+            sb.AppendLine();
+            var slabLines = new System.Collections.Generic.SortedDictionary<float, string>();
+            foreach (var sl in b.Slabs)
+                slabLines[sl.Level] = $" top={sl.Level:0.##} bot={sl.Level - sl.Thickness:0.##}";
+            sb.Append("SLABS:");
+            foreach (var kv in slabLines) sb.Append(kv.Value);
+            sb.AppendLine();
+
             int shown = 0;
             foreach (var n in g.Nodes)
             {

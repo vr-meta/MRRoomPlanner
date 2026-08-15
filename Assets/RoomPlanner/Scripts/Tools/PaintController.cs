@@ -397,13 +397,13 @@ namespace RoomPlanner.Tools
 
             walls.HealTJunctions();   // imported T-touches must split before the face walk
             var rooms = RoomFinder.FindRooms(walls.Graph);
+            // the SMALLEST containing ring is the room — a welded imported graph also
+            // yields the storey's outer boundary ring, which contains every click
             RoomRing room = null;
             foreach (var r in rooms)
-                if (Mathf.Abs(r.Level - floor.Level) < 1.5f && r.ContainsXZ(point))
-                {
+                if (Mathf.Abs(r.Level - floor.Level) < 1.5f && r.ContainsXZ(point)
+                    && (room == null || r.Area < room.Area))
                     room = r;
-                    break;
-                }
             if (room == null)
             {
                 // #111 diagnostics: whole-storey repaint means one of these guards fired —
