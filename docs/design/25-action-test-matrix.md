@@ -40,7 +40,8 @@
 | Paint | ластик «Original look» | — | |
 | Electric | схема/команды/BOM щитка | к | `ElectricalPlayTests` |
 | Electric | жест: розетка триггером по стене | — | |
-| Electric | жест: трасса провода + клик по терминалу | — | |
+| Electric | жест: продолжение трассы от свободного конца | ✓ | `WireGesturePlayTests` |
+| Electric | жест: трасса с нуля + клик по терминалу | — | |
 | Import | build/replace/electrical-очистка | к | `ImportPlayTests` |
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
