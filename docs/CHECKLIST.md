@@ -889,12 +889,14 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
 Revit не экспортируются); сантехника (21 терминал) уже шла как Plumbing; 2D в файле —
 только оси сеток.
 
-- [~] E1. `Core/Ifc/ElectricalImport` (IsOutlet по имени, PlateNormal по тончайшей
+- [x] E1. `Core/Ifc/ElectricalImport` (IsOutlet по имени, PlateNormal по тончайшей
   оси) + `ImportedBuilding.Outlets` + перехват в `BakeProduct` + сдвиг в
   `ImportPlacement.Translate`; `ImportController.SpawnImportedOutlets` через
   `RestoreFixture` (нативные, лицом от стены, в статусе «Nel»), реплейс при повторном
-  Load; тесты `ElectricalImportTests` + `ImportOutletsPlayTests`. Хвост: шлем-проверка
-  на реальном файле; порты IfcDistributionPort — задел авто-трассировки
+  Load; тесты `ElectricalImportTests` + `ImportOutletsPlayTests`. **Проверено в шлеме
+  2026-08-15 на Project1.ifc** («всё правильно отображается»). Важно для UX: сцена из
+  автосейва хранит СТАРЫЙ вид — конвертация видна после «Load IFC». Хвосты: посты из
+  данных IFC (сдвоенные розетки), порты IfcDistributionPort — задел авто-трассировки
 
 ## 3. Структура проекта: Дом → Этажи → Комнаты (корневое)
 
