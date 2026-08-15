@@ -45,10 +45,10 @@ namespace RoomPlanner.EditorTools
             var tiles = new List<float>();
             var glosses = new List<float>();
             var cats = new List<string>();
-            var normals = new List<Texture2D>();   // null for the CC0 set (design/22)
+            var normals = new List<Texture2D>();   // relief where the set ships one (design/29 §5)
 
             int missing = 0;
-            foreach (var (cat, _, id, tile, gloss) in TextureDownloader.Curated)
+            foreach (var (cat, _, id, tile, gloss, bump) in TextureDownloader.Curated)
             {
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TextureDownloader.PathFor(cat, id));
                 if (tex == null) { missing++; continue; }
@@ -57,7 +57,9 @@ namespace RoomPlanner.EditorTools
                 tiles.Add(tile);
                 glosses.Add(gloss);
                 cats.Add(cat);
-                normals.Add(null);
+                normals.Add(bump
+                    ? AssetDatabase.LoadAssetAtPath<Texture2D>(TextureDownloader.NormalPathFor(cat, id))
+                    : null);
             }
             if (missing > 0)
                 Debug.LogWarning($"[Setup] FinishLibrary: {missing} texture(s) missing — " +

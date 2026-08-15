@@ -44,6 +44,8 @@
 | Electric | жест: трасса с нуля + клик по терминалу | — | |
 | Import | build/replace/electrical-очистка | к | `ImportPlayTests` |
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
+| Import | материалы: части по стилям, имя → отделка, box-UV | к | `ObjectMaterialTests` |
+| Import | сабмеш+материал на часть, круг save/load (v5) | к | `ImportPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
 | Blueprint | загрузка плана, калибровка 2 парами | — | (файлы устройства) |
 | Teleport | A больше не телепортирует (#87); X/Y отменяют/повторяют записанное | ✓ | `NavGesturePlayTests` |

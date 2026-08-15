@@ -54,6 +54,12 @@ namespace RoomPlanner.Editing
         public Transform Transform => transform;
         public bool IsHidden => !gameObject.activeSelf;
 
+        /// <summary>Paint and highlight cover EVERY submesh, not just the body (material
+        /// 0). Set by the IFC importer for elements split into per-material parts
+        /// (design/29 §2): their submeshes are all «body», there is no glass slot to
+        /// protect. Walls, doors and furniture leave it false.</summary>
+        public bool PaintAllSubmeshes { get; set; }
+
         // `this` is compile-time typed as a UnityEngine.Object here, so the overloaded
         // null-check correctly reports a destroyed component (unlike interface-typed refs).
         public bool IsAlive => this != null;
@@ -273,7 +279,10 @@ namespace RoomPlanner.Editing
                 // a leaf view's "body" is every panel renderer, not just the first
                 bool body = i == 0 || _leafView != null;
                 bool needBlock = tint || (body && hasFinish);
-                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
+                // Imported elements wear one material PER PART (design/29 §2), so paint
+                // and highlight must cover every submesh; walls/doors keep the body-only
+                // rule that protects their glass and joinery.
+                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1 && !PaintAllSubmeshes;
 
                 if (needBlock)
                 {

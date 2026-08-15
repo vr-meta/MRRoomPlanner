@@ -47,6 +47,64 @@ namespace RoomPlanner.EditorTools
             }
         }
 
+        /// <summary>
+        /// Material report (design/29): how many baked products split into parts, and
+        /// which material names our catalog map answers. Point it at a real export with
+        /// RP_IFC=&lt;path&gt;; otherwise it walks TestData/ifc like Analyze.
+        /// Headless: ci/unity-run.ps1 -Method RoomPlanner.EditorTools.IfcAnalyzer.AnalyzeMaterials
+        /// </summary>
+        [MenuItem("RoomPlanner/Analyze IFC Materials (design/29)")]
+        public static void AnalyzeMaterials()
+        {
+            var files = new List<string>();
+            string single = System.Environment.GetEnvironmentVariable("RP_IFC");
+            if (!string.IsNullOrEmpty(single) && File.Exists(single)) files.Add(single);
+            else
+            {
+                string dir = Path.Combine(Directory.GetCurrentDirectory(), "TestData/ifc");
+                if (Directory.Exists(dir)) files.AddRange(Directory.GetFiles(dir, "*.ifc"));
+            }
+            if (files.Count == 0)
+            {
+                Debug.LogError("[IfcMat] nothing to analyze (set RP_IFC or fill TestData/ifc)");
+                if (Application.isBatchMode) EditorApplication.Exit(1);
+                return;
+            }
+
+            foreach (string path in files)
+            {
+                var b = IfcImporter.Import(StepFile.Parse(File.ReadAllText(path)));
+                var histogram = new Dictionary<int, int>();
+                var names = new Dictionary<string, int>();
+                int dressed = 0, parts = 0, unnamed = 0;
+                foreach (var mep in b.Plumbing)
+                {
+                    int n = Mathf.Max(1, mep.Parts.Count);
+                    histogram[n] = histogram.TryGetValue(n, out int c) ? c + 1 : 1;
+                    parts += n;
+                    foreach (var part in mep.Parts)
+                    {
+                        if (string.IsNullOrEmpty(part.Name)) { unnamed++; continue; }
+                        names[part.Name] = names.TryGetValue(part.Name, out int k) ? k + 1 : 1;
+                        if (!IfcMaterialMap.Resolve(part.Name).IsNone) dressed++;
+                    }
+                }
+
+                var report = new System.Text.StringBuilder();
+                report.AppendLine($"[IfcMat] === {Path.GetFileName(path)} ===");
+                report.AppendLine($"[IfcMat] baked elements: {b.Plumbing.Count}, parts: {parts}, "
+                    + $"dressed by name: {dressed}, nameless parts: {unnamed}");
+                foreach (var kv in histogram) report.AppendLine($"[IfcMat]   {kv.Key} part(s): {kv.Value} element(s)");
+                report.AppendLine("[IfcMat] material name → finish:");
+                foreach (var kv in names)
+                {
+                    var m = IfcMaterialMap.Resolve(kv.Key);
+                    report.AppendLine($"[IfcMat]   {kv.Value,4}× {kv.Key} → {(m.IsNone ? "— (file colour)" : m.FinishId)}");
+                }
+                Debug.Log(report.ToString());
+            }
+        }
+
         private static void AnalyzeOne(string path)
         {
             var f = StepFile.Parse(File.ReadAllText(path));

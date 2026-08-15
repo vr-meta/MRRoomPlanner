@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using RoomPlanner.Core;
 
@@ -105,9 +106,31 @@ namespace RoomPlanner.Core.Ifc
     public enum MepCategory { Plumbing = 0, Furniture = 1, Proxy = 2, Railing = 3 }
 
     /// <summary>
+    /// One material of a baked element (design/29): Revit ships a sofa as leather + steel
+    /// legs, a TV as plastic + glass. Triangles are a CONTIGUOUS range of the element's
+    /// own list — the importer reorders them by style, so a part is (start, count) and the
+    /// project file stores six small fields instead of a second copy of the indices.
+    /// </summary>
+    [Serializable]
+    public sealed class MepPart
+    {
+        /// <summary>IfcSurfaceStyle / IfcMaterial name — the key the finish map reads.</summary>
+        public string Name;
+        public bool HasColor;
+        public Color Color;
+        /// <summary>0 = opaque, 1 = fully transparent (IfcSurfaceStyleRendering).</summary>
+        public float Transparency;
+        public int TriStart;
+        public int TriCount;
+        /// <summary>Finish picked from the catalog by the material name (design/29 §3).</summary>
+        public SurfaceFinish Finish;
+    }
+
+    /// <summary>
     /// A baked-mesh element (plumbing terminal, furniture, proxy, railing): IFC ships
     /// them as Breps, not parameters. Vertices are LOCAL around Origin so the object
-    /// moves by transform. Colour comes from IfcStyledItem when the file has one.
+    /// moves by transform. Colour comes from IfcStyledItem when the file has one; several
+    /// materials on one product live in Parts (design/29).
     /// </summary>
     public sealed class ImportedMep
     {
@@ -116,6 +139,12 @@ namespace RoomPlanner.Core.Ifc
         public Vector3 Origin;                  // Unity world, metres
         public List<Vector3> Vertices = new();  // local to Origin
         public List<int> Triangles = new();
+        /// <summary>Metric box-projected UVs (design/29 §4); empty for files that predate
+        /// them — the scene then leaves the mesh unwrapped, as before.</summary>
+        public List<Vector2> Uvs = new();
+        /// <summary>Per-material parts over the shared vertex list; empty = one part,
+        /// the whole element (old files, unstyled products).</summary>
+        public List<MepPart> Parts = new();
         public int StoreyIndex = -1;
         public bool HasColor;
         public Color Color;

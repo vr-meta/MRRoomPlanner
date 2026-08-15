@@ -201,6 +201,94 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(0.5f, sel.Paint.a, 1e-4, "alpha = 1 − transparency");
         }
 
+        /// <summary>Two materials on one product (design/29 §2): the mesh gets a submesh
+        /// per part and the renderer a material per submesh, so a sofa keeps its aluminium
+        /// legs instead of turning entirely into leather.</summary>
+        [UnityTest]
+        public IEnumerator MultiMaterialElementGetsOneSubmeshPerPart()
+        {
+            var (import, _, _) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            var sofa = TwoPartSofa();
+            b.Plumbing.Add(sofa);
+            import.BuildScene(b);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            Assert.IsNotNull(view);
+            var mesh = view.GetComponent<MeshFilter>().sharedMesh;
+            Assert.AreEqual(2, mesh.subMeshCount, "one submesh per material");
+            Assert.AreEqual(2, view.GetComponent<MeshRenderer>().sharedMaterials.Length);
+            Assert.AreEqual(2, view.Parts.Count, "parts survive on the view for the save");
+            Assert.AreEqual(4, mesh.uv.Length, "metric box UVs came along");
+            Assert.IsTrue(view.GetComponent<Selectable>().PaintAllSubmeshes,
+                "paint must cover every part, not just the first");
+        }
+
+        /// <summary>Round-trip (design/29 §6, format v5): capture → load restores both
+        /// parts with their names, colours and triangle ranges.</summary>
+        [UnityTest]
+        public IEnumerator PartsSurviveCaptureAndLoad()
+        {
+            var (import, walls, _) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            b.Plumbing.Add(TwoPartSofa());
+            import.BuildScene(b);
+            yield return null;
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Plumbing.Count);
+            var saved = data.Plumbing[0];
+            Assert.AreEqual(2, saved.Parts.Count);
+            Assert.AreEqual("Textile - Leather - Black", saved.Parts[0].Name);
+            Assert.AreEqual(3, saved.Parts[0].TriCount, "one triangle = three indices");
+            Assert.AreEqual(3, saved.Parts[1].TriStart);
+            Assert.AreEqual(4, saved.Uvs.Count, "UVs are saved, not recomputed on load");
+
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(data, import, null);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            Assert.IsNotNull(view, "the element came back");
+            Assert.AreEqual(2, view.GetComponent<MeshFilter>().sharedMesh.subMeshCount,
+                "and still wears two materials");
+        }
+
+        /// <summary>A sofa: one quad of leather, one quad of aluminium legs, sharing the
+        /// vertex list — the shape the importer produces for a multi-styled product.</summary>
+        private static ImportedMep TwoPartSofa()
+        {
+            var sofa = new ImportedMep
+            {
+                Name = "Sofa", Category = MepCategory.Furniture,
+                Origin = new Vector3(1f, 0.4f, 1f),
+            };
+            sofa.Vertices.AddRange(new[]
+            {
+                new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, -0.5f),
+                new Vector3(0.5f, 0f, 0.5f), new Vector3(-0.5f, 0f, 0.5f),
+            });
+            sofa.Triangles.AddRange(new[] { 0, 1, 2, 0, 2, 3 });
+            RoomPlanner.Core.BoxUv.Fill(sofa.Vertices, sofa.Triangles, sofa.Uvs);
+            sofa.Parts.Add(new MepPart
+            {
+                Name = "Textile - Leather - Black", HasColor = true,
+                Color = new Color(0.1f, 0.1f, 0.1f), TriStart = 0, TriCount = 3,
+            });
+            sofa.Parts.Add(new MepPart
+            {
+                Name = "Metal - Aluminium", HasColor = true,
+                Color = new Color(0.9f, 0.9f, 0.9f), TriStart = 3, TriCount = 3,
+            });
+            return sofa;
+        }
+
         [UnityTest]
         public IEnumerator BuildsSegmentsAndSlabs_FromImportedBuilding()
         {

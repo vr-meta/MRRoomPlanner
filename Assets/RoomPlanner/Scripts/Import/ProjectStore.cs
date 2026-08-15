@@ -118,7 +118,24 @@ namespace RoomPlanner.Import
                     Finish = CaptureFinish(msel),
                 };
                 pm.Vertices.AddRange(mf.sharedMesh.vertices);
+                // mesh.triangles concatenates the submeshes in order, so the parts'
+                // (start, count) ranges keep pointing at their own triangles (v5)
                 pm.Triangles.AddRange(mf.sharedMesh.triangles);
+                pm.Uvs.AddRange(mf.sharedMesh.uv);
+                foreach (var part in m.Parts)
+                {
+                    if (part == null) continue;
+                    pm.Parts.Add(new ProjectMepPart
+                    {
+                        Name = part.Name,
+                        Painted = part.HasColor,
+                        Paint = part.Color,
+                        Transparency = part.Transparency,
+                        TriStart = part.TriStart,
+                        TriCount = part.TriCount,
+                        Finish = Capture(part.Finish),
+                    });
+                }
                 data.Plumbing.Add(pm);
             }
 
@@ -360,18 +377,37 @@ namespace RoomPlanner.Import
                     Finish = ToFinish(s.Finish),
                 });
             foreach (var m in data.Plumbing)
-                b.Plumbing.Add(new ImportedMep
+            {
+                var mep = new ImportedMep
                 {
                     Name = m.Name, Origin = m.Origin,
                     Vertices = new List<Vector3>(m.Vertices),
                     Triangles = new List<int>(m.Triangles),
+                    Uvs = m.Uvs != null ? new List<Vector2>(m.Uvs) : new List<Vector2>(),
                     StoreyIndex = m.Storey,
                     Category = (MepCategory)m.Category,
                     Transparency = m.Transparency,
                     HasColor = m.Painted,
                     Color = m.Paint,
                     Finish = ToFinish(m.Finish),
-                });
+                };
+                if (m.Parts != null)
+                    foreach (var p in m.Parts)
+                    {
+                        if (p == null) continue;
+                        mep.Parts.Add(new MepPart
+                        {
+                            Name = p.Name,
+                            HasColor = p.Painted,
+                            Color = p.Paint,
+                            Transparency = p.Transparency,
+                            TriStart = p.TriStart,
+                            TriCount = p.TriCount,
+                            Finish = ToFinish(p.Finish),
+                        });
+                    }
+                b.Plumbing.Add(mep);
+            }
             return b;
         }
     }
