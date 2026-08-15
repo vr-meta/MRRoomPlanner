@@ -16,7 +16,12 @@ namespace RoomPlanner.Tools
         ToggleSnapGrid,
         ToggleSnapAngle,
         ToggleScan,
-        ToggleRenderSettings   // gear: the Rendering page in the inspector (feedback 2026-08-11)
+        ToggleRenderSettings,  // gear: the Rendering page in the inspector (feedback 2026-08-11)
+        /// <summary>Snap-strip tab at MenuButton.ToolIndex (0 = tools, 1 = snapping, #85).
+        /// A serialized action, not an OnClick delegate: Setup runs in the Editor, so a
+        /// lambda assigned there is simply gone at runtime — which is exactly why the tabs
+        /// did nothing in the first build (headset feedback 2026-08-15).</summary>
+        SelectStripTab
     }
 
     /// <summary>Button semantics (design/16 P1.3): one-of selection (tool), on/off toggle

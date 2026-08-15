@@ -38,6 +38,10 @@ namespace RoomPlanner.Core.Furniture
         public string Id;
         public string Name;
         public FurnitureCategory Category;
+        /// <summary>Free-form second level inside a category ("Sofa", "Coffee", "Wardrobe").
+        /// Unlike <see cref="Category"/> this is NOT a closed vocabulary: packs differ in how
+        /// finely they split, and the panel just lists what a pack actually uses (#84).</summary>
+        public string Subcategory;
         public FurnitureAnchor Anchor;
         /// <summary>File name inside the collection folder (no directories — see the parser).</summary>
         public string File;
@@ -49,11 +53,22 @@ namespace RoomPlanner.Core.Furniture
         public float YawOffset;
         /// <summary>Triangle count reported by the catalog builder; 0 = unknown.</summary>
         public int Tris;
+        /// <summary>Preview image relative to the pack folder; empty = no thumbnail baked,
+        /// and the picker falls back to text rather than showing an empty square (#83).</summary>
+        public string Preview;
         /// <summary>Owning collection id — the item half of <see cref="Key"/>.</summary>
         public string CollectionId;
 
         /// <summary>Catalog-wide address "collection/item" (project files store this).</summary>
         public string Key => FurnitureCatalog.MakeKey(CollectionId, Id);
+
+        /// <summary>
+        /// No model file = the item is GENERATED (slat partitions, #86). Such pieces are
+        /// sized by their parameters, so shipping a fixed mesh would always be the wrong
+        /// width; they still travel through the catalog so placement, move, undo and
+        /// persistence work exactly as for a downloaded model.
+        /// </summary>
+        public bool IsProcedural => string.IsNullOrEmpty(File);
     }
 
     /// <summary>
@@ -68,6 +83,14 @@ namespace RoomPlanner.Core.Furniture
         public string Author;
         public string License;
         public string LicenseUrl;
+        /// <summary>
+        /// False for packs whose licence forbids commercial use (CC BY-NC and friends).
+        /// Packs are shipped SEPARATELY and labelled (decision 2026-08-15), so a
+        /// non-commercial pack can be used internally without contaminating a build that
+        /// is meant to be sold — the tool treats it like any other collection, the label
+        /// and the packaging are what differ.
+        /// </summary>
+        public bool CommercialUse = true;
         public FurnitureSource Source;
         /// <summary>Folder holding the manifest and the model files.</summary>
         public string RootPath;
@@ -162,6 +185,44 @@ namespace RoomPlanner.Core.Furniture
             {
                 var item = c.Items[i];
                 if (category.HasValue && item.Category != category.Value) continue;
+                result.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Subcategories present in one category of a collection, in first-seen order.
+        /// Two levels exist because a flat needs "sofa" and "dining table", not "seating"
+        /// — with 300 items a single level is unusable (#84).
+        /// </summary>
+        public void SubcategoriesOf(string collectionId, FurnitureCategory category,
+            List<string> result)
+        {
+            if (result == null) return;
+            result.Clear();
+            var c = Find(collectionId);
+            if (c == null) return;
+            for (int i = 0; i < c.Items.Count; i++)
+            {
+                var item = c.Items[i];
+                if (item.Category != category || string.IsNullOrEmpty(item.Subcategory)) continue;
+                if (!result.Contains(item.Subcategory)) result.Add(item.Subcategory);
+            }
+            result.Sort(System.StringComparer.Ordinal);
+        }
+
+        /// <summary>Items filtered by category AND subcategory (null subcategory = all).</summary>
+        public void ItemsOf(string collectionId, FurnitureCategory? category, string subcategory,
+            List<FurnitureItem> result)
+        {
+            if (result == null) return;
+            result.Clear();
+            var c = Find(collectionId);
+            if (c == null) return;
+            for (int i = 0; i < c.Items.Count; i++)
+            {
+                var item = c.Items[i];
+                if (category.HasValue && item.Category != category.Value) continue;
+                if (!string.IsNullOrEmpty(subcategory) && item.Subcategory != subcategory) continue;
                 result.Add(item);
             }
         }

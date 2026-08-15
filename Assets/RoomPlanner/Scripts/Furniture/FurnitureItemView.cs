@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Core.Furniture;
@@ -26,6 +27,17 @@ namespace RoomPlanner.Furniture
         private Transform _model;
         private BoxCollider _box;
         private SettingsSchema _settings;
+
+        // Generated pieces (slat partitions, #86): parameters instead of a model file.
+        [SerializeField] private bool procedural;
+        [SerializeField] private float slat = 0.04f;
+        [SerializeField] private float gap = 0.05f;
+        private Mesh _mesh;
+        private static readonly List<Vector3> Verts = new();
+        private static readonly List<int> Tris = new();
+        private static readonly List<Vector3> Norms = new();
+
+        public bool IsProcedural => procedural;
 
         /// <summary>Stored in the project file as "collection/item" (#73).</summary>
         public string CatalogKey => FurnitureCatalog.MakeKey(collectionId, itemId);
@@ -57,6 +69,14 @@ namespace RoomPlanner.Furniture
                 : string.IsNullOrEmpty(collection.Author) ? collection.License
                 : $"{collection.Author} · {collection.License}";
 
+            procedural = item.IsProcedural;
+            if (procedural)
+            {
+                Rebuild();
+                EnsureCollider();
+                return;
+            }
+
             _model = model != null ? model.transform : null;
             if (_model != null)
             {
@@ -85,6 +105,44 @@ namespace RoomPlanner.Furniture
             _box.size = size;
         }
 
+        /// <summary>Material for generated pieces; wired by the tool from the rig assets.</summary>
+        public Material ProceduralMaterial { get; set; }
+
+        /// <summary>
+        /// Regenerate a procedural piece (slat partition). One mesh per instance, replaced
+        /// in place and released in OnDestroy — Destroy(gameObject) does not free meshes
+        /// (rules 12 §1.5).
+        /// </summary>
+        public void Rebuild()
+        {
+            if (!procedural) return;
+            PartitionMesh.Build(size.x, size.y, slat, gap, size.z, Verts, Tris, Norms);
+
+            var filter = GetComponent<MeshFilter>();
+            if (filter == null) filter = gameObject.AddComponent<MeshFilter>();
+            var renderer = GetComponent<MeshRenderer>();
+            if (renderer == null) renderer = gameObject.AddComponent<MeshRenderer>();
+            if (ProceduralMaterial != null && renderer.sharedMaterial == null)
+                renderer.sharedMaterial = ProceduralMaterial;
+
+            if (_mesh == null) { _mesh = new Mesh { name = "Partition" }; }
+            _mesh.Clear();
+            _mesh.SetVertices(Verts);
+            _mesh.SetTriangles(Tris, 0);
+            _mesh.SetNormals(Norms);
+            _mesh.RecalculateBounds();
+            filter.sharedMesh = _mesh;
+            EnsureCollider();
+        }
+
+        private void OnDestroy()
+        {
+            if (_mesh == null) return;
+            if (Application.isPlaying) Destroy(_mesh);
+            else DestroyImmediate(_mesh);
+            _mesh = null;
+        }
+
         public void ApplyPose(in FurniturePose pose)
         {
             if (!pose.Valid) return;
@@ -106,7 +164,30 @@ namespace RoomPlanner.Furniture
         /// <summary>Per-instance rows shown when the piece is selected (design/20 §2).</summary>
         public SettingsSchema GetSettings()
         {
-            return _settings ??= new SettingsSchema()
+            if (_settings != null) return _settings;
+
+            // A generated piece is sized by its parameters — that is the whole point of
+            // generating it (design/27 §3c), so the inspector edits them directly.
+            if (procedural)
+                return _settings = new SettingsSchema()
+                    .Slider("w", "Width", 0.3f, 4f, 0.05f, () => size.x,
+                        v => { size.x = v; Rebuild(); }, (_, v) => { size.x = v; Rebuild(); },
+                        () => $"{size.x * 100f:0} cm", displayScale: 100f)
+                    .Slider("h", "Height", 0.4f, 3f, 0.05f, () => size.y,
+                        v => { size.y = v; Rebuild(); }, (_, v) => { size.y = v; Rebuild(); },
+                        () => $"{size.y * 100f:0} cm", displayScale: 100f)
+                    .Slider("slat", "Slat", 0.02f, 0.15f, 0.005f, () => slat,
+                        v => { slat = v; Rebuild(); }, (_, v) => { slat = v; Rebuild(); },
+                        () => $"{slat * 100f:0.#} cm", displayScale: 100f)
+                    .Slider("gap", "Gap", 0.01f, 0.30f, 0.005f, () => gap,
+                        v => { gap = v; Rebuild(); }, (_, v) => { gap = v; Rebuild(); },
+                        () => $"{gap * 100f:0.#} cm", displayScale: 100f)
+                    .Stepper("yaw", "Rotate", () => $"{yaw:0}°",
+                        () => SetYaw(yaw - YawStep), () => SetYaw(yaw + YawStep))
+                    .Readout("slats", "Slats",
+                        () => PartitionMesh.SlatCount(size.x, slat, gap).ToString());
+
+            return _settings = new SettingsSchema()
                 .Readout("size", "Size", () =>
                     $"{size.x * 100f:0} × {size.z * 100f:0} × {size.y * 100f:0} cm")
                 .Stepper("yaw", "Rotate", () => $"{yaw:0}°",

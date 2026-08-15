@@ -57,8 +57,10 @@ namespace RoomPlanner.Core.Furniture
             public string Id;
             public string Name;
             public string Category;
+            public string Subcategory;
             public string Anchor;
             public string File;
+            public string Preview;
             public Vector3 Size;
             public string Fit;
             public float YawOffset;
@@ -73,6 +75,8 @@ namespace RoomPlanner.Core.Furniture
             public string Author;
             public string License;
             public string LicenseUrl;
+            /// <summary>"true"/"false"; absent = commercial use allowed (the CC0 default).</summary>
+            public string CommercialUse;
             public ItemDto[] Items;
         }
 
@@ -107,6 +111,8 @@ namespace RoomPlanner.Core.Furniture
                 Author = dto.Author,
                 License = dto.License,
                 LicenseUrl = dto.LicenseUrl,
+                CommercialUse = !string.Equals(dto.CommercialUse, "false",
+                    StringComparison.OrdinalIgnoreCase),
                 Source = source,
                 RootPath = rootPath,
             };
@@ -130,8 +136,12 @@ namespace RoomPlanner.Core.Furniture
                     // An unknown category only affects grouping, so it degrades to Decor;
                     // an unknown anchor changes PHYSICS and is rejected above instead.
                     Category = ParseCategory(raw.Category),
+                    Subcategory = string.IsNullOrWhiteSpace(raw.Subcategory) ? null : raw.Subcategory.Trim(),
                     Anchor = anchor,
                     File = raw.File,
+                    // An unsafe preview path costs the thumbnail, not the item: a missing
+                    // picture degrades to a text label, a bad path would be a hole (#83).
+                    Preview = IsSafeFileName(raw.Preview) ? raw.Preview : null,
                     Size = raw.Size,
                     Fit = ParseFit(raw.Fit),
                     YawOffset = Mathf.Repeat(raw.YawOffset, 360f),

@@ -31,6 +31,7 @@ namespace RoomPlanner.Furniture
         [SerializeField] private LineRenderer ghost;         // footprint rectangle
         [SerializeField] private Transform itemsRoot;        // parent for placed furniture
         [SerializeField] private Material placeholderMat;    // stands in for a missing pack
+        [SerializeField] private Material partitionMat;      // generated slat screens (#86)
 
         private const int SelectableLayer = 6;
         /// <summary>Stick rotation speed, degrees per second (a full turn in four seconds —
@@ -46,6 +47,7 @@ namespace RoomPlanner.Furniture
         private int _tab;                    // 0 Place · 1 Move
         private int _collection;
         private int _category;               // 0 = All, then CategoriesOf order
+        private int _sub;                    // 0 = All, then SubcategoriesOf order
         private int _item;
         private float _yaw;
         private bool _snapToWall = true;
@@ -53,6 +55,8 @@ namespace RoomPlanner.Furniture
         private SettingsSchema _settings;
         private readonly List<FurnitureItem> _items = new();
         private readonly List<FurnitureCategory> _categories = new();
+        private readonly List<string> _subcategories = new();
+        private string[] _subNames = System.Array.Empty<string>();
         private readonly RaycastHit[] _hits = new RaycastHit[8];
         private readonly Vector3[] _corners = new Vector3[4];
         private string[] _collectionNames = System.Array.Empty<string>();
@@ -97,7 +101,7 @@ namespace RoomPlanner.Furniture
         {
             var catalog = Catalog;
             if (catalog == null) return;
-            int stamp = catalog.Count * 1000003 + _collection * 1009 + _category;
+            int stamp = catalog.Count * 1000003 + _collection * 1009 + _category * 31 + _sub;
             if (stamp == _catalogStamp) return;
             _catalogStamp = stamp;
 
@@ -108,6 +112,7 @@ namespace RoomPlanner.Furniture
             if (collection == null)
             {
                 _categoryNames = new[] { "All" };
+                _subNames = new[] { "All" };
                 _itemNames = System.Array.Empty<string>();
                 _items.Clear();
                 return;
@@ -120,7 +125,18 @@ namespace RoomPlanner.Furniture
 
             _category = Mathf.Clamp(_category, 0, _categoryNames.Length - 1);
             FurnitureCategory? filter = _category == 0 ? null : _categories[_category - 1];
-            catalog.ItemsOf(collection.Id, filter, _items);
+
+            // Subcategories only make sense inside one category ("Sofa" under Seating);
+            // with All selected the second level is not offered.
+            if (filter.HasValue) catalog.SubcategoriesOf(collection.Id, filter.Value, _subcategories);
+            else _subcategories.Clear();
+            _subNames = new string[_subcategories.Count + 1];
+            _subNames[0] = "All";
+            for (int i = 0; i < _subcategories.Count; i++) _subNames[i + 1] = _subcategories[i];
+            _sub = Mathf.Clamp(_sub, 0, _subNames.Length - 1);
+
+            string subFilter = _sub == 0 ? null : _subcategories[_sub - 1];
+            catalog.ItemsOf(collection.Id, filter, subFilter, _items);
 
             _itemNames = new string[_items.Count];
             for (int i = 0; i < _items.Count; i++) _itemNames[i] = _items[i].Name;
@@ -136,29 +152,41 @@ namespace RoomPlanner.Furniture
             var place = new SettingsSchema()
                 .Select("collection", "Collection", () => { RefreshLists(); return _collectionNames; },
                     () => _collection,
-                    i => { _collection = i; _category = 0; _item = 0; _catalogStamp = -1; RefreshLists(); })
+                    i => { _collection = i; _category = 0; _sub = 0; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
                 .Select("category", "Category", () => { RefreshLists(); return _categoryNames; },
                     () => _category,
-                    i => { _category = i; _item = 0; _catalogStamp = -1; RefreshLists(); })
-                .Select("item", "Item", () => { RefreshLists(); return _itemNames; },
-                    () => _item, i => _item = i)
+                    i => { _category = i; _sub = 0; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
+                .Select("sub", "Type", () => { RefreshLists(); return _subNames; },
+                    () => _sub,
+                    i => { _sub = i; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
+                // Pictures, not names: "Sofa (classic)" vs "Sofa (fabric)" means nothing
+                // until it is in the room (headset feedback 2026-08-15, #83). The grid shows
+                // one PAGE — a pack has hundreds of items and a panel taller than the user
+                // is not a menu (design/20 §3).
+                .Stepper("page", "Page", () => $"{_page + 1}/{PageCount}",
+                    () => SetPage(_page - 1), () => SetPage(_page + 1))
+                .PreviewSwatch("item", "Item",
+                    () => { RefreshLists(); return PageSize(); },
+                    i => library != null ? library.PreviewOf(ItemAt(i)) : null,
+                    i => ItemAt(i)?.Name,
+                    () => _item - _page * ItemsPerPage,
+                    i => _item = _page * ItemsPerPage + i,
+                    PickerVersion)
                 .Stepper("yaw", "Rotate", () => $"{_yaw:0}°",
                     () => AdjustYaw(-PlacementOptions.DefaultYawStep),
                     () => AdjustYaw(PlacementOptions.DefaultYawStep))
                 .Toggle("snap", "Snap to wall", () => _snapToWall, v => _snapToWall = v)
-                .Readout("size", "Size", () =>
+                // Size AND provenance in one row: the page is at the eight-row ceiling
+                // (design/20 §3), and both facts belong to the same selected item anyway.
+                .Readout("size", "Item", () =>
                 {
+                    if (library != null && !library.Ready) return library.Status;
                     var item = CurrentItem;
-                    return item == null ? "—"
-                        : $"{item.Size.x * 100f:0} × {item.Size.z * 100f:0} × {item.Size.y * 100f:0} cm";
-                })
-                .Readout("source", "Source", () =>
-                {
-                    if (library == null) return "—";
-                    if (!library.Ready) return library.Status;
+                    if (item == null) return "—";
+                    string size = $"{item.Size.x * 100f:0} × {item.Size.z * 100f:0} × {item.Size.y * 100f:0} cm";
                     var c = CurrentCollection;
-                    return c == null ? library.Status
-                        : string.IsNullOrEmpty(c.Author) ? c.License : $"{c.Author} · {c.License}";
+                    string licence = c == null ? null : (c.CommercialUse ? c.License : c.License + " (NC)");
+                    return string.IsNullOrEmpty(licence) ? size : $"{size} · {licence}";
                 });
 
             var move = new SettingsSchema()
@@ -173,6 +201,43 @@ namespace RoomPlanner.Furniture
                 () => _tab, i => { _tab = Mathf.Clamp(i, 0, 1); EndDrag(record: true); },
                 place, move);
             return _settings;
+        }
+
+        /// <summary>Chips per page — 6 columns × 4 rows, the grid the panel renders.</summary>
+        public const int ItemsPerPage = 24;
+
+        private int _page;
+
+        private int PageCount => Mathf.Max(1, Mathf.CeilToInt(_items.Count / (float)ItemsPerPage));
+
+        /// <summary>Items on the current page (the last one is usually short).</summary>
+        private int PageSize() =>
+            Mathf.Clamp(_items.Count - _page * ItemsPerPage, 0, ItemsPerPage);
+
+        private FurnitureItem ItemAt(int indexOnPage)
+        {
+            int i = _page * ItemsPerPage + indexOnPage;
+            return i >= 0 && i < _items.Count ? _items[i] : null;
+        }
+
+        private void SetPage(int page)
+        {
+            int clamped = Mathf.Clamp(page, 0, PageCount - 1);
+            if (clamped == _page) return;
+            _page = clamped;
+            // Keep a valid selection on the page the user is looking at.
+            _item = Mathf.Min(_page * ItemsPerPage, Mathf.Max(0, _items.Count - 1));
+        }
+
+        /// <summary>
+        /// Identifies WHAT the picker is showing. The panel rebuilds its rows when this
+        /// changes — without it, switching category left the previous category's pictures
+        /// on screen (headset feedback 2026-08-15).
+        /// </summary>
+        private int PickerVersion()
+        {
+            RefreshLists();
+            return ((_collection * 31 + _category) * 31 + _sub) * 1021 + _page * 7 + _items.Count;
         }
 
         private void AdjustYaw(float delta) =>
@@ -353,11 +418,14 @@ namespace RoomPlanner.Furniture
             go.transform.SetParent(itemsRoot != null ? itemsRoot : transform, worldPositionStays: true);
 
             var view = go.AddComponent<FurnitureItemView>();
+            view.ProceduralMaterial = partitionMat;
             view.Bind(item, null, library != null ? library.Catalog.Find(item.CollectionId) : null);
             view.ApplyPose(pose);
             go.AddComponent<Selectable>();
 
-            if (loader != null) LoadModelInto(view, item);
+            // Generated pieces are complete the moment they are bound; only model-backed
+            // items wait for glTFast.
+            if (loader != null && !item.IsProcedural) LoadModelInto(view, item);
             return view;
         }
 

@@ -126,11 +126,35 @@ namespace RoomPlanner.Tools
             ("paint", "paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f)),       // Interior
         };
 
+        /// <summary>
+        /// Registry order as ids — the same order <see cref="Start"/> builds the array in.
+        /// Setup code (which has no live registry) resolves palette shortcuts through this,
+        /// and Start asserts the two stay in step.
+        /// </summary>
+        public static readonly string[] RegistryIds =
+        {
+            "select", "measure", "wall", "floor", "blueprint", "import",
+            "electric", "paint", "openings", "projects", "furniture",
+        };
+
+        /// <summary>Index of a tool in the registry, or -1 — for Editor-side wiring.</summary>
+        public static int RegistryIndexOf(string id)
+        {
+            for (int i = 0; i < RegistryIds.Length; i++)
+                if (RegistryIds[i] == id) return i;
+            return -1;
+        }
+
         private void Start()
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (the radial's fixed slot table above maps tools to compass positions).
             _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture };
+
+            for (int i = 0; i < _tools.Length && i < RegistryIds.Length; i++)
+                if (_tools[i] != null && _tools[i].Id != RegistryIds[i])
+                    Debug.LogError($"[Tools] registry order drifted: slot {i} is " +
+                                   $"{_tools[i].Id}, RegistryIds says {RegistryIds[i]}");
 
             Debug.Log($"[Tools] v13 registry: {_tools.Length} tools, radial={(radial != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)
@@ -192,10 +216,7 @@ namespace RoomPlanner.Tools
         private float _uiDebounceUntil;
         private int _prevTool = -1;   // R3 = previous tool (16 P2.3)
 
-        // A button: tap (release < AHoldSeconds) = teleport, hold = tool radial
-        private const float AHoldSeconds = 0.35f;
-        private float _aPressedAt;
-        private bool _aConsumed;
+        // A button: the tool radial, nothing else (#87 removed the tap teleport).
 
         // slider drag capture (design/20 §2.2)
         private SliderWidget _slider;
@@ -239,29 +260,20 @@ namespace RoomPlanner.Tools
             Ray ray = pointer.GetRay();
 
             // ---- tool radial captures ALL input while open (design/20 §1) ----
-            // Invocation (device feedback 2026-08-10): HOLD A ~0.35 s (stick clicks felt
-            // awkward); a short A tap stays teleport (fires on release). L3 still works.
+            // A is single-purpose since 2026-08-15 (#87): the aim-and-tap teleport is gone
+            // — the portal arc on the trigger replaced it — so the radial opens on PRESS,
+            // with no hold window to disambiguate against.
             var cam = Camera.main != null ? Camera.main.transform : null;
-            bool teleportTap = false;
-            if (input.TeleportPressed()) { _aPressedAt = Time.time; _aConsumed = false; }
-            if (_aPressedAt > 0f && !input.TeleportHeld())
-            {
-                teleportTap = !_aConsumed && Time.time - _aPressedAt < AHoldSeconds;
-                _aPressedAt = 0f;
-            }
             if (radial != null)
             {
-                bool holdFired = _aPressedAt > 0f && !_aConsumed && !radial.IsOpen
-                    && Time.time - _aPressedAt >= AHoldSeconds;
-                if (input.RadialPressed() || holdFired)
+                if (input.RadialPressed() || input.TeleportPressed())
                 {
-                    if (radial.IsOpen && !holdFired) radial.Close();
+                    if (radial.IsOpen) radial.Close();
                     else if (cam != null)
                     {
                         radial.Open(cam, _active);
                         input.PulseLeft(0.3f, 0.012f);
                     }
-                    if (holdFired) _aConsumed = true;
                 }
                 bool captures = radial.Tick(input.LeftThumbstick(), ray,
                     input.ConfirmPressed(), input.ClearPressed(), cam, input);
@@ -390,22 +402,9 @@ namespace RoomPlanner.Tools
             }
             _grabbing = false;
 
-            // Global teleport (A TAP, fires on release — the hold opens the radial): bring
-            // the aimed slab spot under your feet — the model moves, never the camera
-            // (passthrough; design/18 I6). Works from any tool.
-            if (!overMenu && !debounced && sceneModel != null && teleportTap
-                && (select == null || !select.IsDragging)
-                && (locomotion == null || !locomotion.IsAiming))
-            {
-                // Slabs AND stair treads are teleport targets — aiming a step is how you
-                // walk down to a lower storey (design/18 I12).
-                if (sceneModel.TryPick(ray, out var picked, out var point)
-                    && picked is Selectable sel
-                    && (sel.Kind == SelectableKind.Floor || sel.Kind == SelectableKind.Stair))
-                {
-                    TeleportModelTo(point);
-                }
-            }
+            // The aim-and-tap teleport that used to live on A is gone (#87): the portal arc
+            // (design/21) is the only way to travel, so one button no longer carries two
+            // meanings. TeleportModelTo stays — the portal and the gravity settle use it.
 
             ITool act = ActiveTool();
             if (act != null) act.Tick(overMenu || debounced);
@@ -563,6 +562,9 @@ namespace RoomPlanner.Tools
                 case MenuAction.ToggleSnapAngle: snapAngle = !snapAngle; break;
                 case MenuAction.ToggleScan: scanOn = !scanOn; SetScan(scanOn); break;
                 case MenuAction.ToggleRenderSettings: _showRenderSettings = !_showRenderSettings; break;
+                case MenuAction.SelectStripTab:
+                    if (menu != null) menu.SetTab(mb.ToolIndex);
+                    break;
             }
             RefreshMenu();
         }
@@ -643,6 +645,9 @@ namespace RoomPlanner.Tools
             ITool next = ActiveTool();
             if (next != null) next.OnActivate();
             if (inspector != null) inspector.NoteToolChanged();
+            // The strip follows the tool: drawing walls needs snapping, everything else
+            // needs the shortcuts (#85).
+            if (menu != null && next != null) menu.OnToolChanged(next.Id);
             RefreshMenu();
         }
 

@@ -57,6 +57,7 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("reticle").objectReferenceValue = ctx.Reticle.transform;
             so.FindProperty("itemsRoot").objectReferenceValue = root.transform;
             so.FindProperty("placeholderMat").objectReferenceValue = ctx.ProxyMat;
+            so.FindProperty("partitionMat").objectReferenceValue = ctx.FurnitureMat;   // slat screens (#86)
             so.ApplyModifiedProperties();
 
             var mso = new SerializedObject(ctx.Manager);
