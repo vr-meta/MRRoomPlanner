@@ -675,6 +675,7 @@ namespace RoomPlanner.Import
             foreach (var m in TeleportCommand.CollectMeasurements())
                 if (m != null) Destroy(m.gameObject);
             ClearElectrical();
+            ClearPlumbing();
             ClearFurniture();
             _created.Clear();
             _importedSegments.Clear();
@@ -693,6 +694,18 @@ namespace RoomPlanner.Import
             foreach (var item in new List<ISelectable>(sceneModel.Items))
                 if (item is Selectable s && s.IsAlive
                     && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                    Destroy(s.gameObject);
+        }
+
+        /// <summary>Destroy the plumbing layer (design/28, v5 projects) — same rule as
+        /// the electrical one: registered risers/pipes/stub-outs/drains only, the parked
+        /// prefab template and the tool's ghost preview survive.</summary>
+        private void ClearPlumbing()
+        {
+            if (sceneModel == null) return;
+            foreach (var item in new List<ISelectable>(sceneModel.Items))
+                if (item is Selectable s && s.IsAlive
+                    && (s.Kind == SelectableKind.PlumbFixture || s.Kind == SelectableKind.Pipe))
                     Destroy(s.gameObject);
         }
 

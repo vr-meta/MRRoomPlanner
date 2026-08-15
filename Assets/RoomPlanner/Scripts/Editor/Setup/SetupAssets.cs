@@ -80,6 +80,12 @@ namespace RoomPlanner.EditorTools
             ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
             MakeGlossy(ctx.FixtureMat, 0.55f);
 
+            // Native plumbing (design/28): gray PP drain pipe — risers, runs, stub-outs
+            // and the drain body all share the trade-plastic look; the blue LayerPlumbing
+            // token stays a UI accent, never the object color.
+            ctx.PipeMat = CreatePlainLitMat("Plumb_Pipe", new Color(0.58f, 0.60f, 0.62f));
+            MakeGlossy(ctx.PipeMat, 0.40f);
+
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
             ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);
