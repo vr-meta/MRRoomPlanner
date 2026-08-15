@@ -26,7 +26,9 @@ namespace RoomPlanner.EditorTools
             var b = IfcImporter.Import(StepFile.Parse(File.ReadAllText(path)));
             if (b == null) { Debug.Log(sb + "IMPORT FAILED"); return; }
 
-            sb.AppendLine($"storeys={b.Storeys.Count} walls={b.Walls.Count} slabs={b.Slabs.Count} stairs={b.Stairs.Count}");
+            sb.AppendLine($"storeys={b.Storeys.Count} walls={b.Walls.Count} slabs={b.Slabs.Count} stairs={b.Stairs.Count} pipes={b.Pipes.Count} baked={b.Plumbing.Count}");
+            foreach (var p in b.Pipes)
+                sb.AppendLine($"PIPE r={p.Radius:0.###} ({p.Start.x:0.##},{p.Start.y:0.##},{p.Start.z:0.##})->({p.End.x:0.##},{p.End.y:0.##},{p.End.z:0.##}) '{p.Name}'");
             for (int i = 0; i < b.Storeys.Count; i++)
                 sb.AppendLine($"  storey[{i}] '{b.Storeys[i].Name}' elev={b.Storeys[i].Elevation:0.###}");
 
