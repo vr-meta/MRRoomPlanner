@@ -148,9 +148,15 @@ namespace RoomPlanner.Tests.Play
             pointer.Ray = AtFloor(1f, 2f);
             Click(plumb, input);
 
-            var risers = Object.FindObjectsByType<PipeRoute>(FindObjectsSortMode.None);
-            Assert.AreEqual(1, risers.Length);
-            var r = risers[0];
+            // the ghost column (#112) is an active PipeRoute too — count registered only
+            var placed = new List<PipeRoute>();
+            foreach (var pr in Object.FindObjectsByType<PipeRoute>(FindObjectsSortMode.None))
+            {
+                var sel = pr.GetComponent<Selectable>();
+                if (sel != null && !string.IsNullOrEmpty(sel.Id)) placed.Add(pr);
+            }
+            Assert.AreEqual(1, placed.Count);
+            var r = placed[0];
             Assert.IsTrue(r.IsRiser);
             Assert.AreEqual(PipeDiameter.D110, r.Diameter);
             Assert.AreEqual(0f, r.GetPoint(0).y, 0.01f, "foot on the floor");
@@ -171,7 +177,13 @@ namespace RoomPlanner.Tests.Play
             Click(plumb, input);
             yield return Debounce();
 
-            var riser = Object.FindObjectsByType<PipeRoute>(FindObjectsSortMode.None)[0];
+            PipeRoute riser = null;   // skip the ghost column (#112) — registered only
+            foreach (var pr in Object.FindObjectsByType<PipeRoute>(FindObjectsSortMode.None))
+            {
+                var s = pr.GetComponent<Selectable>();
+                if (s != null && !string.IsNullOrEmpty(s.Id)) riser = pr;
+            }
+            Assert.IsNotNull(riser, "one registered riser placed");
             string riserId = riser.GetComponent<Selectable>().Id;
             Assert.IsFalse(string.IsNullOrEmpty(riserId), "registered risers carry an id");
             Physics.SyncTransforms();

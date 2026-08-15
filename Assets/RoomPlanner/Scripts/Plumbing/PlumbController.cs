@@ -31,6 +31,8 @@ namespace RoomPlanner.Plumbing
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
         [SerializeField] private SceneModel sceneModel;
+        [SerializeField] private RoomPlanner.Walls.WallGraphRenderer walls;
+        [SerializeField] private PlacementGuideOverlay guideOverlay;
 
         public enum SubMode { Riser, Pipe, Outlet, Drain }
 
@@ -59,9 +61,12 @@ namespace RoomPlanner.Plumbing
 
         // ---- per-frame caches (rule 4.1: no allocations in Tick) ----
         private readonly RaycastHit[] _ownHits = new RaycastHit[16];
+        private readonly List<Vector3> _axes = new();
         private const int SelectableLayer = 6;
 
         private PlumbFixture _ghost;             // placement preview, never registered
+        private PipeRoute _riserGhost;           // riser column preview (#112), never registered
+        private Vector3 _riserGhostFoot = new(float.NaN, 0f, 0f);
         private SubMode _ghostMode = (SubMode)(-1);
         private PlumbFixtureKind _ghostKind = (PlumbFixtureKind)(-1);
         private OutletAngle _ghostAngle = (OutletAngle)(-1);
@@ -88,6 +93,33 @@ namespace RoomPlanner.Plumbing
             if (reticle != null) reticle.gameObject.SetActive(false);
             if (previewLine != null) previewLine.enabled = false;
             if (_ghost != null) _ghost.gameObject.SetActive(false);
+            if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
+            if (guideOverlay != null) guideOverlay.Hide();
+        }
+
+        /// <summary>Dimension guides during placement (#113): show distances to the
+        /// nearest wall(s) and, with grid snap on, land them on 5 cm multiples. The
+        /// mount normal keeps a wall fixture from being dimensioned against its own
+        /// wall. Redrawn after quantizing so the labels show the snapped values.</summary>
+        private Vector3 ApplyGuides(Vector3 place, Vector3 mountNormal)
+        {
+            if (guideOverlay == null) return place;
+            _axes.Clear();
+            var g = walls != null ? walls.Graph : null;
+            if (g != null)
+                foreach (var s in g.Segments)
+                {
+                    if (!walls.IsVisible(s)) continue;
+                    _axes.Add(s.A.Position);
+                    _axes.Add(s.B.Position);
+                }
+            guideOverlay.ShowAt(place, _axes, mountNormal);
+            if (manager != null && manager.SnapGrid && guideOverlay.Count > 0)
+            {
+                place = guideOverlay.Quantize(place, 0.05f);
+                guideOverlay.ShowAt(place, _axes, mountNormal);
+            }
+            return place;
         }
 
         public void Tick(bool blocked)
@@ -98,6 +130,8 @@ namespace RoomPlanner.Plumbing
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 if (previewLine != null) previewLine.enabled = false;
                 if (_ghost != null) _ghost.gameObject.SetActive(false);
+                if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
+                if (guideOverlay != null) guideOverlay.Hide();
                 return;
             }
 
@@ -165,6 +199,8 @@ namespace RoomPlanner.Plumbing
             if (_ghost != null) _ghost.gameObject.SetActive(false);
 
             bool valid = hasHit && IsFloor(normal);
+            if (valid) point = ApplyGuides(point, Vector3.zero);
+            else if (guideOverlay != null) guideOverlay.Hide();
             if (reticle != null)
             {
                 reticle.gameObject.SetActive(valid);
@@ -172,10 +208,12 @@ namespace RoomPlanner.Plumbing
             }
             if (!valid)
             {
+                if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
                 if (input.ConfirmPressed()) input.Pulse(0.2f, 0.01f);   // refusal tick
                 if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
                 return;
             }
+            UpdateRiserGhost(point);
 
             if (input.ConfirmPressed() && Time.time >= _nextPlaceAllowed)
             {
@@ -183,6 +221,29 @@ namespace RoomPlanner.Plumbing
                 PlaceRiser(point);
             }
             if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
+        }
+
+        /// <summary>Riser placement used to be blind — a flat reticle on the floor
+        /// (#112). The ghost is a full-height D110 column; the tube is only re-cooked
+        /// when the cursor moves more than 2 cm (a rebuild is a mesh cook, rule 4.1).</summary>
+        private void UpdateRiserGhost(Vector3 foot)
+        {
+            if (pipePrefab == null) return;
+            if (_riserGhost == null)
+            {
+                _riserGhost = Instantiate(pipePrefab, transform);
+                _riserGhost.name = "RiserPreview";
+            }
+            if ((foot - _riserGhostFoot).sqrMagnitude > 0.0004f)
+            {
+                float topY = CeilingYAt(foot);
+                _riserGhost.Build(new List<Vector3> { foot, new(foot.x, topY, foot.z) },
+                    PipeDiameter.D110);
+                var col = _riserGhost.GetComponent<MeshCollider>();
+                if (col != null) col.enabled = false;   // a preview must not catch rays
+                _riserGhostFoot = foot;
+            }
+            _riserGhost.gameObject.SetActive(true);
         }
 
         private void PlaceRiser(Vector3 foot)
@@ -242,6 +303,7 @@ namespace RoomPlanner.Plumbing
         private void TickOutlet(bool hasHit, Vector3 point, Vector3 normal)
         {
             if (previewLine != null) previewLine.enabled = false;
+            if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
 
             bool valid = hasHit && IsWall(normal);
             if (!valid)
@@ -249,6 +311,7 @@ namespace RoomPlanner.Plumbing
                 // no air fixtures, ever (the electrical rule)
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 if (_ghost != null) _ghost.gameObject.SetActive(false);
+                if (guideOverlay != null) guideOverlay.Hide();
                 if (input.ConfirmPressed()) input.Pulse(0.2f, 0.01f);
                 if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
                 return;
@@ -263,6 +326,7 @@ namespace RoomPlanner.Plumbing
             outward.Normalize();
             var rot = Quaternion.LookRotation(outward);
             place += outward * 0.002f;   // keep the seat off the wall plane
+            place = ApplyGuides(place, outward);
 
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = place; }
             UpdateGhost(_outletKind, place, rot);
@@ -278,12 +342,14 @@ namespace RoomPlanner.Plumbing
         private void TickDrain(bool hasHit, Vector3 point, Vector3 normal)
         {
             if (previewLine != null) previewLine.enabled = false;
+            if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
 
             bool valid = hasHit && IsFloor(normal);
             if (!valid)
             {
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 if (_ghost != null) _ghost.gameObject.SetActive(false);
+                if (guideOverlay != null) guideOverlay.Hide();
                 if (input.ConfirmPressed()) input.Pulse(0.2f, 0.01f);
                 if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
                 return;
@@ -291,6 +357,7 @@ namespace RoomPlanner.Plumbing
 
             // the grate sits flush in the floor plane, upright whatever the hit normal
             var rot = Quaternion.identity;
+            point = ApplyGuides(point, Vector3.zero);
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = point; }
             UpdateGhost(PlumbFixtureKind.FloorDrain, point, rot);
 
@@ -361,33 +428,37 @@ namespace RoomPlanner.Plumbing
             PlumbFixture hitFixture, PipeRoute hitPipe)
         {
             if (_ghost != null) _ghost.gameObject.SetActive(false);
+            if (_riserGhost != null) _riserGhost.gameObject.SetActive(false);
+            if (guideOverlay != null) guideOverlay.Hide();   // guides are for fixtures (v1)
 
             // terminal magnet: within reach of a fixture's socket the cursor jumps to it
             PlumbFixture terminal = FindNearestTerminal(hasHit ? point : Vector3.zero, hasHit);
             if (hitFixture != null) terminal = hitFixture;
 
-            // riser magnet: pipes tee into a riser at ANY height along its axis
-            PipeRoute riser = null;
-            Vector3 riserPoint = default;
-            if (terminal == null)
-            {
-                riser = FindNearestRiser(hasHit ? point : Vector3.zero, hasHit, out riserPoint);
-                if (riser == null && hitPipe != null && hitPipe.IsRiser && hitPipe.PointCount >= 2)
-                {
-                    riser = hitPipe;
-                    riserPoint = PipeMath.ClosestOnSegment(hitPipe.GetPoint(0),
-                        hitPipe.GetPoint(hitPipe.PointCount - 1), point);
-                }
-            }
-
             // free-end magnet (#81 pattern): with no run active, the loose end of a
-            // same-diameter pipe is a pickup spot — clicking it CONTINUES that pipe
+            // same-diameter pipe is a pickup spot — clicking it CONTINUES that pipe.
+            // Checked BEFORE the tee magnet: near an end, continuing beats teeing.
             PipeRoute pickup = null;
             bool pickupFromStart = false;
             Vector3 pickupPoint = default;
-            if (_pts.Count == 0 && terminal == null && riser == null)
+            if (_pts.Count == 0 && terminal == null)
                 pickup = FindNearestFreeEnd(hasHit ? point : Vector3.zero, hasHit,
                     out pickupFromStart, out pickupPoint);
+
+            // tee magnet (#115): pipes tee into a riser at ANY height along its axis —
+            // and into any EXISTING run's body at the closest point on its polyline
+            PipeRoute riser = null;
+            Vector3 riserPoint = default;
+            if (terminal == null && pickup == null)
+            {
+                riser = FindNearestPipeTee(hasHit ? point : Vector3.zero, hasHit, out riserPoint);
+                if (riser == null && hitPipe != null && hitPipe != _continued
+                    && hitPipe.PointCount >= 2)
+                {
+                    riser = hitPipe;
+                    riserPoint = ClosestOnPolyline(hitPipe, point);
+                }
+            }
 
             bool valid = hasHit && (terminal != null || riser != null || pickup != null
                 || IsWall(normal) || IsCeiling(normal) || IsFloor(normal));
@@ -426,20 +497,28 @@ namespace RoomPlanner.Plumbing
         {
             if (!hasHit || sceneModel == null) return null;
             PlumbFixture best = null;
-            float bestDist = PlumbingDefaults.TerminalSnapRadius;
+            float bestScore = 1f;
             var items = sceneModel.Items;
             for (int i = 0; i < items.Count; i++)
             {
                 var item = items[i];
                 if (item == null || !item.IsAlive || item.IsHidden) continue;
                 if (item is not Selectable s || s.Plumb == null) continue;
-                float d = Vector3.Distance(s.Plumb.TerminalWorld, nearPoint);
-                if (d < bestDist) { bestDist = d; best = s.Plumb; }
+                // the drain port gets a wider magnet (#115) — normalize by each
+                // fixture's own radius so the strongest RELATIVE pull wins
+                float radius = s.Plumb.Kind == PlumbFixtureKind.FloorDrain
+                    ? PlumbingDefaults.DrainSnapRadius
+                    : PlumbingDefaults.TerminalSnapRadius;
+                float score = Vector3.Distance(s.Plumb.TerminalWorld, nearPoint) / radius;
+                if (score < bestScore) { bestScore = score; best = s.Plumb; }
             }
             return best;
         }
 
-        private PipeRoute FindNearestRiser(Vector3 nearPoint, bool hasHit, out Vector3 axisPoint)
+        /// <summary>The tee magnet (#115): the closest point on ANY existing pipe's
+        /// polyline — a riser axis above all, but horizontal runs tee too. The pipe
+        /// being continued never magnets itself.</summary>
+        private PipeRoute FindNearestPipeTee(Vector3 nearPoint, bool hasHit, out Vector3 axisPoint)
         {
             axisPoint = default;
             if (!hasHit || sceneModel == null) return null;
@@ -452,10 +531,26 @@ namespace RoomPlanner.Plumbing
                 if (item == null || !item.IsAlive || item.IsHidden) continue;
                 if (item is not Selectable s || s.Pipe == null) continue;
                 var r = s.Pipe;
-                if (!r.IsRiser || r.PointCount < 2 || r == _continued) continue;
-                Vector3 p = PipeMath.ClosestOnSegment(r.GetPoint(0), r.GetPoint(r.PointCount - 1), nearPoint);
-                float d = Vector3.Distance(p, nearPoint);
-                if (d < bestDist) { bestDist = d; best = r; axisPoint = p; }
+                if (r.PointCount < 2 || r == _continued) continue;
+                for (int k = 1; k < r.PointCount; k++)
+                {
+                    Vector3 p = PipeMath.ClosestOnSegment(r.GetPoint(k - 1), r.GetPoint(k), nearPoint);
+                    float d = Vector3.Distance(p, nearPoint);
+                    if (d < bestDist) { bestDist = d; best = r; axisPoint = p; }
+                }
+            }
+            return best;
+        }
+
+        private static Vector3 ClosestOnPolyline(PipeRoute r, Vector3 point)
+        {
+            Vector3 best = r.GetPoint(0);
+            float bestDist = float.MaxValue;
+            for (int k = 1; k < r.PointCount; k++)
+            {
+                Vector3 p = PipeMath.ClosestOnSegment(r.GetPoint(k - 1), r.GetPoint(k), point);
+                float d = Vector3.Distance(p, point);
+                if (d < bestDist) { bestDist = d; best = p; }
             }
             return best;
         }
@@ -750,9 +845,9 @@ namespace RoomPlanner.Plumbing
                 .Segmented("okind", "Type", new[] { "Toilet", "Sink" },
                     () => _outletKind == PlumbFixtureKind.ToiletOutlet ? 0 : 1,
                     i => _outletKind = i == 0 ? PlumbFixtureKind.ToiletOutlet : PlumbFixtureKind.SinkOutlet)
-                .Segmented("oangle", "Angle", new[] { "90°", "45°" },
-                    () => _angle == OutletAngle.Deg90 ? 0 : 1,
-                    i => _angle = i == 0 ? OutletAngle.Deg90 : OutletAngle.Deg45)
+                .Segmented("oangle", "Angle", new[] { "90°", "45°↓", "45°↑" },
+                    () => (int)_angle,
+                    i => _angle = (OutletAngle)Mathf.Clamp(i, 0, 2))
                 .Slider("oh", "Height", PlumbingDefaults.MinOutletHeight,
                     PlumbingDefaults.MaxOutletHeight, PlumbingDefaults.HeightStep,
                     () => ActiveHeight(),

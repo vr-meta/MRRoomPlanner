@@ -8,9 +8,9 @@ namespace RoomPlanner.Plumbing
     /// sink family, and the floor drain under showers/washing machines.</summary>
     public enum PlumbFixtureKind { ToiletOutlet, SinkOutlet, FloorDrain }
 
-    /// <summary>Stub-out geometry: straight out of the wall or the classic angled-down
-    /// elbow toward a riser.</summary>
-    public enum OutletAngle { Deg90, Deg45 }
+    /// <summary>Stub-out geometry: straight out of the wall, the classic angled-down
+    /// elbow toward a riser, or its mirrored rise (washer standpipes, vents — #114).</summary>
+    public enum OutletAngle { Deg90, Deg45, Deg45Up }
 
     public static class PipeSpec
     {
@@ -57,6 +57,9 @@ namespace RoomPlanner.Plumbing
         public const float MinPointStep = 0.03f;
         public const float PlaceDebounceSeconds = 0.25f;
         public const float TerminalSnapRadius = 0.10f;
+        // the drain port sits low in a grate corner — headset feedback 2026-08-15 (#115):
+        // the standard radius was too fiddly to hit with a ray
+        public const float DrainSnapRadius = 0.15f;
         public const float FixtureClearance = 0.05f;
 
         // BOM

@@ -26,14 +26,14 @@ namespace RoomPlanner.Plumbing
                 return _drainSchema;
             }
             _outletSchema ??= new SettingsSchema()
-                .Segmented("fangle", "Angle", new[] { "90°", "45°" },
-                    () => Fixture.Angle == OutletAngle.Deg90 ? 0 : 1, SetAngle);
+                .Segmented("fangle", "Angle", new[] { "90°", "45°↓", "45°↑" },
+                    () => (int)Fixture.Angle, SetAngle);
             return _outletSchema;
         }
 
         private void SetAngle(int index)
         {
-            var target = index == 0 ? OutletAngle.Deg90 : OutletAngle.Deg45;
+            var target = (OutletAngle)Mathf.Clamp(index, 0, 2);
             if (Fixture.Angle == target) return;
             var cmd = new OutletAngleCommand(this, Fixture.Angle, target);
             var model = SceneModel.Instance;

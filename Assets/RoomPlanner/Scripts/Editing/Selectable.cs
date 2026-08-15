@@ -557,7 +557,12 @@ namespace RoomPlanner.Editing
         private string DescribePlumbFixture()
         {
             if (_plumbFixture == null) return "Plumbing";
-            string angle = _plumbFixture.Angle == RoomPlanner.Plumbing.OutletAngle.Deg45 ? "45°" : "90°";
+            string angle = _plumbFixture.Angle switch
+            {
+                RoomPlanner.Plumbing.OutletAngle.Deg45 => "45°↓",
+                RoomPlanner.Plumbing.OutletAngle.Deg45Up => "45°↑",
+                _ => "90°",
+            };
             return _plumbFixture.Kind switch
             {
                 RoomPlanner.Plumbing.PlumbFixtureKind.ToiletOutlet =>

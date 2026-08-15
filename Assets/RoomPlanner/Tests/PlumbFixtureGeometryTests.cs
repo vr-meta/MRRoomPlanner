@@ -44,6 +44,18 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void ToiletOutlet45Up_MirrorsTheDropUpward()
+        {
+            _fx.Build(PlumbFixtureKind.ToiletOutlet, OutletAngle.Deg45);
+            var down = _fx.TerminalLocal;
+            _fx.Build(PlumbFixtureKind.ToiletOutlet, OutletAngle.Deg45Up);
+            var up = _fx.TerminalLocal;
+            Assert.Greater(up.y, 0f, "#114: the flipped elbow rises");
+            Assert.AreEqual(-down.y, up.y, 1e-5, "an exact mirror of the down variant");
+            Assert.AreEqual(down.z, up.z, 1e-5);
+        }
+
+        [Test]
         public void SinkOutlet_IsD50_AndSlimmerThanToilet()
         {
             _fx.Build(PlumbFixtureKind.ToiletOutlet, OutletAngle.Deg90);

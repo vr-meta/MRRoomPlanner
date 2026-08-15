@@ -27,6 +27,38 @@ namespace RoomPlanner.EditorTools
             prev.sharedMaterial = ctx.PipeMat;
             prev.enabled = false;
 
+            // dimension-guide overlay (#113): two thin lines + cm labels, hidden until
+            // a fixture placement previews near a wall
+            var guidesGo = new GameObject("PlacementGuides");
+            guidesGo.transform.SetParent(ctx.Rig.transform, false);
+            var overlay = guidesGo.AddComponent<RoomPlanner.Tools.PlacementGuideOverlay>();
+            LineRenderer GuideLine(string name)
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(guidesGo.transform, false);
+                var lr = go.AddComponent<LineRenderer>();
+                lr.useWorldSpace = true;
+                lr.widthMultiplier = 0.004f;
+                lr.numCapVertices = 2;
+                lr.sharedMaterial = ctx.LineMat;
+                lr.enabled = false;
+                return lr;
+            }
+            var gla = GuideLine("GuideLineA");
+            var glb = GuideLine("GuideLineB");
+            var labA = SetupAssets.MakeTextChild(guidesGo.transform, "GuideLabelA", "0 cm",
+                new Vector2(0.14f, 0.035f));
+            var labB = SetupAssets.MakeTextChild(guidesGo.transform, "GuideLabelB", "0 cm",
+                new Vector2(0.14f, 0.035f));
+            labA.gameObject.SetActive(false);
+            labB.gameObject.SetActive(false);
+            var oso = new SerializedObject(overlay);
+            oso.FindProperty("lineA").objectReferenceValue = gla;
+            oso.FindProperty("lineB").objectReferenceValue = glb;
+            oso.FindProperty("labelA").objectReferenceValue = labA;
+            oso.FindProperty("labelB").objectReferenceValue = labB;
+            oso.ApplyModifiedProperties();
+
             var so = new SerializedObject(tool);
             so.FindProperty("pointer").objectReferenceValue = ctx.Pointer;
             so.FindProperty("input").objectReferenceValue = ctx.Input;
@@ -37,6 +69,9 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("previewLine").objectReferenceValue = prev;
             so.FindProperty("manager").objectReferenceValue = ctx.Manager;
             so.FindProperty("sceneModel").objectReferenceValue = ctx.SceneModel;
+            so.FindProperty("walls").objectReferenceValue =
+                ctx.Rig.GetComponent<RoomPlanner.Walls.WallGraphRenderer>();
+            so.FindProperty("guideOverlay").objectReferenceValue = overlay;
             so.ApplyModifiedProperties();
 
             var mso = new SerializedObject(ctx.Manager);

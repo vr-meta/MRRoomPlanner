@@ -61,7 +61,8 @@ namespace RoomPlanner.Plumbing
                 if (Angle == OutletAngle.Deg90)
                     return new Vector3(0f, 0f, PlumbingDefaults.StubLength);
                 float leg = PlumbingDefaults.Stub45Drop * 0.70710678f;
-                return new Vector3(0f, -leg, PlumbingDefaults.Stub45Run + leg);
+                float sign = Angle == OutletAngle.Deg45Up ? 1f : -1f;   // #114: mirrored rise
+                return new Vector3(0f, sign * leg, PlumbingDefaults.Stub45Run + leg);
             }
         }
 
@@ -123,8 +124,7 @@ namespace RoomPlanner.Plumbing
             else
             {
                 _tubePts.Add(new Vector3(0f, 0f, PlumbingDefaults.Stub45Run));
-                float leg = PlumbingDefaults.Stub45Drop * 0.70710678f;
-                mouth = new Vector3(0f, -leg, PlumbingDefaults.Stub45Run + leg);
+                mouth = TerminalLocal;   // the 45 elbow, down or mirrored up (#114)
                 _tubePts.Add(mouth);
             }
             AppendTube(_tubePts, radius);

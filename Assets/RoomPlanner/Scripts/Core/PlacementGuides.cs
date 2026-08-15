@@ -83,6 +83,28 @@ namespace RoomPlanner.Core
             return count;
         }
 
+        /// <summary>Drops guides whose offset direction is roughly parallel to
+        /// <paramref name="excludeNormal"/> (in plan) and compacts the array — a
+        /// wall-mounted element must not be dimensioned against its OWN wall, or
+        /// quantizing would drag it off the face. Returns the new count.</summary>
+        public static int FilterByNormal(WallGuide[] guides, int count, Vector3 excludeNormal,
+            float maxAbsDot = 0.866f)
+        {
+            if (guides == null) return 0;
+            var ex = new Vector3(excludeNormal.x, 0f, excludeNormal.z);
+            if (ex.sqrMagnitude < 1e-8f) return count;
+            ex.Normalize();
+            int kept = 0;
+            for (int i = 0; i < count && i < guides.Length; i++)
+            {
+                if (!guides[i].Valid) continue;
+                if (Mathf.Abs(Vector3.Dot(guides[i].Normal, ex)) > maxAbsDot) continue;
+                guides[kept++] = guides[i];
+            }
+            for (int i = kept; i < guides.Length; i++) guides[i] = default;
+            return kept;
+        }
+
         /// <summary>Moves the point along each guide's normal so its wall distances
         /// become multiples of <paramref name="step"/> (nearest multiple; a distance
         /// rounding to zero clamps to one step — placement never lands INSIDE a wall).
