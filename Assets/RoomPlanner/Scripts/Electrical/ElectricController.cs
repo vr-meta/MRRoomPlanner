@@ -50,6 +50,12 @@ namespace RoomPlanner.Electrical
         private string _startFixtureId;
         private float _nextPlaceAllowed;
 
+        // ---- route continuation (#81): picked-up route being extended from its free end ----
+        private WireRoute _continued;
+        private List<Vector3> _continuedBefore;
+        private string _continuedStartId, _continuedEndId;
+        private CableType _continuedCable;
+
         // ---- per-frame caches (rule 4.1: no allocations in Tick) ----
         private readonly RaycastHit[] _ownHits = new RaycastHit[16];
         private const int SelectableLayer = 6;
@@ -402,8 +408,19 @@ namespace RoomPlanner.Electrical
             ElectricFixture terminal = FindNearestTerminal(hasHit ? point : Vector3.zero, hasHit);
             if (hitFixture != null) terminal = hitFixture;
 
-            bool valid = hasHit && (terminal != null || IsWall(normal) || IsCeiling(normal));
-            Vector3 cursor = terminal != null ? terminal.TerminalWorld : point;
+            // free-end magnet (#81): with no run active, the loose end of an existing
+            // route is a pickup spot — clicking it CONTINUES that route (still one wire)
+            WireRoute pickup = null;
+            bool pickupFromStart = false;
+            Vector3 pickupPoint = default;
+            if (_pts.Count == 0 && terminal == null)
+                pickup = FindNearestFreeEnd(hasHit ? point : Vector3.zero, hasHit,
+                    out pickupFromStart, out pickupPoint);
+
+            bool valid = hasHit && (terminal != null || pickup != null
+                || IsWall(normal) || IsCeiling(normal));
+            Vector3 cursor = terminal != null ? terminal.TerminalWorld
+                : pickup != null ? pickupPoint : point;
 
             if (reticle != null)
             {
@@ -415,7 +432,8 @@ namespace RoomPlanner.Electrical
             if (valid && input.ConfirmPressed() && Time.time >= _nextPlaceAllowed)
             {
                 _nextPlaceAllowed = Time.time + ElectricalDefaults.PlaceDebounceSeconds;
-                AddWirePoint(cursor, terminal);
+                if (pickup != null) BeginContinuation(pickup, pickupFromStart);
+                else AddWirePoint(cursor, terminal);
             }
             else if (!valid && input.ConfirmPressed())
             {
@@ -447,6 +465,76 @@ namespace RoomPlanner.Electrical
                 if (d < bestDist) { bestDist = d; best = s.Fixture; }
             }
             return best;
+        }
+
+        /// <summary>Loose end of an existing route within the terminal-snap radius —
+        /// the pickup spot for continuing it (#81). An end attached to a fixture is
+        /// not free; hidden (deleted) routes never magnet (rule 2.4).</summary>
+        private WireRoute FindNearestFreeEnd(Vector3 nearPoint, bool hasHit,
+            out bool fromStart, out Vector3 endPoint)
+        {
+            fromStart = false;
+            endPoint = default;
+            if (!hasHit || sceneModel == null) return null;
+            WireRoute best = null;
+            float bestDist = ElectricalDefaults.TerminalSnapRadius;
+            var items = sceneModel.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive || item.IsHidden) continue;
+                if (item is not Selectable s) continue;
+                var route = s.GetComponent<WireRoute>();
+                if (route == null || route.Points.Count < 2) continue;
+
+                if (string.IsNullOrEmpty(route.StartFixtureId))
+                {
+                    float d = Vector3.Distance(route.Points[0], nearPoint);
+                    if (d < bestDist)
+                    {
+                        bestDist = d; best = route;
+                        fromStart = true; endPoint = route.Points[0];
+                    }
+                }
+                if (string.IsNullOrEmpty(route.EndFixtureId))
+                {
+                    var last = route.Points[route.Points.Count - 1];
+                    float d = Vector3.Distance(last, nearPoint);
+                    if (d < bestDist)
+                    {
+                        bestDist = d; best = route;
+                        fromStart = false; endPoint = last;
+                    }
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Pick an existing route up by its free end (#81): its polyline becomes
+        /// the active run and drawing resumes — the finish rewrites the SAME route as one
+        /// undoable edit. Grabbing the START reverses the polyline so drawing always
+        /// appends at the tail; the start/end attachments swap with it.</summary>
+        private void BeginContinuation(WireRoute route, bool fromStart)
+        {
+            _continued = route;
+            _continuedBefore = new List<Vector3>(route.Points);
+            _continuedStartId = route.StartFixtureId;
+            _continuedEndId = route.EndFixtureId;
+            _continuedCable = route.Cable;
+
+            _pts.Clear();
+            _pts.AddRange(route.Points);
+            if (fromStart)
+            {
+                _pts.Reverse();
+                _startFixtureId = route.EndFixtureId;
+            }
+            else
+            {
+                _startFixtureId = route.StartFixtureId;
+            }
+            _cable = route.Cable;
+            input.Pulse(0.6f, 0.02f);
         }
 
         private void AddWirePoint(Vector3 cursor, ElectricFixture terminal)
@@ -486,6 +574,24 @@ namespace RoomPlanner.Electrical
 
         private void FinishRoute(ElectricFixture endTerminal)
         {
+            if (_continued != null)
+            {
+                // Continuation stays the SAME route (#81) — one undoable edit; finishing
+                // with no new points is a no-op, the route is simply put back down.
+                var contSel = _continued.GetComponent<Selectable>();
+                if (_pts.Count > _continuedBefore.Count && sceneModel != null
+                    && contSel != null && contSel.IsAlive)
+                {
+                    sceneModel.History.Execute(new RouteExtendCommand(_continued,
+                        _continuedBefore, _continuedStartId, _continuedEndId, _continuedCable,
+                        new List<Vector3>(_pts), _startFixtureId,
+                        endTerminal != null ? FixtureId(endTerminal) : null, _cable));
+                    input.Pulse(0.6f, 0.03f);
+                }
+                CancelRoute();
+                return;
+            }
+
             if (_pts.Count >= 2 && wirePrefab != null && sceneModel != null)
             {
                 var route = Instantiate(wirePrefab, transform);
@@ -509,6 +615,8 @@ namespace RoomPlanner.Electrical
         {
             _pts.Clear();
             _startFixtureId = null;
+            _continued = null;
+            _continuedBefore = null;
             if (previewLine != null) previewLine.enabled = false;
         }
 
@@ -604,5 +712,45 @@ namespace RoomPlanner.Electrical
 
         private static float ClampHeight(float value, float min) =>
             Mathf.Clamp(value, min, ElectricalDefaults.MaxMountHeight);
+    }
+
+    /// <summary>
+    /// Continuing a route from its free end (#81): the whole continuation — appended
+    /// points, new end attachment, possibly a cable change — is ONE undo entry that
+    /// puts the previous polyline and attachments back.
+    /// </summary>
+    public sealed class RouteExtendCommand : ICommand, ISelectableCommand
+    {
+        private readonly WireRoute _route;
+        private readonly List<Vector3> _before, _after;
+        private readonly string _beforeStart, _beforeEnd, _afterStart, _afterEnd;
+        private readonly CableType _beforeCable, _afterCable;
+
+        public RouteExtendCommand(WireRoute route,
+            List<Vector3> before, string beforeStart, string beforeEnd, CableType beforeCable,
+            List<Vector3> after, string afterStart, string afterEnd, CableType afterCable)
+        {
+            _route = route;
+            _before = before; _beforeStart = beforeStart; _beforeEnd = beforeEnd;
+            _beforeCable = beforeCable;
+            _after = after; _afterStart = afterStart; _afterEnd = afterEnd;
+            _afterCable = afterCable;
+        }
+
+        public string Name => "Extend wire";
+        public ISelectable Target => _route != null ? _route.GetComponent<Selectable>() : null;
+
+        public void Do() => Apply(_after, _afterStart, _afterEnd, _afterCable);
+        public void Undo() => Apply(_before, _beforeStart, _beforeEnd, _beforeCable);
+
+        private void Apply(List<Vector3> pts, string startId, string endId, CableType cable)
+        {
+            if (_route == null) return;
+            var sel = _route.GetComponent<Selectable>();
+            if (sel == null || !sel.IsAlive) return;
+            _route.Build(new List<Vector3>(pts), cable);
+            _route.StartFixtureId = startId;
+            _route.EndFixtureId = endId;
+        }
     }
 }
