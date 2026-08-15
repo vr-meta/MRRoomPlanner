@@ -882,6 +882,22 @@ CC0-текстуры ambientCG (обои ×4, крашеные стены ×4, �
   tracking space → сходится за шаг; guard ≤3 попыток, всё логируется. Тест
   ScannedFloor_CalibratesTheRig_ModelStaysPut. Хвост: мультирум, шлем-проверка
 
+## 2ad. IFC-розетки → нативная электрика (issue #79, ветка `feature/ifc-outlets-79`)
+
+Разведка Project1(2).ifc (Revit 24): 65 розеток «Р Розетка:220 V» = proxy-плашки
+5×5×1 см (mapped 3D, не 2D); выключателей/светильников в экспорте нет (2D-аннотации
+Revit не экспортируются); сантехника (21 терминал) уже шла как Plumbing; 2D в файле —
+только оси сеток.
+
+- [x] E1. `Core/Ifc/ElectricalImport` (IsOutlet по имени, PlateNormal по тончайшей
+  оси) + `ImportedBuilding.Outlets` + перехват в `BakeProduct` + сдвиг в
+  `ImportPlacement.Translate`; `ImportController.SpawnImportedOutlets` через
+  `RestoreFixture` (нативные, лицом от стены, в статусе «Nel»), реплейс при повторном
+  Load; тесты `ElectricalImportTests` + `ImportOutletsPlayTests`. **Проверено в шлеме
+  2026-08-15 на Project1.ifc** («всё правильно отображается»). Важно для UX: сцена из
+  автосейва хранит СТАРЫЙ вид — конвертация видна после «Load IFC». Хвосты: посты из
+  данных IFC (сдвоенные розетки), порты IfcDistributionPort — задел авто-трассировки
+  
 ## 2ae. Продолжение провода от свободного конца (issue #81, ветка `feature/wire-continue-81`)
 
 - [x] W1. Магнит к свободным концам трасс в суб-режиме Wire (радиус терминала, 10 см;

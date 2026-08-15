@@ -125,6 +125,19 @@ namespace RoomPlanner.Core.Ifc
         public SurfaceFinish Finish;
     }
 
+    /// <summary>A power outlet recognized in the IFC (#79) — converted into a NATIVE
+    /// electrical fixture by the importer instead of a dumb baked mesh.</summary>
+    public sealed class ImportedOutlet
+    {
+        public string Name;
+        /// <summary>Plate centre, Unity world metres.</summary>
+        public Vector3 Position;
+        /// <summary>Unsigned mounting axis (the plate's thin side); the scene side
+        /// picks the sign that faces away from the host wall.</summary>
+        public Vector3 Normal = Vector3.forward;
+        public int StoreyIndex = -1;
+    }
+
     public sealed class ImportedBuilding
     {
         public List<ImportedStorey> Storeys = new();
@@ -133,6 +146,7 @@ namespace RoomPlanner.Core.Ifc
         public List<ImportedOpening> Openings = new();
         public List<ImportedStair> Stairs = new();
         public List<ImportedMep> Plumbing = new();
+        public List<ImportedOutlet> Outlets = new();
 
         // Honest import status: what the MVP subset could not represent (shown in UI).
         public int SkippedWalls;

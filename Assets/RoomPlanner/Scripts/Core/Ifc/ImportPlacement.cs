@@ -69,6 +69,7 @@ namespace RoomPlanner.Core.Ifc
             }
             foreach (var st in b.Stairs) st.Base += delta;
             foreach (var m in b.Plumbing) m.Origin += delta;
+            foreach (var o in b.Outlets) o.Position += delta;
         }
 
         /// <summary>Stand the building's bottom-center on target.</summary>
