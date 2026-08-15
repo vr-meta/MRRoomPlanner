@@ -90,11 +90,16 @@ ENDSEC;";
         [Test]
         public void WallAxisLandsAtExactWorldPosition()
         {
-            // Wall #150: placement (8425,0,0) rotated X→north, axis (0,0)→(7000,0).
-            // Expected Unity endpoints: (8.425, 0, 0) → (8.425, 0, 7).
+            // Wall #150: placement (8425,0,0) rotated X→north, axis (0,0)→(7000,0) —
+            // Unity (8.425, 0, 0) → (8.425, 0, 7). WallAxisWeld (#111/#119) may pull
+            // the ENDPOINTS along/toward neighbour axes within the joint reach, but
+            // the axis LINE itself must land exactly where the file drew it.
             var w = Building.Walls.First(x => !x.FromColumn);
-            Assert.AreEqual(0f, Vector3.Distance(w.Path[0], new Vector3(8.425f, 0f, 0f)), 1e-3);
-            Assert.AreEqual(0f, Vector3.Distance(w.Path[1], new Vector3(8.425f, 0f, 7f)), 1e-3);
+            Assert.AreEqual(8.425f, w.Path[0].x, 0.25f);
+            Assert.AreEqual(8.425f, w.Path[1].x, 0.25f);
+            Assert.AreEqual(0f, w.Path[0].z, 0.25f);
+            Assert.AreEqual(7f, w.Path[1].z, 0.25f);
+            Assert.AreEqual(0f, w.Path[0].y, 1e-3);
         }
 
         [Test]
