@@ -138,12 +138,18 @@ ENDSEC;";
             Assert.AreEqual(2.275f, landing.Level, 1e-3);
             Assert.AreEqual(0.3528f, landing.Thickness, 1e-3);
             Assert.AreEqual(0, landing.StoreyIndex, "storey inherited from the stair via IfcRelAggregates");
+            // The drawn top face is 2100 × 1050 at (3400, 5800), but three of its edges
+            // lie on wall axes, and SlabWallAlignment (#117) extends those to the wall
+            // FAR faces — so the landing may only ever GROW outward, up to half the
+            // thickest bordering wall per side, never shrink.
             float dx = landing.Outline.Max(p => p.x) - landing.Outline.Min(p => p.x);
             float dz = landing.Outline.Max(p => p.z) - landing.Outline.Min(p => p.z);
-            Assert.AreEqual(2.1f, dx, 1e-3);
-            Assert.AreEqual(1.05f, dz, 1e-3);
-            Assert.AreEqual(3.4f, landing.Outline.Min(p => p.x), 1e-3);
-            Assert.AreEqual(5.8f, landing.Outline.Min(p => p.z), 1e-3);
+            Assert.GreaterOrEqual(dx, 2.1f - 1e-3f);
+            Assert.LessOrEqual(dx, 2.1f + 0.4f);
+            Assert.GreaterOrEqual(dz, 1.05f - 1e-3f);
+            Assert.LessOrEqual(dz, 1.05f + 0.4f);
+            Assert.LessOrEqual(landing.Outline.Min(p => p.x), 3.4f + 1e-3f);
+            Assert.LessOrEqual(landing.Outline.Min(p => p.z), 5.8f + 1e-3f);
             foreach (var p in landing.Outline)
                 Assert.AreEqual(landing.Level, p.y, 1e-4, "outline sits on the top plane");
         }
