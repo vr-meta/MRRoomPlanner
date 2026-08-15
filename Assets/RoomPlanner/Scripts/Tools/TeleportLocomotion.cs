@@ -170,22 +170,45 @@ namespace RoomPlanner.Tools
 
         // ---- smooth locomotion (left stick, scan-off virtual mode only) ----
 
+        // ←/→ snap turn (feedback 2026-08-15): a discrete pivot beats the unused
+        // strafe — turning the whole body in the chair got old fast
+        private const float SnapTurnDeg = 45f;
+        private const float SnapTurnThreshold = 0.6f;
+        private const float SnapTurnRearm = 0.3f;
+        private bool _snapArmed = true;
+
         private void TickMove(bool scanOn)
         {
             if (scanOn) return;                     // passthrough: walk with your feet
             Vector2 stick = input.LeftThumbstick();
-            if (stick.sqrMagnitude < StickDeadZone * StickDeadZone) return;
 
             var cam = Camera.main;
             Transform rig = ResolveRig();
             if (cam == null || rig == null) return;
 
+            // ←/→ = snap turn around the head, once per push, re-armed at the center
+            if (Mathf.Abs(stick.x) > SnapTurnThreshold)
+            {
+                if (_snapArmed)
+                {
+                    _snapArmed = false;
+                    rig.RotateAround(cam.transform.position, Vector3.up,
+                        Mathf.Sign(stick.x) * SnapTurnDeg);
+                    input.PulseLeft(0.3f, 0.02f);
+                }
+            }
+            else if (Mathf.Abs(stick.x) < SnapTurnRearm)
+            {
+                _snapArmed = true;
+            }
+
+            if (Mathf.Abs(stick.y) < StickDeadZone) return;
+
             Vector3 fwd = cam.transform.forward;
             fwd.y = 0f;
             if (fwd.sqrMagnitude < 1e-4f) return;   // looking straight down — no heading
             fwd.Normalize();
-            Vector3 right = new(fwd.z, 0f, -fwd.x);
-            Vector3 step = (fwd * stick.y + right * stick.x) * (MoveSpeed * Time.deltaTime);
+            Vector3 step = fwd * (stick.y * MoveSpeed * Time.deltaTime);
 
             // Horizontal only — the vertical is gravity's job (GroundService settles the
             // MODEL to the feet). The one thing refused here is a ledge too tall to step
