@@ -389,6 +389,46 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator Picker_Paginates_AndChangesContentWhenTheFilterChanges()
+        {
+            // Headset feedback 2026-08-15: the grid showed the first two dozen items with
+            // no way to reach the rest, and switching category left the previous pictures
+            // on screen. Both come from rows being built once: the grid needs a page, and
+            // the panel needs to know the content changed.
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+
+            var place = tool.GetSettings().TabPages[0];
+            var page = Row(place, "page");
+            var grid = Row(place, "item");
+            Assert.NotNull(page.Value, "the picker states which page it is on");
+            Assert.NotNull(grid.ContentVersion, "the grid must announce content changes");
+
+            // One page at a time, never the whole pack in one wall of chips.
+            Assert.LessOrEqual(grid.PreviewCount(), FurnitureController.ItemsPerPage);
+
+            int before = grid.ContentVersion();
+            page.Increase?.Invoke();                       // next page
+            int afterPage = grid.ContentVersion();
+            var collectionRow = Row(place, "collection");
+
+            // Paging only means something when there is more than one page; with a small
+            // catalog installed the version must at least stay consistent.
+            if (page.Value().StartsWith("2/"))
+                Assert.AreNotEqual(before, afterPage, "a new page is new content");
+
+            // Switching collection must always invalidate the grid.
+            int optionCount = collectionRow.ResolveOptions().Length;
+            collectionRow.SetIndex?.Invoke((collectionRow.GetIndex() + 1) % optionCount);
+            Assert.AreNotEqual(afterPage, grid.ContentVersion(),
+                "changing the collection must rebuild the pictures");
+        }
+
+        [UnityTest]
         public IEnumerator Partition_IsGeneratedOnPlacement_AndResizesFromItsInspector()
         {
             // A slat screen is parameters, not a file (#86): it must be complete the moment

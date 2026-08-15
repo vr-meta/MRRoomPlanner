@@ -38,6 +38,7 @@ namespace RoomPlanner.Tools
         private SettingsSchema _bound;
         private SettingsSchema _boundPage;
         private int _boundSelRows = -1;
+        private int _boundVersion;
         private readonly List<System.Action> _refreshers = new();
         private readonly List<SliderWidget> _sliders = new();
         private readonly List<(SettingField field, Transform fill, float width, Mesh mesh)> _progressBars = new();
@@ -122,17 +123,26 @@ namespace RoomPlanner.Tools
             _bound = null;
             _boundPage = null;
             _boundSelRows = -1;
+            _boundVersion = 0;
         }
 
         private void Bind(SettingsSchema schema, int selRows)
         {
             var page = schema.ActivePage();
+            // Content version: rows are built once and refreshed in place, so a row whose
+            // CONTENT changed (another category in a preview grid) has to force a rebuild —
+            // otherwise the panel keeps showing the previous pictures (feedback 2026-08-15).
+            int version = 0;
+            foreach (var f in page.Fields)
+                version = version * 397 + (f.ContentVersion?.Invoke() ?? 0);
+
             if (ReferenceEquals(_bound, schema) && ReferenceEquals(_boundPage, page)
-                && _boundSelRows == selRows) return;
+                && _boundSelRows == selRows && _boundVersion == version) return;
             Clear();
             _bound = schema;
             _boundPage = page;
             _boundSelRows = selRows;
+            _boundVersion = version;
 
             if (schema.HasTabs) BuildTabStrip(schema, selRows);
 

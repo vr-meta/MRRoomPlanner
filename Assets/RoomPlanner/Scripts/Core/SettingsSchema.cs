@@ -71,6 +71,14 @@ namespace RoomPlanner.Core
         public Func<int, Texture2D> PreviewProvider;
         public Func<int, string> PreviewLabel;
 
+        /// <summary>
+        /// Changes whenever the row's CONTENT changes (a different category, a different
+        /// page). Rows are built once and only refreshed in place, so without this a
+        /// preview grid keeps showing the previous category's pictures (headset feedback
+        /// 2026-08-15). Null = static content.
+        /// </summary>
+        public Func<int> ContentVersion;
+
         // Action
         public bool Destructive;       // outline + hold-to-fill Danger (design/20 §2.8)
 
@@ -235,13 +243,13 @@ namespace RoomPlanner.Core
         /// </summary>
         public SettingsSchema PreviewSwatch(string id, string caption,
             Func<int> count, Func<int, Texture2D> preview, Func<int, string> label,
-            Func<int> getIndex, Action<int> setIndex)
+            Func<int> getIndex, Action<int> setIndex, Func<int> contentVersion = null)
         {
             _fields.Add(new SettingField
             {
                 Id = id, Caption = caption, Kind = SettingKind.Swatch,
                 PreviewCount = count, PreviewProvider = preview, PreviewLabel = label,
-                GetIndex = getIndex, SetIndex = setIndex,
+                GetIndex = getIndex, SetIndex = setIndex, ContentVersion = contentVersion,
             });
             return this;
         }

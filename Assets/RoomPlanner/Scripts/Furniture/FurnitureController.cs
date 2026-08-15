@@ -152,37 +152,41 @@ namespace RoomPlanner.Furniture
             var place = new SettingsSchema()
                 .Select("collection", "Collection", () => { RefreshLists(); return _collectionNames; },
                     () => _collection,
-                    i => { _collection = i; _category = 0; _sub = 0; _item = 0; _catalogStamp = -1; RefreshLists(); })
+                    i => { _collection = i; _category = 0; _sub = 0; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
                 .Select("category", "Category", () => { RefreshLists(); return _categoryNames; },
                     () => _category,
-                    i => { _category = i; _sub = 0; _item = 0; _catalogStamp = -1; RefreshLists(); })
+                    i => { _category = i; _sub = 0; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
                 .Select("sub", "Type", () => { RefreshLists(); return _subNames; },
                     () => _sub,
-                    i => { _sub = i; _item = 0; _catalogStamp = -1; RefreshLists(); })
+                    i => { _sub = i; _item = 0; _page = 0; _catalogStamp = -1; RefreshLists(); })
                 // Pictures, not names: "Sofa (classic)" vs "Sofa (fabric)" means nothing
-                // until it is in the room (headset feedback 2026-08-15, #83).
+                // until it is in the room (headset feedback 2026-08-15, #83). The grid shows
+                // one PAGE — a pack has hundreds of items and a panel taller than the user
+                // is not a menu (design/20 §3).
+                .Stepper("page", "Page", () => $"{_page + 1}/{PageCount}",
+                    () => SetPage(_page - 1), () => SetPage(_page + 1))
                 .PreviewSwatch("item", "Item",
-                    () => { RefreshLists(); return _items.Count; },
-                    i => library != null && i >= 0 && i < _items.Count ? library.PreviewOf(_items[i]) : null,
-                    i => i >= 0 && i < _items.Count ? _items[i].Name : null,
-                    () => _item, i => _item = i)
+                    () => { RefreshLists(); return PageSize(); },
+                    i => library != null ? library.PreviewOf(ItemAt(i)) : null,
+                    i => ItemAt(i)?.Name,
+                    () => _item - _page * ItemsPerPage,
+                    i => _item = _page * ItemsPerPage + i,
+                    PickerVersion)
                 .Stepper("yaw", "Rotate", () => $"{_yaw:0}°",
                     () => AdjustYaw(-PlacementOptions.DefaultYawStep),
                     () => AdjustYaw(PlacementOptions.DefaultYawStep))
                 .Toggle("snap", "Snap to wall", () => _snapToWall, v => _snapToWall = v)
-                .Readout("size", "Size", () =>
+                // Size AND provenance in one row: the page is at the eight-row ceiling
+                // (design/20 §3), and both facts belong to the same selected item anyway.
+                .Readout("size", "Item", () =>
                 {
+                    if (library != null && !library.Ready) return library.Status;
                     var item = CurrentItem;
-                    return item == null ? "—"
-                        : $"{item.Size.x * 100f:0} × {item.Size.z * 100f:0} × {item.Size.y * 100f:0} cm";
-                })
-                .Readout("source", "Source", () =>
-                {
-                    if (library == null) return "—";
-                    if (!library.Ready) return library.Status;
+                    if (item == null) return "—";
+                    string size = $"{item.Size.x * 100f:0} × {item.Size.z * 100f:0} × {item.Size.y * 100f:0} cm";
                     var c = CurrentCollection;
-                    return c == null ? library.Status
-                        : string.IsNullOrEmpty(c.Author) ? c.License : $"{c.Author} · {c.License}";
+                    string licence = c == null ? null : (c.CommercialUse ? c.License : c.License + " (NC)");
+                    return string.IsNullOrEmpty(licence) ? size : $"{size} · {licence}";
                 });
 
             var move = new SettingsSchema()
@@ -197,6 +201,43 @@ namespace RoomPlanner.Furniture
                 () => _tab, i => { _tab = Mathf.Clamp(i, 0, 1); EndDrag(record: true); },
                 place, move);
             return _settings;
+        }
+
+        /// <summary>Chips per page — 6 columns × 4 rows, the grid the panel renders.</summary>
+        public const int ItemsPerPage = 24;
+
+        private int _page;
+
+        private int PageCount => Mathf.Max(1, Mathf.CeilToInt(_items.Count / (float)ItemsPerPage));
+
+        /// <summary>Items on the current page (the last one is usually short).</summary>
+        private int PageSize() =>
+            Mathf.Clamp(_items.Count - _page * ItemsPerPage, 0, ItemsPerPage);
+
+        private FurnitureItem ItemAt(int indexOnPage)
+        {
+            int i = _page * ItemsPerPage + indexOnPage;
+            return i >= 0 && i < _items.Count ? _items[i] : null;
+        }
+
+        private void SetPage(int page)
+        {
+            int clamped = Mathf.Clamp(page, 0, PageCount - 1);
+            if (clamped == _page) return;
+            _page = clamped;
+            // Keep a valid selection on the page the user is looking at.
+            _item = Mathf.Min(_page * ItemsPerPage, Mathf.Max(0, _items.Count - 1));
+        }
+
+        /// <summary>
+        /// Identifies WHAT the picker is showing. The panel rebuilds its rows when this
+        /// changes — without it, switching category left the previous category's pictures
+        /// on screen (headset feedback 2026-08-15).
+        /// </summary>
+        private int PickerVersion()
+        {
+            RefreshLists();
+            return ((_collection * 31 + _category) * 31 + _sub) * 1021 + _page * 7 + _items.Count;
         }
 
         private void AdjustYaw(float delta) =>
