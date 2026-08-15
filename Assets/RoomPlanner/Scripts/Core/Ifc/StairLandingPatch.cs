@@ -27,26 +27,32 @@ namespace RoomPlanner.Core.Ifc
                 if (s.Risers <= 0 || s.RiserHeight <= 0f || s.TreadDepth <= 0f) continue;
                 float topY = s.Base.y + s.Risers * s.RiserHeight;
 
+                Vector3 dir = Quaternion.Euler(0f, s.YawDeg, 0f) * Vector3.forward;
+                Vector3 topEdge = s.Base + dir * (s.Risers * s.TreadDepth);
+
+                // several slabs can share the arrival level (the terrace does) — the
+                // one whose HOLE contains the top edge is the stairwell slab, not
+                // whichever happened to come first in the file
                 ImportedSlab arrival = null;
+                List<Vector3> throughHole = null;
                 float bestGap = LevelTolerance;
                 foreach (var sl in b.Slabs)
                 {
                     float gap = Mathf.Abs(sl.Level - topY);
-                    if (gap < bestGap) { bestGap = gap; arrival = sl; }
+                    if (gap >= bestGap) continue;
+                    foreach (var hole in sl.Holes)
+                    {
+                        if (hole == null || hole.Count < 3) continue;
+                        if (!PointInRingXZ(hole, topEdge)) continue;
+                        bestGap = gap; arrival = sl; throughHole = hole;
+                        break;
+                    }
                 }
                 if (arrival == null) continue;
 
-                Vector3 dir = Quaternion.Euler(0f, s.YawDeg, 0f) * Vector3.forward;
-                Vector3 topEdge = s.Base + dir * (s.Risers * s.TreadDepth);
-                foreach (var hole in arrival.Holes)
-                {
-                    if (hole == null || hole.Count < 3) continue;
-                    if (!PointInRingXZ(hole, topEdge)) continue;
-                    float travel = RayToRingXZ(hole, topEdge, dir);
-                    if (travel <= 0f || travel > MaxTravel) continue;
-                    patches.Add(MakePatch(topEdge, dir, s.Width, travel + Overlap, arrival));
-                    break;
-                }
+                float travel = RayToRingXZ(throughHole, topEdge, dir);
+                if (travel <= 0f || travel > MaxTravel) continue;
+                patches.Add(MakePatch(topEdge, dir, s.Width, travel + Overlap, arrival));
             }
             b.Slabs.AddRange(patches);
         }

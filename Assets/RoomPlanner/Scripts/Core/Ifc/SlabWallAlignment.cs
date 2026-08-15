@@ -47,8 +47,21 @@ namespace RoomPlanner.Core.Ifc
                 {
                     if (w.Path.Count < 2 || w.Thickness <= 0f) continue;
                     Vector3 wa = w.Path[0], wb = w.Path[w.Path.Count - 1];
-                    if (DistXZ(a, wa, wb) > AxisTolerance) continue;
-                    if (DistXZ(c, wa, wb) > AxisTolerance) continue;
+                    wa.y = 0f; wb.y = 0f;
+                    Vector3 wd = wb - wa;
+                    float wlen = wd.magnitude;
+                    if (wlen < 1e-4f) continue;
+                    wd /= wlen;
+                    // the wall axis is often SHORTER than the slab edge it carries
+                    // (several collinear walls under one edge) — match against the
+                    // infinite LINE, but demand a real overlap with the wall segment
+                    if (LineDistXZ(a, wa, wd) > AxisTolerance) continue;
+                    if (LineDistXZ(c, wa, wd) > AxisTolerance) continue;
+                    float ta = Vector3.Dot(new Vector3(a.x - wa.x, 0f, a.z - wa.z), wd);
+                    float tc = Vector3.Dot(new Vector3(c.x - wa.x, 0f, c.z - wa.z), wd);
+                    float overlap = Mathf.Min(Mathf.Max(ta, tc), wlen)
+                                  - Mathf.Max(Mathf.Min(ta, tc), 0f);
+                    if (overlap < 0.2f) continue;
                     offsets[i] = Mathf.Max(offsets[i], w.Thickness * 0.5f);
                 }
             }
@@ -100,14 +113,12 @@ namespace RoomPlanner.Core.Ifc
         private static Vector3 OutNormal(Vector3 dir, float outSign) =>
             new Vector3(dir.z, 0f, -dir.x) * outSign;
 
-        private static float DistXZ(Vector3 p, Vector3 a, Vector3 b)
+        /// <summary>Distance from p to the INFINITE line (origin, unit dir) in plan.</summary>
+        private static float LineDistXZ(Vector3 p, Vector3 origin, Vector3 dir)
         {
-            var p2 = new Vector3(p.x, 0f, p.z);
-            a.y = 0f; b.y = 0f;
-            Vector3 ab = b - a;
-            if (ab.sqrMagnitude < 1e-10f) return Vector3.Distance(p2, a);
-            float t = Mathf.Clamp01(Vector3.Dot(p2 - a, ab) / ab.sqrMagnitude);
-            return Vector3.Distance(a + ab * t, p2);
+            var v = new Vector3(p.x - origin.x, 0f, p.z - origin.z);
+            float along = Vector3.Dot(v, dir);
+            return (v - dir * along).magnitude;
         }
     }
 }

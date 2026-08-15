@@ -72,6 +72,22 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void ShortCollinearWall_StillCarriesTheLongEdge()
+        {
+            var b = new ImportedBuilding();
+            var slab = Square(4f);
+            b.Slabs.Add(slab);
+            // the axis under the 4 m edge is a 1.5 m wall piece — the drawing often
+            // splits one edge across several collinear walls (the Project1 terrace)
+            b.Walls.Add(Wall(new Vector3(1f, 0f, 0f), new Vector3(2.5f, 0f, 0f), 0.2f));
+
+            SlabWallAlignment.Apply(b);
+
+            Assert.AreEqual(-0.1f, slab.Outline[0].z, 1e-4);
+            Assert.AreEqual(-0.1f, slab.Outline[1].z, 1e-4);
+        }
+
+        [Test]
         public void ClockwiseOutline_StillExtendsOutward()
         {
             var b = new ImportedBuilding();
