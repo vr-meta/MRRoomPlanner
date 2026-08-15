@@ -39,6 +39,7 @@ namespace RoomPlanner.EditorTools
                 ShotInspectorShowcase(cam, ctx);
                 ShotNumpad(cam, ctx);
                 ShotEveryTool(cam, ctx);
+                ShotFixtures(cam);
 
                 Debug.Log("[CI] ui-shots saved to Build/ui-shots");
             }
@@ -263,6 +264,70 @@ namespace RoomPlanner.EditorTools
                     Tint = slots[i].tint, ToolIndex = slots[i].tool,
                 };
             return defs;
+        }
+
+        /// <summary>Electrical fixtures side by side (issue #134) — the design record for
+        /// «розетки и выключатели должны быть реалистичнее»: geometry judged headless
+        /// instead of by putting the headset on for every tweak.</summary>
+        private static void ShotFixtures(Camera cam)
+        {
+            var body = AssetDatabase.LoadAssetAtPath<Material>($"{SetupAssets.MatDir}/Electric_Fixture.mat");
+            var accent = AssetDatabase.LoadAssetAtPath<Material>($"{SetupAssets.MatDir}/Electric_Accent.mat");
+            if (body == null) return;
+
+            var host = new GameObject("Fixtures");
+            try
+            {
+                var light = new GameObject("Sun").AddComponent<Light>();
+                light.type = LightType.Directional;
+                light.intensity = 1.6f;
+                // the light travels toward -Z, i.e. onto the faces that look at the room
+                light.transform.rotation = Quaternion.Euler(30f, 145f, 0f);
+                // an empty scene has no ambient at all — the recesses would read as
+                // black holes instead of shadow
+                var savedMode = RenderSettings.ambientMode;
+                var savedAmbient = RenderSettings.ambientLight;
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+                RenderSettings.ambientLight = new Color(0.42f, 0.44f, 0.48f);
+
+                var kinds = new[]
+                {
+                    (RoomPlanner.Electrical.FixtureKind.Outlet, 2, 1),
+                    (RoomPlanner.Electrical.FixtureKind.Switch, 1, 2),
+                    (RoomPlanner.Electrical.FixtureKind.Junction, 1, 1),
+                };
+                float x = -0.36f;
+                foreach (var (kind, posts, keys) in kinds)
+                {
+                    var go = new GameObject(kind.ToString());
+                    go.transform.SetParent(host.transform, false);
+                    go.transform.position = new Vector3(x, 0f, 0f);
+                    go.AddComponent<MeshFilter>();
+                    go.AddComponent<MeshRenderer>().sharedMaterials =
+                        new[] { body, accent != null ? accent : body };
+                    go.AddComponent<RoomPlanner.Electrical.ElectricFixture>().Build(kind, posts, keys);
+                    x += 0.17f;
+                }
+                var panelGo = new GameObject("Panel");
+                panelGo.transform.SetParent(host.transform, false);
+                panelGo.transform.position = new Vector3(0.22f, 0f, 0f);
+                panelGo.AddComponent<MeshFilter>();
+                panelGo.AddComponent<MeshRenderer>().sharedMaterials =
+                    new[] { body, accent != null ? accent : body };
+                panelGo.AddComponent<RoomPlanner.Electrical.ElectricFixture>()
+                    .Build(RoomPlanner.Electrical.FixtureKind.Panel, 1, 1);
+
+                // the fixtures face +Z (the room), so the camera stands in front of them
+                Shoot(cam, new Vector3(-0.07f, 0.10f, 0.95f), new Vector3(-0.07f, 0f, 0f),
+                    "electric-fixtures", 1600, 900);
+                UnityEngine.Object.DestroyImmediate(light.gameObject);
+                RenderSettings.ambientMode = savedMode;
+                RenderSettings.ambientLight = savedAmbient;
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+            }
         }
 
         private static void LoadMaterials(RigContext ctx)

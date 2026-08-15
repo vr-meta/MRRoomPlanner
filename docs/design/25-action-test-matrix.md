@@ -39,6 +39,7 @@
 | Paint | по сторонам стены / текстуры | к | `PaintPlayTests`, round-trip |
 | Paint | ластик «Original look» | — | |
 | Electric | схема/команды/BOM щитка | к | `ElectricalPlayTests` |
+| Electric | геометрия фурнитуры: выемки вычитают объём, сабмеши | к | `ElectricFixtureGeometryTests` |
 | Electric | жест: розетка триггером по стене | — | |
 | Electric | жест: продолжение трассы от свободного конца | ✓ | `WireGesturePlayTests` |
 | Electric | жест: трасса с нуля + клик по терминалу | — | |

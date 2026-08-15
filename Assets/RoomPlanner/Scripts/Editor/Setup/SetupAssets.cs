@@ -79,6 +79,20 @@ namespace RoomPlanner.EditorTools
             MakeGlossy(ctx.WireMat, 0.30f);
             ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
             MakeGlossy(ctx.FixtureMat, 0.55f);
+            // real trade plastic instead of a flat tint (issue #134): the catalog's white
+            // plastic over the fixture's METRIC uvs, so the grain has a real-world scale
+            var plastic = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TextureDownloader.PathFor("Objects", "plastic-white"));
+            if (plastic != null)
+            {
+                ApplyTexture(ctx.FixtureMat, plastic);
+                // 0.3 m tile — the catalog value for plastic-white
+                ctx.FixtureMat.SetVector("_BaseMap_ST", new Vector4(1f / 0.3f, 1f / 0.3f, 0f, 0f));
+            }
+            // accents (issue #134): socket pins, screws, DIN rail, panel handle — dark
+            // metal on submesh 1, so paint on the plate never touches them
+            ctx.FixtureAccentMat = CreatePlainLitMat("Electric_Accent", new Color(0.20f, 0.21f, 0.22f));
+            MakeGlossy(ctx.FixtureAccentMat, 0.75f);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
