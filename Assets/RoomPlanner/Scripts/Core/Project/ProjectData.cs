@@ -27,6 +27,9 @@ namespace RoomPlanner.Core.Project
         /// <summary>Leaf openness 0..1 (v3, issue #50). Pre-v3 readers derive 0.75
         /// from a non-zero Swing (the old "imported doors stand open" look).</summary>
         public float Open;
+        /// <summary>v5: frame + leaf finish from the IFC material (issue #133); Kind 0 =
+        /// the rig's joinery material, as every file before v5.</summary>
+        public ProjectFinish Frame = new();
     }
 
     /// <summary>

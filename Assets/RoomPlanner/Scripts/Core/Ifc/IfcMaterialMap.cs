@@ -131,6 +131,30 @@ namespace RoomPlanner.Core.Ifc
             return Match.None;
         }
 
+        /// <summary>
+        /// Which material of a door/window is the FRAME (issue #133). Revit ships them as
+        /// a material list — a passage door is «Aluminum + Wood - Birch + Metal - Paint
+        /// Finish - Grey», a window is «Wood - Stained + Glass». The leaf and the frame
+        /// are the wood when there is wood, the metal otherwise; glass never (it has its
+        /// own see-through material), and a name the catalog cannot answer is the last
+        /// resort. Returns null when nothing usable is in the list.
+        /// </summary>
+        public static string PickFrame(IReadOnlyList<string> names)
+        {
+            if (names == null) return null;
+            string wood = null, metal = null, other = null;
+            foreach (string name in names)
+            {
+                if (string.IsNullOrWhiteSpace(name) || IsGlass(name)) continue;
+                var m = Resolve(name);
+                if (m.IsNone) { other ??= name; continue; }
+                if (m.FinishId.StartsWith("wood", StringComparison.Ordinal)) wood ??= name;
+                else if (m.FinishId.StartsWith("metal", StringComparison.Ordinal)) metal ??= name;
+                else other ??= name;
+            }
+            return wood ?? metal ?? other;
+        }
+
         /// <summary>True when the name says «glass» — the element takes the see-through
         /// material even if the file forgot to set transparency (TV screens do).</summary>
         public static bool IsGlass(string name)

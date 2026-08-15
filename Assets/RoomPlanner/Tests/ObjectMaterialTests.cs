@@ -256,6 +256,47 @@ END-ISO-10303-21;";
             Assert.IsTrue(IfcMaterialMap.Resolve(name).IsNone, $"'{name}' must not be guessed");
         }
 
+        // ------------------------------------------------- doors and windows (#133)
+
+        /// <summary>Revit ships a door as a material LIST; the leaf and frame are the
+        /// wood when there is wood, the metal otherwise, and never the glazing.</summary>
+        [Test]
+        public void FramePickPrefersWoodThenMetalNeverGlass()
+        {
+            Assert.AreEqual("Wood - Birch", IfcMaterialMap.PickFrame(new[]
+            {
+                "Aluminum", "Wood - Birch", "Metal - Paint Finish - Grey",
+            }), "passage door: the leaf is birch, not its aluminium hardware");
+
+            Assert.AreEqual("Cherry", IfcMaterialMap.PickFrame(new[]
+            {
+                "Cherry", "Metal - Stainless Steel", "Metal - Painted - Grey", "Glass",
+            }), "exterior door: cherry leaf");
+
+            Assert.AreEqual("Wood - Stained", IfcMaterialMap.PickFrame(new[]
+            {
+                "Wood - Stained", "Glass",
+            }), "window: the frame, not the pane");
+
+            Assert.AreEqual("Metal - Stainless Steel", IfcMaterialMap.PickFrame(new[]
+            {
+                "Glass", "Metal - Stainless Steel",
+            }), "no wood in the list → the metal");
+
+            Assert.IsNull(IfcMaterialMap.PickFrame(new[] { "Glass", "Стекло" }),
+                "glass only → nothing to dress, the pane has its own material");
+            Assert.IsNull(IfcMaterialMap.PickFrame(null));
+        }
+
+        [Test]
+        public void FramePickFallsBackToAnUnknownName()
+        {
+            // unknown names are still returned: the caller decides (a finish comes out
+            // None and the joinery keeps the rig material), but the name is not lost
+            Assert.AreEqual("Default Wall",
+                IfcMaterialMap.PickFrame(new[] { "Glass", "Default Wall" }));
+        }
+
         [Test]
         public void GlassIsRecognisedAndCarriesNoTexture()
         {

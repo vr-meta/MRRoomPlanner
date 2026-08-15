@@ -120,7 +120,7 @@ namespace RoomPlanner.Core.Ifc
 
             // The product's material is the fallback name/colour for parts the geometry
             // did not style — 152 of ~260 products in the reference export (design/29 §1.3).
-            bool hasMat = c.MaterialOfElement.TryGetValue(id, out int matId);
+            bool hasMat = c.TryFirstMaterial(id, out int matId);
             string matName = hasMat && c.MaterialName.TryGetValue(matId, out string mn) ? mn : null;
             StyleRec matStyle = default;
             bool matStyled = hasMat && c.StyleOfMaterial.TryGetValue(matId, out matStyle);
@@ -621,8 +621,31 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, int> TypeOfElement = new();     // element id → style/type record
             public readonly Dictionary<int, StyleRec> StyleOfItem = new();  // geometry item id → style
             public readonly Dictionary<int, StyleRec> StyleOfMaterial = new(); // IfcMaterial id → style
-            public readonly Dictionary<int, int> MaterialOfElement = new(); // element/type id → IfcMaterial id
+            // element/type id → its IfcMaterials, in file order (Revit ships doors and
+            // windows as a LIST: wood + aluminium + painted metal + glass)
+            public readonly Dictionary<int, List<int>> MaterialsOfElement = new();
             public readonly Dictionary<int, string> MaterialName = new();   // IfcMaterial id → name
+
+            /// <summary>First material of an element, the one baked parts fall back to.</summary>
+            public bool TryFirstMaterial(int element, out int material)
+            {
+                material = 0;
+                if (!MaterialsOfElement.TryGetValue(element, out var list) || list.Count == 0)
+                    return false;
+                material = list[0];
+                return true;
+            }
+
+            /// <summary>Names of an element's materials (empty when it has none).</summary>
+            public List<string> MaterialNamesOf(int element)
+            {
+                var names = new List<string>();
+                if (!MaterialsOfElement.TryGetValue(element, out var list)) return names;
+                foreach (int id in list)
+                    if (MaterialName.TryGetValue(id, out string n) && !string.IsNullOrEmpty(n))
+                        names.Add(n);
+                return names;
+            }
         }
 
         /// <summary>One IfcSurfaceStyle as we use it: the NAME (the only reliable signal
@@ -750,59 +773,54 @@ namespace RoomPlanner.Core.Ifc
             }
 
             // IFCRELASSOCIATESMATERIAL(…, RelatedObjects, RelatingMaterial)
+            var found = new List<int>();
             foreach (int id in c.F.OfType("IFCRELASSOCIATESMATERIAL"))
             {
                 var a = c.F.Args(id);
                 if (a == null || a.Count < 6 || a[4].Kind != StepKind.List
                     || a[5].Kind != StepKind.Ref) continue;
-                int mat = FirstMaterial(c, a[5].Ref, 0);
-                if (mat == 0) continue;
+                found.Clear();
+                CollectMaterials(c, a[5].Ref, 0, found);
+                if (found.Count == 0) continue;
                 foreach (var el in a[4].Items)
-                    if (el.Kind == StepKind.Ref && !c.MaterialOfElement.ContainsKey(el.Ref))
-                        c.MaterialOfElement[el.Ref] = mat;
+                    if (el.Kind == StepKind.Ref && !c.MaterialsOfElement.ContainsKey(el.Ref))
+                        c.MaterialsOfElement[el.Ref] = new List<int>(found);
             }
 
             // IFCRELDEFINESBYTYPE(…, RelatedObjects, RelatingType) — inherit the type's
-            // material where the instance has none of its own
+            // materials where the instance has none of its own
             foreach (int id in c.F.OfType("IFCRELDEFINESBYTYPE"))
             {
                 var a = c.F.Args(id);
                 if (a == null || a.Count < 6 || a[4].Kind != StepKind.List
                     || a[5].Kind != StepKind.Ref) continue;
-                if (!c.MaterialOfElement.TryGetValue(a[5].Ref, out int mat)) continue;
+                if (!c.MaterialsOfElement.TryGetValue(a[5].Ref, out var mats)) continue;
                 foreach (var el in a[4].Items)
-                    if (el.Kind == StepKind.Ref && !c.MaterialOfElement.ContainsKey(el.Ref))
-                        c.MaterialOfElement[el.Ref] = mat;
+                    if (el.Kind == StepKind.Ref && !c.MaterialsOfElement.ContainsKey(el.Ref))
+                        c.MaterialsOfElement[el.Ref] = new List<int>(mats);
             }
         }
 
-        /// <summary>First IfcMaterial inside a RelatingMaterial (which may be a material,
-        /// a list, a layer set or a layer-set usage); 0 when there is none.</summary>
-        private static int FirstMaterial(Ctx c, int id, int depth)
+        /// <summary>Every IfcMaterial inside a RelatingMaterial (which may be a material,
+        /// a list, a layer set or a layer-set usage), in file order and without repeats —
+        /// a door arrives as «Aluminum + Wood - Birch + Metal - Paint Finish - Grey».</summary>
+        private static void CollectMaterials(Ctx c, int id, int depth, List<int> result)
         {
-            if (id == 0 || depth > 4) return 0;
-            string t = c.F.TypeOf(id);
-            if (t == "IFCMATERIAL") return id;
+            if (id == 0 || depth > 4) return;
+            if (c.F.TypeOf(id) == "IFCMATERIAL")
+            {
+                if (!result.Contains(id)) result.Add(id);
+                return;
+            }
             var a = c.F.Args(id);
-            if (a == null) return 0;
+            if (a == null) return;
             foreach (var v in a)
             {
-                if (v.Kind == StepKind.Ref)
-                {
-                    int m = FirstMaterial(c, v.Ref, depth + 1);
-                    if (m != 0) return m;
-                }
+                if (v.Kind == StepKind.Ref) CollectMaterials(c, v.Ref, depth + 1, result);
                 else if (v.Kind == StepKind.List)
-                {
                     foreach (var it in v.Items)
-                    {
-                        if (it.Kind != StepKind.Ref) continue;
-                        int m = FirstMaterial(c, it.Ref, depth + 1);
-                        if (m != 0) return m;
-                    }
-                }
+                        if (it.Kind == StepKind.Ref) CollectMaterials(c, it.Ref, depth + 1, result);
             }
-            return 0;
         }
 
         private static void MapVoidsAndFills(Ctx c)
@@ -1028,6 +1046,11 @@ namespace RoomPlanner.Core.Ifc
                     HingeDir = hingeDir,
                     // swing known → the door stands open (the pre-#50 imported look)
                     OpenFraction = swingDir.sqrMagnitude > 1e-6f ? 0.75f : 0f,
+                    // what the frame and the leaf are made of (issue #133): the door or
+                    // window itself carries the material list, the empty opening does not
+                    FrameMaterial = filler != 0
+                        ? IfcMaterialMap.PickFrame(c.MaterialNamesOf(filler))
+                        : null,
                 });
             }
         }

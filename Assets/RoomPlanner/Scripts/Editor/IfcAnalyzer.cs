@@ -90,8 +90,24 @@ namespace RoomPlanner.EditorTools
                     }
                 }
 
+                // doors and windows (issue #133): the frame material picked per opening
+                var frames = new Dictionary<string, int>();
+                int bare = 0;
+                foreach (var op in b.Openings)
+                {
+                    if (string.IsNullOrEmpty(op.FrameMaterial)) { bare++; continue; }
+                    frames[op.FrameMaterial] = frames.TryGetValue(op.FrameMaterial, out int n) ? n + 1 : 1;
+                }
+
                 var report = new System.Text.StringBuilder();
                 report.AppendLine($"[IfcMat] === {Path.GetFileName(path)} ===");
+                report.AppendLine($"[IfcMat] openings: {b.Openings.Count}, without a frame material: {bare}");
+                foreach (var kv in frames)
+                {
+                    var m = IfcMaterialMap.Resolve(kv.Key);
+                    report.AppendLine($"[IfcMat]   frame {kv.Value,3}× {kv.Key} → "
+                        + (m.IsNone ? "— (joinery material)" : m.FinishId));
+                }
                 report.AppendLine($"[IfcMat] baked elements: {b.Plumbing.Count}, parts: {parts}, "
                     + $"dressed by name: {dressed}, nameless parts: {unnamed}");
                 foreach (var kv in histogram) report.AppendLine($"[IfcMat]   {kv.Key} part(s): {kv.Value} element(s)");

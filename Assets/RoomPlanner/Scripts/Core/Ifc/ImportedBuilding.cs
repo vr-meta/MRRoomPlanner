@@ -78,6 +78,14 @@ namespace RoomPlanner.Core.Ifc
         /// <summary>Leaf openness 0..1 (issue #50). IFC doors with known swing arrive
         /// at 0.75 — the historical "imported doors stand open" look.</summary>
         public float OpenFraction;
+
+        /// <summary>IFC material name the frame and leaf should wear (issue #133) —
+        /// picked out of the product's material list by IfcMaterialMap.PickFrame.</summary>
+        public string FrameMaterial;
+
+        /// <summary>Frame finish from a project file (v5); None for the IFC path, which
+        /// resolves FrameMaterial through the catalog at build time.</summary>
+        public SurfaceFinish FrameFinish;
     }
 
     /// <summary>A stair flight as PARAMETERS (design/18 I9) â€” meshed by our Stair module.</summary>

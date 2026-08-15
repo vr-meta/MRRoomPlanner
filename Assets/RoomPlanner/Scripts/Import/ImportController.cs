@@ -361,13 +361,24 @@ namespace RoomPlanner.Import
             if (headroomFixes > 0)
                 Debug.Log($"[Import] stair headroom: widened/created {headroomFixes} slab opening(s)");
 
-            int mepCount = 0, submeshCount = 0;
+            int mepCount = 0, submeshCount = 0, vertsBefore = 0, vertsAfter = 0;
             foreach (var mep in building.Plumbing)
             {
                 var go = new GameObject($"{mep.Category} {mep.Name}");
                 go.transform.SetParent(transform, false);
                 go.transform.position = mep.Origin;
                 var mesh = new Mesh { name = "MepMesh" };
+                // Angle-based normals BEFORE anything else (issue #132): IFC extrusions
+                // share their ring vertices, so RecalculateNormals rounded off every
+                // 90° corner — square bars looked like cylinders. This splits sharp
+                // edges and keeps tessellated curves smooth; triangle order survives,
+                // so the parts' ranges still address their own triangles.
+                _smoothNormals.Clear();
+                vertsBefore += mep.Vertices.Count;
+                MeshSmoothing.Apply(mep.Vertices, mep.Triangles, _smoothNormals);
+                vertsAfter += mep.Vertices.Count;
+                // the split invalidates the saved UVs — reproject on the new vertices
+                BoxUv.Fill(mep.Vertices, mep.Triangles, mep.Uvs);
                 mesh.SetVertices(mep.Vertices);
                 // One submesh per material of the product (design/29 §2): a sofa is
                 // leather + aluminium legs, a TV is plastic + glass.
@@ -394,7 +405,8 @@ namespace RoomPlanner.Import
                 // imported element samples one texel and reads as flat colour
                 if (mep.Uvs != null && mep.Uvs.Count == mep.Vertices.Count)
                     mesh.SetUVs(0, mep.Uvs);
-                mesh.RecalculateNormals();
+                if (_smoothNormals.Count == mep.Vertices.Count) mesh.SetNormals(_smoothNormals);
+                else mesh.RecalculateNormals();
                 mesh.RecalculateBounds();
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
@@ -432,7 +444,8 @@ namespace RoomPlanner.Import
             }
             if (mepCount > 0)
                 Debug.Log($"[Import] baked elements: {mepCount}, submeshes: {submeshCount}, "
-                    + $"materials: {_partMaterials.Count}");
+                    + $"materials: {_partMaterials.Count}, "
+                    + $"vertices: {vertsBefore} → {vertsAfter} (sharp-edge split)");
 
             int outletCount = SpawnImportedOutlets(building);
 
@@ -574,6 +587,9 @@ namespace RoomPlanner.Import
         /// <summary>Triangle buffer reused while slicing an element into submeshes.</summary>
         private readonly List<int> _partTris = new();
 
+        /// <summary>Normals produced by the angle-based split (issue #132).</summary>
+        private readonly List<Vector3> _smoothNormals = new();
+
         /// <summary>Materials built for imported parts, keyed by look (design/29 §2) —
         /// ~40 for a flat, far below the SRP batcher's comfort zone. Owned here: runtime
         /// materials are not freed by destroying the objects that use them (rule 1.5).</summary>
@@ -703,7 +719,7 @@ namespace RoomPlanner.Import
         /// The wall mesh does not cut them yet (Phase D panelisation, docs/design/03) — the
         /// data rides on the graph so they appear the moment that lands.
         /// </summary>
-        private static int AttachOpenings(ImportedBuilding building, List<List<WallSegment>> wallSegments)
+        private int AttachOpenings(ImportedBuilding building, List<List<WallSegment>> wallSegments)
         {
             int count = 0, nextId = 1;
             foreach (var op in building.Openings)
@@ -738,7 +754,15 @@ namespace RoomPlanner.Import
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
                     OpenFraction = Mathf.Clamp01(op.OpenFraction),
+                    // frame + leaf material (issue #133): a project file carries the
+                    // finish itself, a fresh IFC import resolves it from the name
+                    FrameFinish = op.FrameFinish.IsNone
+                        ? FinishForName(op.FrameMaterial, Color.white)
+                        : op.FrameFinish,
                 });
+                var added = host.Openings[host.Openings.Count - 1];
+                added.FrameTexture = ResolveFinishTexture(added.FrameFinish);
+                added.FrameNormal = ResolveFinishNormal(added.FrameFinish);
                 count++;
             }
             return count;

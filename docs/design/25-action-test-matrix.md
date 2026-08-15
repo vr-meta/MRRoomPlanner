@@ -46,6 +46,8 @@
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
 | Import | материалы: части по стилям, имя → отделка, box-UV | к | `ObjectMaterialTests` |
 | Import | сабмеш+материал на часть, круг save/load (v5) | к | `ImportPlayTests` |
+| Import | нормали: острые рёбра режутся, кривые остаются гладкими | к | `MeshSmoothingTests` |
+| Openings | материал рамы/створки из IFC на joinery и створке | к | `WallOpeningPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
 | Blueprint | загрузка плана, калибровка 2 парами | — | (файлы устройства) |
 | Teleport | A больше не телепортирует (#87); X/Y отменяют/повторяют записанное | ✓ | `NavGesturePlayTests` |

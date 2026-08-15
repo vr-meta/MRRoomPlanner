@@ -584,8 +584,77 @@ namespace RoomPlanner.Walls
                     Quaternion.LookRotation(d.AxisZ, Vector3.up));
                 view.Bind(this, d.Op, d.YawSign);
                 view.Rebuild(d.Kind, d.Width, d.Height, d.Thickness, LeafMaterial());
+                ApplyFrameLook(view.GetComponentsInChildren<MeshRenderer>(true), d.Op);
+            }
+
+            ApplyJoineryLook();
+        }
+
+        /// <summary>
+        /// Frames and leaves wear the material the IFC gave the door/window (issue #133).
+        /// The joinery is ONE submesh per wall, so a wall hosting openings of different
+        /// materials shows the first one that has a finish — documented rather than
+        /// random. Property block only: the shared joinery material is never mutated.
+        /// </summary>
+        private void ApplyJoineryLook()
+        {
+            var mr = GetComponent<MeshRenderer>();
+            if (mr == null || mr.sharedMaterials.Length <= JoinerySubmesh) return;
+
+            WallOpening chosen = null;
+            var s = _segment;
+            if (s != null)
+                foreach (var op in s.Openings)
+                    if (op != null && !op.FrameFinish.IsNone) { chosen = op; break; }
+
+            if (chosen == null) { mr.SetPropertyBlock(null, JoinerySubmesh); return; }
+            FillFrameBlock(chosen);
+            mr.SetPropertyBlock(_frameBlock, JoinerySubmesh);
+        }
+
+        private void ApplyFrameLook(MeshRenderer[] renderers, WallOpening op)
+        {
+            if (renderers == null) return;
+            if (op == null || op.FrameFinish.IsNone)
+            {
+                foreach (var r in renderers) if (r != null) r.SetPropertyBlock(null);
+                return;
+            }
+            FillFrameBlock(op);
+            foreach (var r in renderers) if (r != null) r.SetPropertyBlock(_frameBlock);
+        }
+
+        private void FillFrameBlock(WallOpening op)
+        {
+            _frameBlock ??= new MaterialPropertyBlock();
+            _frameBlock.Clear();
+            var finish = op.FrameFinish;
+            _frameBlock.SetColor(BaseColorId, finish.Color);
+            if (op.FrameTexture != null)
+            {
+                _frameBlock.SetTexture(BaseMapId, op.FrameTexture);
+                _frameBlock.SetVector(BaseMapStId, finish.UvScaleOffset());
+                _frameBlock.SetVector(UvRotId, finish.UvRotation());
+            }
+            _frameBlock.SetFloat(SmoothnessId, finish.Smoothness);
+            if (op.FrameNormal != null)
+            {
+                _frameBlock.SetTexture(BumpMapId, op.FrameNormal);
+                _frameBlock.SetFloat(HasBumpId, 1f);
             }
         }
+
+        /// <summary>Frames and door leaves live in submesh 2 (design/18 I12).</summary>
+        private const int JoinerySubmesh = 2;
+
+        private MaterialPropertyBlock _frameBlock;
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int UvRotId = Shader.PropertyToID("_UvRot");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
+        private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
 
         private Material LeafMaterial()
         {
