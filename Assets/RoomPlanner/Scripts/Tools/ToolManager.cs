@@ -230,10 +230,10 @@ namespace RoomPlanner.Tools
             // the left hand while open — an active aim cancels instead of fighting it.
             if (locomotion != null) locomotion.Tick(radial != null && radial.IsOpen, scanOn);
 
-            // Gravity (design/26): with the scan off GroundService drops the rig itself; in
-            // passthrough the camera must stay put, so the MODEL comes to the feet instead.
+            // Gravity (design/26, #65): the MODEL comes to the feet in both modes — the
+            // rig never moves, the feet are the fixed Y = 0 datum.
             // Never recorded — gravity is navigation, not an edit (undo would fight it).
-            if (ground != null && ground.Tick(scanOn, out Vector3 settle))
+            if (ground != null && ground.Tick(out Vector3 settle))
                 ShiftModel(settle, record: false);
 
             Ray ray = pointer.GetRay();

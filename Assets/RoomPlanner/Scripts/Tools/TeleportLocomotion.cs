@@ -187,14 +187,14 @@ namespace RoomPlanner.Tools
             Vector3 right = new(fwd.z, 0f, -fwd.x);
             Vector3 step = (fwd * stick.y + right * stick.x) * (MoveSpeed * Time.deltaTime);
 
-            // Horizontal only — the vertical is gravity's job (GroundService drops the rig
-            // off a slab edge and lifts it onto a tread). The one thing refused here is a
-            // ledge too tall to step onto: that is what keeps the walker out of the solid
-            // body of a stair flight instead of gliding through it (design/26 §4).
+            // Horizontal only — the vertical is gravity's job (GroundService settles the
+            // MODEL to the feet). The one thing refused here is a ledge too tall to step
+            // onto: that is what keeps the walker out of the solid body of a stair flight
+            // instead of gliding through it (design/26 §4).
             if (ground != null)
             {
                 Vector3 feet = cam.transform.position + step;
-                if (!ground.CanStepTo(feet.x, feet.z, rig.position.y)) return;
+                if (!ground.CanStepTo(feet.x, feet.z, ground.FootY)) return;
             }
             rig.position += step;
         }
