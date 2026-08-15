@@ -892,6 +892,17 @@ namespace RoomPlanner.Plumbing
             _lastYawDetent = 0f;
         }
 
+        /// <summary>Teleport moves the model; a half-drawn run is model data too — the
+        /// tape-measure lesson of 2026-08-10. Called from the TeleportCommand (undo
+        /// shifts back through the same path).</summary>
+        public void ShiftDraft(Vector3 delta)
+        {
+            for (int i = 0; i < _pts.Count; i++) _pts[i] += delta;
+            if (_continuedBefore != null)
+                for (int i = 0; i < _continuedBefore.Count; i++) _continuedBefore[i] += delta;
+            _riserGhostFoot = new Vector3(float.NaN, 0f, 0f);   // stale ghost re-cooks
+        }
+
         private void TickYaw()
         {
             float x = input.Thumbstick().x;

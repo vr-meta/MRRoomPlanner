@@ -262,6 +262,42 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator Teleport_ShiftsAHalfDrawnRun_WithTheModel()
+        {
+            var (plumb, input, pointer, model) = MakeRig();
+            yield return null;
+            Physics.SyncTransforms();
+
+            plumb.GetSettings().SelectTab(1);      // Pipe: two points, run NOT finished
+            pointer.Ray = AtWall(1f, 0.5f);
+            Click(plumb, input);
+            yield return Debounce();
+            pointer.Ray = AtWall(2f, 0.5f);
+            Click(plumb, input);
+
+            // the tape-measure lesson: a half-drawn run is model data — it shifts
+            var delta = new Vector3(3f, 0f, -1f);
+            model.History.Execute(new RoomPlanner.Tools.TeleportCommand(
+                null, RoomPlanner.Tools.TeleportCommand.CollectFloors(), delta,
+                draftShift: d => plumb.ShiftDraft(d)));
+
+            input.Clear = true;
+            plumb.Tick(false);                     // B — finish from the SHIFTED draft
+            input.Clear = false;
+            yield return null;
+
+            PipeRoute run = null;
+            foreach (var pr in Object.FindObjectsByType<PipeRoute>(FindObjectsSortMode.None))
+            {
+                var s = pr.GetComponent<Selectable>();
+                if (s != null && !string.IsNullOrEmpty(s.Id)) run = pr;
+            }
+            Assert.IsNotNull(run);
+            Assert.AreEqual(0f, Vector3.Distance(new Vector3(4f, 0.5f, -0.9f), run.GetPoint(0)), 0.02f,
+                "the first drawn point followed the teleport");
+        }
+
+        [UnityTest]
         public IEnumerator SaveLoad_RoundTripsTheLayer_WithIdsIntact()
         {
             var (plumb, input, pointer, model) = MakeRig();

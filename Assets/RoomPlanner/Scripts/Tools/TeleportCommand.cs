@@ -26,6 +26,7 @@ namespace RoomPlanner.Tools
         private readonly List<RoomPlanner.Furniture.FurnitureItemView> _furniture;
         private readonly List<RoomPlanner.Plumbing.PlumbFixture> _plumbFixtures;
         private readonly List<RoomPlanner.Plumbing.PipeRoute> _pipes;
+        private readonly System.Action<Vector3> _draftShift;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
@@ -35,8 +36,10 @@ namespace RoomPlanner.Tools
             List<RoomPlanner.Measure.Measurement> measurements = null,
             List<RoomPlanner.Furniture.FurnitureItemView> furniture = null,
             List<RoomPlanner.Plumbing.PlumbFixture> plumbFixtures = null,
-            List<RoomPlanner.Plumbing.PipeRoute> pipes = null)
+            List<RoomPlanner.Plumbing.PipeRoute> pipes = null,
+            System.Action<Vector3> draftShift = null)
         {
+            _draftShift = draftShift;
             _furniture = furniture;
             _walls = walls;
             _floors = floors;
@@ -101,6 +104,10 @@ namespace RoomPlanner.Tools
             if (_pipes != null)
                 foreach (var p in _pipes)
                     if (p != null) p.MoveBy(d);
+            // A HALF-DRAWN run (wire or pipe points not yet finished) is model data
+            // too — left out of the shift it visually follows the user, exactly the
+            // tape-measure bug of 2026-08-10. Undo shifts it back with everything.
+            _draftShift?.Invoke(d);
         }
 
         /// <summary>Every measurement, hidden ones included — same rule as slabs.</summary>

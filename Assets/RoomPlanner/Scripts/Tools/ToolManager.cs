@@ -533,7 +533,13 @@ namespace RoomPlanner.Tools
                 TeleportCommand.CollectMeasurements(),    // tape stays on the model (feedback 2026-08-10)
                 TeleportCommand.CollectFurniture(),       // and so does furniture (feedback 2026-08-12)
                 TeleportCommand.CollectPlumbFixtures(),   // and the plumbing layer (design/28)
-                TeleportCommand.CollectPipes());
+                TeleportCommand.CollectPipes(),
+                // half-drawn wire/pipe runs shift too (the tape-measure lesson)
+                d =>
+                {
+                    if (electric != null) electric.ShiftDraft(d);
+                    if (plumb != null) plumb.ShiftDraft(d);
+                });
             if (record) sceneModel.History.Execute(cmd);
             else cmd.Do();
             if (ground != null) ground.Invalidate();
