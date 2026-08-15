@@ -96,6 +96,22 @@ namespace RoomPlanner.EditorTools
             ("Objects", "Plastic011", "plastic-grey", 0.3f, 0.35f, false),
             ("Objects", "Plastic006", "plastic-black", 0.3f, 0.45f, false),
             ("Objects", "Porcelain001", "ceramic-white", 0.5f, 0.75f, false),
+            // v1.4 (2026-08-16): «размер репо не пугает» — расширяем ШИРИНУ набора
+            // (VRAM остаётся границей: 2K ASTC ≈ 1.9 МБ на карту, весь каталог висит
+            // в сцене), поэтому берём материалы, которых не хватало под мебель и кухню
+            ("Objects", "Wood095", "wood-ash", 0.8f, 0.30f, true),
+            ("Objects", "Wood092", "wood-teak", 0.8f, 0.30f, true),
+            ("Objects", "Wood067", "wood-veneer-dark", 0.4f, 0.30f, true),
+            ("Objects", "Fabric018", "fabric-green", 0.4f, 0.05f, true),
+            ("Objects", "Fabric031", "fabric-weave", 0.4f, 0.05f, true),
+            ("Objects", "Fabric034", "fabric-felt", 0.4f, 0.02f, true),
+            ("Objects", "Leather035D", "leather-white", 0.3f, 0.25f, true),
+            ("Objects", "Metal034", "metal-brass", 0.5f, 0.70f, false),
+            ("Objects", "Metal035", "metal-copper", 0.5f, 0.65f, false),
+            ("Objects", "Terrazzo019L", "stone-terrazzo", 0.8f, 0.45f, true),
+            ("Objects", "Marble021", "stone-white", 1.0f, 0.75f, false),
+            ("Objects", "Wicker007A", "wicker-natural", 0.4f, 0.10f, true),
+            ("Objects", "Cork002", "cork-natural", 0.5f, 0.05f, true),
         };
 
         public static string PathFor(string cat, string id) => $"{TexDir}/{cat}/{id}.jpg";

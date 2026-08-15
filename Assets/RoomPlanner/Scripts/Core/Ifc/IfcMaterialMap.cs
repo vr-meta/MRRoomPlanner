@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace RoomPlanner.Core.Ifc
 {
@@ -40,20 +41,34 @@ namespace RoomPlanner.Core.Ifc
 
             // ---- leather before textile: «Textile - Leather - Black» is leather ----
             (new[] { "leather black", "leather - black", "black leather" }, "leather-black", false),
+            (new[] { "leather white", "leather - white", "white leather", "кожа бел" },
+                "leather-white", false),
             (new[] { "leather", "кожа", "кожзам" }, "leather-brown", false),
 
             // ---- textile, split by the colour word the name carries ----
             (new[] { "textile blue", "textile - slate", "slate blue", "ткань син", "ткань голуб" },
                 "fabric-blue", false),
-            (new[] { "textile", "fabric", "upholster", "ткан", "обивк", "велюр", "рогожк" },
-                "fabric-grey", true),
+            (new[] { "textile green", "ткань зел", "зелёная ткань", "зеленая ткань" },
+                "fabric-green", false),
+            (new[] { "felt", "войлок", "фетр" }, "fabric-felt", false),
+            (new[] { "рогожк", "boucle", "букле", "coarse weave" }, "fabric-weave", false),
+            (new[] { "textile", "fabric", "upholster", "ткан", "обивк", "велюр", "velvet",
+                "бархат" }, "fabric-grey", true),
+
+            // ---- natural weaves ----
+            (new[] { "rattan", "ротанг", "wicker", "плетён", "плетен", "лоза", "bamboo",
+                "бамбук" }, "wicker-natural", false),
+            (new[] { "cork", "пробк" }, "cork-natural", false),
 
             // ---- wood species ----
             (new[] { "walnut", "орех", "cherry", "вишн", "махагон", "mahogan" }, "wood-walnut", false),
-            (new[] { "birch", "берёз", "берез", "maple", "клён", "клен", "ash", "ясен" },
-                "wood-birch", false),
+            (new[] { "teak", "тиковое", "iroko", "мербау" }, "wood-teak", false),
+            // «ash» only with a separator: «washer» and «washing machine» contain it
+            (new[] { "- ash", "ash wood", "wood ash", "ясен" }, "wood-ash", false),
+            (new[] { "birch", "берёз", "берез", "maple", "клён", "клен" }, "wood-birch", false),
             (new[] { "wenge", "венге", "black brown", "stained", "морён", "морен", "dark wood",
                 "wood dark" }, "wood-dark", false),
+            (new[] { "veneer dark", "тёмный шпон", "темный шпон" }, "wood-veneer-dark", false),
             (new[] { "oak", "дуб", "natural wood", "wood veneer", "шпон", "timber", "древес",
                 "plywood", "фанер", "мдф", "mdf", "chipboard", "лдсп", "дсп" }, "wood-oak", false),
 
@@ -66,6 +81,8 @@ namespace RoomPlanner.Core.Ifc
                 "steel - black", "metal black", "чёрный металл", "черный металл" },
                 "metal-painted-black", false),
             (new[] { "alumin", "алюмин" }, "metal-aluminium", false),
+            (new[] { "brass", "латун", "bronze", "бронз", "gold", "золот" }, "metal-brass", false),
+            (new[] { "copper", "медн", "медь" }, "metal-copper", false),
             (new[] { "stainless", "нержав", "chrome", "хром", "polished steel", "смесител",
                 "кран" }, "metal-steel", false),
             (new[] { "steel", "metal", "сталь", "металл", "железо", "iron", "опор", "рама",
@@ -82,9 +99,24 @@ namespace RoomPlanner.Core.Ifc
                 "pvc" }, "plastic-white", true),
 
             // ---- mineral ----
+            (new[] { "terrazzo", "терраццо", "мозаичн" }, "stone-terrazzo", false),
+            (new[] { "quartz", "кварц", "countertop", "столешниц", "corian", "solid surface" },
+                "stone-white", false),
             (new[] { "marble", "мрамор", "granite", "гранит" }, "marble-012", false),
             (new[] { "concrete", "бетон", "цемент", "cement" }, "concrete-034", false),
         };
+
+        /// <summary>Every finish id the table can produce — the rig build checks that the
+        /// catalog actually ships them, so a typo here is caught at Setup, not on the
+        /// headset as an undressed cabinet.</summary>
+        public static IEnumerable<string> AllFinishIds
+        {
+            get
+            {
+                foreach (var (_, id, _) in Table)
+                    if (!string.IsNullOrEmpty(id)) yield return id;
+            }
+        }
 
         /// <summary>Finish for one IFC material/style name; <see cref="Match.None"/> when
         /// nothing in the table applies (keep the file's colour).</summary>

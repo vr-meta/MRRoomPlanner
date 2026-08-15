@@ -217,9 +217,33 @@ END-ISO-10303-21;";
         [TestCase("Корпус смесителя", "metal-steel")]
         [TestCase("Изделие из полимерного материала", "plastic-white")]
         [TestCase("Concrete, Cast-in-Place gray", "concrete-034")]
+        // v1.4 breadth: brass/copper, natural weaves, stone counters, more species
+        [TestCase("Metal - Brass, Polished", "metal-brass")]
+        [TestCase("Латунь шлифованная", "metal-brass")]
+        [TestCase("Copper - Pipe", "metal-copper")]
+        [TestCase("Ротанг натуральный", "wicker-natural")]
+        [TestCase("Rattan weave", "wicker-natural")]
+        [TestCase("Пробковое покрытие", "cork-natural")]
+        [TestCase("Terrazzo - Beige", "stone-terrazzo")]
+        [TestCase("Столешница кварцевая", "stone-white")]
+        [TestCase("Wood - Teak", "wood-teak")]
+        [TestCase("Wood - Ash", "wood-ash")]
+        [TestCase("Ясень светлый", "wood-ash")]
+        [TestCase("Textile - Felt Grey", "fabric-felt")]
+        [TestCase("Leather - White", "leather-white")]
+        [TestCase("Велюр изумрудный", "fabric-grey")]
         public void MaterialNamesResolveToCatalogFinishes(string name, string expected)
         {
             Assert.AreEqual(expected, IfcMaterialMap.Resolve(name).FinishId);
+        }
+
+        /// <summary>«Washer» and «washing machine» contain «ash» — a naive substring for
+        /// the wood species would have turned every appliance into ash veneer.</summary>
+        [TestCase("Appliance - Washer")]
+        [TestCase("Washing machine body")]
+        public void AshDoesNotSwallowWashers(string name)
+        {
+            Assert.AreNotEqual("wood-ash", IfcMaterialMap.Resolve(name).FinishId);
         }
 
         [TestCase("Default Wall")]

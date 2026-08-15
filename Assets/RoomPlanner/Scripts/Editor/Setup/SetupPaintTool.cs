@@ -101,6 +101,16 @@ namespace RoomPlanner.EditorTools
                 Debug.LogWarning($"[Setup] FinishLibrary: {tileMissing} ceramic bake(s) missing — " +
                     "run RoomPlanner → Bake Tiles, then SetupRig again");
 
+            // The IFC dressing table (design/29 §3) names finishes by id — a typo or a
+            // dropped catalog entry would show up on the headset as an undressed cabinet,
+            // so it is checked here, while the rig is being built.
+            var missingIds = new List<string>();
+            foreach (string id in RoomPlanner.Core.Ifc.IfcMaterialMap.AllFinishIds)
+                if (!ids.Contains(id) && !missingIds.Contains(id)) missingIds.Add(id);
+            if (missingIds.Count > 0)
+                Debug.LogError("[Setup] IfcMaterialMap points at finishes the catalog does not "
+                    + $"have: {string.Join(", ", missingIds)}");
+
             var so = new SerializedObject(lib);
             FillArray(so.FindProperty("ids"), ids.Count, (p, i) => p.stringValue = ids[i]);
             FillArray(so.FindProperty("textures"), textures.Count, (p, i) => p.objectReferenceValue = textures[i]);
