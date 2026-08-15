@@ -71,15 +71,17 @@ namespace RoomPlanner.Core
         /// <summary>
         /// The walking surface under (x, z) for feet at <paramref name="footY"/>: the
         /// highest slab top or stair tread no higher than footY + stepUp, with the ground
-        /// always in the running — it is treated as INFINITE in XZ, so walking past the rim
-        /// of the visible ground plane cannot drop you into the void. When even the ground
-        /// is above the feet, the feet's own level is returned (stay put).
+        /// ALWAYS in the running — it is treated as INFINITE in XZ, so walking past the rim
+        /// of the visible ground plane cannot drop you into the void, and it ignores the
+        /// step-up ceiling: a walker sunk below the building's lowest storey gets settled
+        /// back onto it. The old "stand still when even the ground is overhead" fallback
+        /// was a trap with no exit (#65).
         /// </summary>
         public static float Support(IReadOnlyList<WalkSlab> slabs, IReadOnlyList<WalkFlight> flights,
             float groundY, float x, float z, float footY, float stepUp = StepUp)
         {
             float ceiling = footY + stepUp;
-            float best = groundY <= ceiling ? groundY : float.NegativeInfinity;
+            float best = groundY;
             var p = new Vector3(x, 0f, z);
 
             if (slabs != null)
@@ -97,10 +99,7 @@ namespace RoomPlanner.Core
                     if (y > best && y <= ceiling) best = y;
                 }
 
-            // Nothing at or below the feet — only possible when the ground itself is above
-            // them (a lone mezzanine slab is the model's lowest storey while the walker
-            // stands under it). Standing still beats being yanked up to it.
-            return float.IsNegativeInfinity(best) ? footY : best;
+            return best;
         }
 
         /// <summary>

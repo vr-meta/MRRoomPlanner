@@ -70,12 +70,13 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
-        public void Support_StandsStillWhenEvenTheGroundIsOverhead()
+        public void Support_LiftsBackOntoAnOverheadGround_NoTrap()
         {
-            // the model's only slab is a mezzanine at 1.5 → the derived ground is 1.5, but
-            // yanking the walker up to it would be worse than leaving them where they are
+            // #65: sunk below the building's lowest storey the old "stand still" fallback
+            // left no way back — every teleport re-trapped the user. The ground is the
+            // datum: an unsupported walker is settled back onto it, step-up limit or not.
             var slabs = new List<WalkSlab> { new(1.5f, Square(2f)) };
-            Assert.AreEqual(0f, GroundMath.Support(slabs, null, 1.5f, 0f, 0f, 0f), 1e-5f);
+            Assert.AreEqual(1.5f, GroundMath.Support(slabs, null, 1.5f, 0f, 0f, 0f), 1e-5f);
         }
 
         [Test]
