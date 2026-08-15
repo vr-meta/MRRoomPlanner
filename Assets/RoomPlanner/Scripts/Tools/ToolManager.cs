@@ -562,6 +562,9 @@ namespace RoomPlanner.Tools
                 case MenuAction.ToggleSnapAngle: snapAngle = !snapAngle; break;
                 case MenuAction.ToggleScan: scanOn = !scanOn; SetScan(scanOn); break;
                 case MenuAction.ToggleRenderSettings: _showRenderSettings = !_showRenderSettings; break;
+                case MenuAction.SelectStripTab:
+                    if (menu != null) menu.SetTab(mb.ToolIndex);
+                    break;
             }
             RefreshMenu();
         }

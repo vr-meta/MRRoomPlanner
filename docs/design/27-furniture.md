@@ -20,12 +20,17 @@
 для инструмента неразличим — меняется только поле `Source`.
 
 ```
-StreamingAssets/Furniture/
-  collections.json         ← индекс паков: на Android StreamingAssets лежит внутри APK
-  kenney-furniture/        collection.json  sofa.glb  bed.glb  …    и не перечисляется
-persistentDataPath/FurnitureCache/
-  polypizza-downloaded/    collection.json  <sha>.glb  …      ← v2, тот же формат
+StreamingAssets/Furniture/         ← паки, запечённые в APK (сейчас пусто)
+  collections.json                    индекс: StreamingAssets внутри APK не перечисляется
+persistentDataPath/Furniture/      ← ПОДКЛАДЫВАЕМЫЕ паки: скопировал папку — появились
+  abo-modern/              collection.json  <id>.glb  <id>.preview.jpg …
+persistentDataPath/FurnitureCache/ ← скачанные онлайн-паки (#74), тот же формат
 ```
+
+**Паки не запекаются в APK** (решение 2026-08-15). Каталог — сотни мегабайт, он меняется
+чаще кода, а часть паков некоммерческие; поэтому пак кладётся папкой на устройство
+(`Android/data/<пакет>/files/Furniture/<pack>/`) и подхватывается при старте. Это же даёт
+раздельную поставку: коммерческая сборка просто не везёт NC-пак.
 
 **Габариты — из манифеста, не из меша.** Модели CC0 стилизованы; планировщик, который
 врёт про размеры, бесполезен. Загруженная модель равномерно масштабируется так, чтобы её

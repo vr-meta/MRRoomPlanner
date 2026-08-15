@@ -39,6 +39,42 @@ namespace RoomPlanner.Tests.Play
             return go;
         }
 
+        private const string TestPackId = "test-pack";
+        private const string TestPackTitle = "Test pack";
+        private string _testPackFolder;
+
+        /// <summary>
+        /// Writes a pack into the side-load folder — the same one a user copies a pack
+        /// into (design/27). Manifest-only: the picker never opens a model, and this keeps
+        /// the test independent of which packs happen to be installed on the machine.
+        /// </summary>
+        private void WriteTestPack(int items)
+        {
+            _testPackFolder = System.IO.Path.Combine(FurnitureLibrary.SideloadRoot, TestPackId);
+            System.IO.Directory.CreateDirectory(_testPackFolder);
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{{\"Id\":\"{TestPackId}\",\"Title\":\"{TestPackTitle}\",\"License\":\"CC0\",\"Items\":[");
+            for (int i = 0; i < items; i++)
+            {
+                if (i > 0) sb.Append(',');
+                string category = i < items / 2 ? "Seating" : "Table";
+                sb.Append($"{{\"Id\":\"i{i}\",\"Name\":\"Item {i}\",\"Category\":\"{category}\"," +
+                          $"\"File\":\"i{i}.glb\",\"Size\":{{\"x\":1,\"y\":1,\"z\":1}}}}");
+            }
+            sb.Append("]}");
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(_testPackFolder, FurnitureCatalogParser.ManifestName), sb.ToString());
+        }
+
+        [TearDown]
+        public void RemoveTestPack()
+        {
+            if (_testPackFolder != null && System.IO.Directory.Exists(_testPackFolder))
+                System.IO.Directory.Delete(_testPackFolder, true);
+            _testPackFolder = null;
+        }
+
         private IEnumerator MakeLibrary(System.Action<FurnitureLibrary> onReady)
         {
             var go = Track(new GameObject("FurnitureLibrary"));
@@ -395,6 +431,7 @@ namespace RoomPlanner.Tests.Play
             // no way to reach the rest, and switching category left the previous pictures
             // on screen. Both come from rows being built once: the grid needs a page, and
             // the panel needs to know the content changed.
+            WriteTestPack(40);
             FurnitureLibrary library = null;
             yield return MakeLibrary(l => library = l);
 
@@ -405,27 +442,35 @@ namespace RoomPlanner.Tests.Play
             var place = tool.GetSettings().TabPages[0];
             var page = Row(place, "page");
             var grid = Row(place, "item");
+            var categoryRow = Row(place, "category");
+            var collectionRow = Row(place, "collection");
             Assert.NotNull(page.Value, "the picker states which page it is on");
             Assert.NotNull(grid.ContentVersion, "the grid must announce content changes");
 
+            // Point at the test pack (two categories, 40 items — more than one page).
+            var names = collectionRow.ResolveOptions();
+            int packIndex = System.Array.IndexOf(names, TestPackTitle);
+            Assert.GreaterOrEqual(packIndex, 0, "the test pack must be in the catalog");
+            collectionRow.SetIndex(packIndex);
+
             // One page at a time, never the whole pack in one wall of chips.
-            Assert.LessOrEqual(grid.PreviewCount(), FurnitureController.ItemsPerPage);
+            Assert.AreEqual(FurnitureController.ItemsPerPage, grid.PreviewCount());
+            StringAssert.StartsWith("1/2", page.Value());
 
-            int before = grid.ContentVersion();
-            page.Increase?.Invoke();                       // next page
-            int afterPage = grid.ContentVersion();
-            var collectionRow = Row(place, "collection");
+            int firstPage = grid.ContentVersion();
+            page.Increase?.Invoke();
+            StringAssert.StartsWith("2/2", page.Value());
+            Assert.AreNotEqual(firstPage, grid.ContentVersion(), "a new page is new content");
+            Assert.AreEqual(40 - FurnitureController.ItemsPerPage, grid.PreviewCount(),
+                "the last page is short");
 
-            // Paging only means something when there is more than one page; with a small
-            // catalog installed the version must at least stay consistent.
-            if (page.Value().StartsWith("2/"))
-                Assert.AreNotEqual(before, afterPage, "a new page is new content");
-
-            // Switching collection must always invalidate the grid.
-            int optionCount = collectionRow.ResolveOptions().Length;
-            collectionRow.SetIndex?.Invoke((collectionRow.GetIndex() + 1) % optionCount);
-            Assert.AreNotEqual(afterPage, grid.ContentVersion(),
-                "changing the collection must rebuild the pictures");
+            // Switching category must invalidate the grid AND go back to page one —
+            // otherwise the panel keeps showing the previous category (feedback 2026-08-15).
+            int beforeCategory = grid.ContentVersion();
+            categoryRow.SetIndex(1);
+            Assert.AreNotEqual(beforeCategory, grid.ContentVersion(),
+                "changing the category must rebuild the pictures");
+            StringAssert.StartsWith("1/", page.Value(), "a filter change returns to page one");
         }
 
         [UnityTest]

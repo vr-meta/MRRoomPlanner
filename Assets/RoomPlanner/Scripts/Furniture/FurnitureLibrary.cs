@@ -20,7 +20,15 @@ namespace RoomPlanner.Furniture
     public class FurnitureLibrary : MonoBehaviour
     {
         public const string BundledFolder = "Furniture";
+        /// <summary>Where downloaded packs land (#74).</summary>
         public const string CacheFolder = "FurnitureCache";
+        /// <summary>
+        /// Drop-in folder next to the projects and IFC files: copy a pack folder here and
+        /// it shows up in the catalog, no rebuild involved. Packs are big and change often
+        /// (and some are non-commercial), so baking them into the APK is the wrong default
+        /// — decision 2026-08-15, "чтобы мы их могли докидывать в папку".
+        /// </summary>
+        public const string SideloadFolder = "Furniture";
 
         public FurnitureCatalog Catalog { get; } = new();
 
@@ -38,6 +46,7 @@ namespace RoomPlanner.Furniture
 
         public static string BundledRoot => Path.Combine(Application.streamingAssetsPath, BundledFolder);
         public static string CacheRoot => Path.Combine(Application.persistentDataPath, CacheFolder);
+        public static string SideloadRoot => Path.Combine(Application.persistentDataPath, SideloadFolder);
 
         private void Awake() => StartCoroutine(LoadAll());
 
@@ -69,10 +78,11 @@ namespace RoomPlanner.Furniture
                 if (TryAdd(manifest, FurnitureSource.Bundled, folder, id, out int n)) { packs++; items += n; }
             }
 
-            // ---- downloaded packs (plain filesystem) ----
-            if (Directory.Exists(CacheRoot))
+            // ---- packs on the device: downloaded (#74) and side-loaded by hand ----
+            foreach (string root in new[] { CacheRoot, SideloadRoot })
             {
-                foreach (string folder in Directory.GetDirectories(CacheRoot))
+                if (!Directory.Exists(root)) continue;
+                foreach (string folder in Directory.GetDirectories(root))
                 {
                     string manifest = Path.Combine(folder, FurnitureCatalogParser.ManifestName);
                     if (!File.Exists(manifest)) continue;

@@ -31,23 +31,31 @@ namespace RoomPlanner.EditorTools
             SetupAssets.MakePlateGo(panel.transform, "Rim", new Vector3(0f, 0f, 0.002f),
                 0.316f, 0.121f, RoomPlanner.Core.UiTokens.RadiusL + 0.003f, ctx.RimMat);
 
-            // ---- tab strip (#85): snapping is not what the strip is for most of the time ----
-            var tabSize = new Vector2(0.068f, 0.024f);
-            var tabToolsBtn = SetupAssets.MakeMenuButton(root.transform, "TabTools", "Tools",
-                MenuAction.None, new Vector3(-0.113f, 0.048f, 0f), tabSize,
-                ctx.BtnMat, ctx.ActiveMat, withActiveMark: false, kind: MenuButtonKind.Radio);
-            var tabSnapBtn = SetupAssets.MakeMenuButton(root.transform, "TabSnap", "Snap",
-                MenuAction.None, new Vector3(-0.041f, 0.048f, 0f), tabSize,
-                ctx.BtnMat, ctx.ActiveMat, withActiveMark: false, kind: MenuButtonKind.Radio);
-            tabToolsBtn.Tooltip = "Frequently used tools";
-            tabSnapBtn.Tooltip = "Snapping (walls, openings)";
+            // ---- tabs (#85): file-folder tabs sitting ON TOP of the strip, not inside it.
+            // The first build put them at y=0.048, overlapping the button row at 0.026
+            // (headset feedback 2026-08-15 — "они наезжают на кнопки").
+            const float panelTop = 0.115f * 0.5f;          // 0.0575
+            var tabSize = new Vector2(0.072f, 0.022f);
+            float tabY = panelTop + tabSize.y * 0.5f - 0.004f;   // overlap 4 mm = attached, not floating
+
+            MenuButton Tab(string name, string label, int index, float x, string tip)
+            {
+                var b = SetupAssets.MakeMenuButton(root.transform, name, label,
+                    MenuAction.SelectStripTab, new Vector3(x, tabY, 0.001f), tabSize,
+                    ctx.BtnMat, ctx.ActiveMat, withActiveMark: false, kind: MenuButtonKind.Radio);
+                b.Tooltip = tip;
+                var bso = new SerializedObject(b);
+                bso.FindProperty("toolIndex").intValue = index;   // which tab this is
+                bso.ApplyModifiedProperties();
+                return b;
+            }
+            var tabToolsBtn = Tab("TabTools", "Tools", 0, -0.117f, "Frequently used tools");
+            var tabSnapBtn = Tab("TabSnap", "Snap", 1, -0.041f, "Snapping (walls, openings)");
 
             var toolsRow = new GameObject("ToolsRow");
             toolsRow.transform.SetParent(root.transform, false);
             var snapRow = new GameObject("SnapRow");
             snapRow.transform.SetParent(root.transform, false);
-            tabToolsBtn.OnClick = () => menu.SetTab(0);
-            tabSnapBtn.OnClick = () => menu.SetTab(1);
 
             // ---- tab 1: shortcuts to the tools reached constantly ----
             var snapSize = new Vector2(0.042f, 0.042f);
