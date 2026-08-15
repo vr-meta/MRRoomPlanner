@@ -84,11 +84,28 @@ namespace RoomPlanner.Core.Ifc
             Vector3 min = verts[0], max = verts[0];
             foreach (var p in verts) { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
             var origin = (min + max) * 0.5f;
+            string name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}";
+
+            // Electrical conversion (#79): Revit outlets are proxy plates (5×5×1 cm).
+            // They become NATIVE electrical fixtures — editable, wireable, in the panel
+            // BOM — instead of invisible-small baked meshes.
+            if (category == MepCategory.Proxy && ElectricalImport.IsOutlet(name))
+            {
+                b.Outlets.Add(new ImportedOutlet
+                {
+                    Name = name,
+                    Position = origin,
+                    Normal = ElectricalImport.PlateNormal(max - min),
+                    StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int os) ? os : -1,
+                });
+                return true;
+            }
+
             for (int i = 0; i < verts.Count; i++) verts[i] -= origin;
 
             b.Plumbing.Add(new ImportedMep
             {
-                Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
+                Name = name,
                 Category = category,
                 Origin = origin,
                 Vertices = verts,

@@ -393,6 +393,8 @@ namespace RoomPlanner.Import
                 mepCount++;
             }
 
+            int outletCount = SpawnImportedOutlets(building);
+
             // One undo entry for the whole import (objects are already live → Record).
             if (sceneModel != null && _created.Count > 0)
                 sceneModel.History.Record(new ImportBatchCommand(CollectSelectables()));
@@ -400,10 +402,85 @@ namespace RoomPlanner.Import
             int skipped = building.SkippedWalls + building.SkippedColumns + building.SkippedSlabs
                 + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
             _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
+                + (outletCount > 0 ? $" {outletCount}el" : "")
                 + (headroomFixes > 0 ? $" {headroomFixes}hr" : "")
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
-                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, skipped {skipped}");
+                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, {outletCount} outlets, skipped {skipped}");
+        }
+
+        /// <summary>
+        /// Native electrical from the IFC (#79): outlets arrive as tiny proxy plates and
+        /// leave as REAL fixtures — editable, wireable, counted by the panel BOM. Reuses
+        /// the persistence factory (RestoreFixture), so an imported outlet is
+        /// indistinguishable from a hand-placed one, round-trip included.
+        /// </summary>
+        private int SpawnImportedOutlets(ImportedBuilding building)
+        {
+            if (building.Outlets.Count == 0) return 0;
+            var electric = FindFirstObjectByType<Electrical.ElectricController>();
+            if (electric == null)
+            {
+                Debug.LogWarning("[Import] file carries outlets but the rig has no ElectricController");
+                return 0;
+            }
+            int made = 0;
+            foreach (var o in building.Outlets)
+            {
+                Vector3 n = OutletFacing(o);
+                var fx = electric.RestoreFixture(new Core.Project.ProjectFixture
+                {
+                    Kind = (int)Electrical.FixtureKind.Outlet,
+                    Posts = 1,
+                    Keys = 1,
+                    Position = o.Position + n * 0.002f,   // keep the back plate off the wall
+                    Rotation = Quaternion.LookRotation(n,
+                        Mathf.Abs(n.y) > 0.9f ? Vector3.forward : Vector3.up),
+                    BaseLevel = o.StoreyIndex >= 0 && o.StoreyIndex < building.Storeys.Count
+                        ? building.Storeys[o.StoreyIndex].Elevation : 0f,
+                });
+                if (fx == null) continue;
+                var sel = fx.GetComponent<Selectable>();
+                if (sel != null) _created.Add((sel, o.StoreyIndex));
+                made++;
+            }
+            return made;
+        }
+
+        /// <summary>Mounting direction: the plate's thin axis, signed AWAY from the
+        /// nearest wall centreline so the face looks into the room.</summary>
+        private Vector3 OutletFacing(ImportedOutlet o)
+        {
+            Vector3 n = o.Normal;
+            if (Mathf.Abs(n.y) > 0.9f) return Vector3.up;   // lying flat — floor/ceiling box
+            var graph = walls != null ? walls.Graph : null;
+            if (graph == null) return n;
+
+            float bestD = float.MaxValue;
+            Vector3 bestP = o.Position;
+            foreach (var s in graph.Segments)
+            {
+                Vector3 p = ClosestOnSegmentXZ(s.A.Position, s.B.Position, o.Position);
+                float dx = p.x - o.Position.x, dz = p.z - o.Position.z;
+                float d = dx * dx + dz * dz;
+                if (d < bestD) { bestD = d; bestP = p; }
+            }
+            Vector3 off = o.Position - bestP;
+            off.y = 0f;
+            if (off.sqrMagnitude > 1e-8f && Vector3.Dot(off, n) < 0f) n = -n;
+            return n;
+        }
+
+        private static Vector3 ClosestOnSegmentXZ(Vector3 a, Vector3 b, Vector3 p)
+        {
+            Vector3 ab = b - a;
+            ab.y = 0f;
+            float len2 = ab.sqrMagnitude;
+            if (len2 < 1e-8f) return a;
+            Vector3 ap = p - a;
+            ap.y = 0f;
+            float t = Mathf.Clamp01(Vector3.Dot(ap, ab) / len2);
+            return a + ab * t;
         }
 
         private FinishLibrary _finishLibrary;
