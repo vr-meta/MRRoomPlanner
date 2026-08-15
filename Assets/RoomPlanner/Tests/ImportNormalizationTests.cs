@@ -103,6 +103,49 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(-0.1f, minZ, 1e-4, "outward regardless of winding");
         }
 
+        // ---- #111/#119: dangling wall-axis endpoints weld onto neighbour axes ----
+
+        [Test]
+        public void DanglingCornerAxes_WeldIntoOneSharedPoint()
+        {
+            // Revit face-joins: each axis stops half a thickness short of the other
+            var b = new ImportedBuilding();
+            var h = Wall(new Vector3(0.1f, 0f, 0f), new Vector3(4f, 0f, 0f), 0.2f);
+            var v = Wall(new Vector3(0f, 0f, 0.1f), new Vector3(0f, 0f, 4f), 0.2f);
+            b.Walls.Add(h);
+            b.Walls.Add(v);
+
+            int welds = WallAxisWeld.Apply(b);
+
+            Assert.GreaterOrEqual(welds, 1);
+            Assert.Less(Vector3.Distance(h.Path[0], v.Path[0]), 1e-3f,
+                "the corner closes into one shared point — rings can form, joins seal");
+        }
+
+        [Test]
+        public void FarEndpoints_StayPut()
+        {
+            var b = new ImportedBuilding();
+            var h = Wall(new Vector3(0f, 0f, 0f), new Vector3(4f, 0f, 0f), 0.2f);
+            var v = Wall(new Vector3(0f, 0f, 1f), new Vector3(0f, 0f, 4f), 0.2f);  // 1 m away
+            b.Walls.Add(h);
+            b.Walls.Add(v);
+            WallAxisWeld.Apply(b);
+            Assert.AreEqual(new Vector3(0f, 0f, 1f), v.Path[0], "beyond the joint reach");
+            Assert.AreEqual(new Vector3(4f, 0f, 0f), h.Path[1]);
+        }
+
+        [Test]
+        public void OtherStorey_NeverWelds()
+        {
+            var b = new ImportedBuilding();
+            var h = Wall(new Vector3(0f, 3.15f, 0f), new Vector3(4f, 3.15f, 0f), 0.2f);
+            var v = Wall(new Vector3(0.05f, 0f, 0f), new Vector3(0f, 0f, 4f), 0.2f);
+            b.Walls.Add(h);
+            b.Walls.Add(v);
+            Assert.AreEqual(0, WallAxisWeld.Apply(b));
+        }
+
         // ---- #116: a flight ending inside the stairwell hole gets a landing patch ----
 
         private static ImportedBuilding StairIntoHole()
@@ -145,8 +188,9 @@ namespace RoomPlanner.Tests
                 minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x);
                 minZ = Mathf.Min(minZ, p.z);
             }
-            Assert.AreEqual(3.5f, minX, 1e-4, "flight-wide strip");
-            Assert.AreEqual(4.5f, maxX, 1e-4);
+            Assert.AreEqual(3f - StairLandingPatch.Overlap, minX, 1e-3,
+                "the strip spans the FULL hole width — the void beside the flight closes too");
+            Assert.AreEqual(5f + StairLandingPatch.Overlap, maxX, 1e-3);
             // from the top edge (z=2.3) to the hole boundary (z=2) plus the tuck-under
             Assert.AreEqual(2f - StairLandingPatch.Overlap, minZ, 1e-3);
         }

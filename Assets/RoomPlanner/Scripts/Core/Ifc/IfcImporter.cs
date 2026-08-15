@@ -27,8 +27,9 @@ namespace RoomPlanner.Core.Ifc
             ImportPipes(ctx, b);
             ImportBakedElements(ctx, b);
             // drawing-convention normalizations (headset feedback 2026-08-15):
-            // slab outlines follow wall axes (#117); stairwell holes outrun the
-            // flights that serve them (#116)
+            // wall axes stop short of their neighbours (#111/#119), slab outlines
+            // follow wall axes (#117), stairwell holes outrun the flights (#116)
+            WallAxisWeld.Apply(b);
             SlabWallAlignment.Apply(b);
             StairLandingPatch.Apply(b);
             return b;

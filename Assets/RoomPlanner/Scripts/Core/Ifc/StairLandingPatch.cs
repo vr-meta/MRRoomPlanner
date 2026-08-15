@@ -52,17 +52,28 @@ namespace RoomPlanner.Core.Ifc
 
                 float travel = RayToRingXZ(throughHole, topEdge, dir);
                 if (travel <= 0f || travel > MaxTravel) continue;
-                patches.Add(MakePatch(topEdge, dir, s.Width, travel + Overlap, arrival));
+                // full hole width, not just the flight width (feedback 2026-08-15:
+                // "дырки остались" — the void BESIDE the flight was still open)
+                Vector3 right = new Vector3(dir.z, 0f, -dir.x);
+                float minR = float.MaxValue, maxR = float.MinValue;
+                foreach (var p in throughHole)
+                {
+                    float r = Vector3.Dot(new Vector3(p.x - topEdge.x, 0f, p.z - topEdge.z), right);
+                    minR = Mathf.Min(minR, r);
+                    maxR = Mathf.Max(maxR, r);
+                }
+                patches.Add(MakePatch(topEdge, dir, minR - Overlap, maxR + Overlap,
+                    travel + Overlap, arrival));
             }
             b.Slabs.AddRange(patches);
         }
 
-        private static ImportedSlab MakePatch(Vector3 topEdge, Vector3 dir, float width,
-            float length, ImportedSlab arrival)
+        private static ImportedSlab MakePatch(Vector3 topEdge, Vector3 dir,
+            float rMin, float rMax, float length, ImportedSlab arrival)
         {
             Vector3 right = new Vector3(dir.z, 0f, -dir.x);
-            Vector3 a = topEdge - right * (width * 0.5f);
-            Vector3 bq = topEdge + right * (width * 0.5f);
+            Vector3 a = topEdge + right * rMin;
+            Vector3 bq = topEdge + right * rMax;
             float y = arrival.Level;
             var patch = new ImportedSlab
             {

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 using RoomPlanner.Core.Ifc;
+using RoomPlanner.Walls;
 
 namespace RoomPlanner.EditorTools
 {
@@ -29,6 +30,46 @@ namespace RoomPlanner.EditorTools
             sb.AppendLine($"storeys={b.Storeys.Count} walls={b.Walls.Count} slabs={b.Slabs.Count} stairs={b.Stairs.Count} pipes={b.Pipes.Count} baked={b.Plumbing.Count}");
             foreach (var p in b.Pipes)
                 sb.AppendLine($"PIPE r={p.Radius:0.###} ({p.Start.x:0.##},{p.Start.y:0.##},{p.Start.z:0.##})->({p.End.x:0.##},{p.End.y:0.##},{p.End.z:0.##}) '{p.Name}'");
+
+            // #111: the headset log said "no ring contains … among 4 rooms" — rebuild
+            // the wall graph the way the import does and see what RoomFinder detects
+            var g = new WallGraph();
+            foreach (var w in b.Walls)
+            {
+                if (w.Path.Count < 2) continue;
+                var seg = g.AddSegment(g.SnapOrCreateNode(w.Path[0]),
+                    g.SnapOrCreateNode(w.Path[w.Path.Count - 1]));
+                if (seg == null) continue;   // duplicate/degenerate after the weld
+                seg.Thickness = w.Thickness;
+                seg.Height = w.Height;
+            }
+            int splits = RoomFinder.SplitTJunctions(g);
+            var rooms = RoomFinder.FindRooms(g);
+            int dangling = 0;
+            foreach (var n in g.Nodes) if (n.Degree < 2) dangling++;
+            sb.AppendLine($"GRAPH nodes={g.Nodes.Count} segs={g.Segments.Count} tSplits={splits} dangling={dangling} rooms={rooms.Count}");
+            foreach (var r in rooms)
+                sb.AppendLine($"ROOM level={r.Level:0.##} area={r.Area:0.0} pts={r.Polygon.Count}");
+            int shown = 0;
+            foreach (var n in g.Nodes)
+            {
+                if (n.Degree >= 2 || shown >= 16) continue;
+                float best = float.MaxValue;
+                foreach (var s2 in g.Segments)
+                {
+                    if (s2.A == n || s2.B == n) continue;
+                    if (Mathf.Abs(s2.A.Position.y - n.Position.y) > 0.5f) continue;
+                    Vector3 a2 = s2.A.Position, b2 = s2.B.Position;
+                    a2.y = 0f; b2.y = 0f;
+                    var p2 = new Vector3(n.Position.x, 0f, n.Position.z);
+                    Vector3 ab = b2 - a2;
+                    if (ab.sqrMagnitude < 1e-10f) continue;
+                    float tt = Mathf.Clamp01(Vector3.Dot(p2 - a2, ab) / ab.sqrMagnitude);
+                    best = Mathf.Min(best, Vector3.Distance(a2 + ab * tt, p2));
+                }
+                sb.AppendLine($"DANGLE ({n.Position.x:0.##},{n.Position.y:0.##},{n.Position.z:0.##}) nearestAxis={(best == float.MaxValue ? -1f : best):0.###}");
+                shown++;
+            }
             for (int i = 0; i < b.Storeys.Count; i++)
                 sb.AppendLine($"  storey[{i}] '{b.Storeys[i].Name}' elev={b.Storeys[i].Elevation:0.###}");
 

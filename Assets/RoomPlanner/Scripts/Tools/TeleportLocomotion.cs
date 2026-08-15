@@ -179,7 +179,10 @@ namespace RoomPlanner.Tools
 
         private void TickMove(bool scanOn)
         {
-            if (scanOn) return;                     // passthrough: walk with your feet
+            // The Scan-ON gate is gone (headset feedback 2026-08-15: "повороты и ходьба
+            // не работают") — the user drives the stick deliberately and owns the
+            // comfort trade-off; passthrough desync self-corrects on the next teleport.
+            _ = scanOn;
             Vector2 stick = input.LeftThumbstick();
 
             var cam = Camera.main;
