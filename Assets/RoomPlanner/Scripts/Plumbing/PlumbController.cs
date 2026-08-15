@@ -64,6 +64,11 @@ namespace RoomPlanner.Plumbing
         private readonly List<Vector3> _axes = new();
         private const int SelectableLayer = 6;
 
+        // stick-yaw during placement (#115): angled stub-outs and turned drains —
+        // the furniture-rotation gesture (90°/s, a haptic detent every 15°)
+        private float _yawOffset;
+        private float _lastYawDetent;
+
         private PlumbFixture _ghost;             // placement preview, never registered
         private PipeRoute _riserGhost;           // riser column preview (#112), never registered
         private Vector3 _riserGhostFoot = new(float.NaN, 0f, 0f);
@@ -324,7 +329,11 @@ namespace RoomPlanner.Plumbing
             Vector3 outward = new Vector3(normal.x, 0f, normal.z);
             if (outward.sqrMagnitude < 1e-6f) outward = Vector3.forward;
             outward.Normalize();
-            var rot = Quaternion.LookRotation(outward);
+            // stick turns the stub around the vertical, clamped so the seat stays on
+            // the wall; grip quantizes to 15° (the furniture gesture, #115)
+            TickYaw();
+            float wallYaw = Mathf.Clamp(_yawOffset, -75f, 75f);
+            var rot = Quaternion.AngleAxis(wallYaw, Vector3.up) * Quaternion.LookRotation(outward);
             place += outward * 0.002f;   // keep the seat off the wall plane
             place = ApplyGuides(place, outward);
 
@@ -355,8 +364,10 @@ namespace RoomPlanner.Plumbing
                 return;
             }
 
-            // the grate sits flush in the floor plane, upright whatever the hit normal
-            var rot = Quaternion.identity;
+            // the grate sits flush in the floor plane, upright whatever the hit normal;
+            // stick turns it freely so the D50 port faces the run (#115)
+            TickYaw();
+            var rot = Quaternion.Euler(0f, _yawOffset, 0f);
             point = ApplyGuides(point, Vector3.zero);
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = point; }
             UpdateGhost(PlumbFixtureKind.FloorDrain, point, rot);
@@ -877,6 +888,22 @@ namespace RoomPlanner.Plumbing
         {
             FinishOrCancelRoute();               // switching modes never eats a drawn run
             _mode = (SubMode)Mathf.Clamp(mode, 0, 3);
+            _yawOffset = 0f;
+            _lastYawDetent = 0f;
+        }
+
+        private void TickYaw()
+        {
+            float x = input.Thumbstick().x;
+            if (Mathf.Abs(x) < 0.3f) return;
+            _yawOffset += x * 90f * Time.deltaTime;
+            _yawOffset = Mathf.Repeat(_yawOffset + 180f, 360f) - 180f;
+            if (input.SnapHeld()) _yawOffset = Mathf.Round(_yawOffset / 15f) * 15f;
+            if (Mathf.Abs(Mathf.DeltaAngle(_yawOffset, _lastYawDetent)) >= 15f)
+            {
+                _lastYawDetent = _yawOffset;
+                input.Pulse(0.2f, 0.01f);        // detent tick, the furniture feel
+            }
         }
     }
 
