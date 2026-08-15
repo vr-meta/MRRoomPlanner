@@ -158,6 +158,22 @@ namespace RoomPlanner.Import
                         pw.Points.AddRange(route.Points);
                         data.Wires.Add(pw);
                     }
+                    else if (s.Kind == Editing.SelectableKind.Furniture)
+                    {
+                        // v4 (design/27): the catalog address travels, the model does not.
+                        var view = s.GetComponent<Furniture.FurnitureItemView>();
+                        if (view == null) continue;
+                        data.Furniture.Add(new ProjectFurniture
+                        {
+                            Id = s.Id,
+                            Key = view.CatalogKey,
+                            Name = view.DisplayName,
+                            Position = view.transform.position,
+                            Yaw = view.Yaw,
+                            Size = view.Size,
+                            Anchor = (int)view.Anchor,
+                        });
+                    }
                     else if (s.Kind == Editing.SelectableKind.Measurement)
                     {
                         // Kind falls back to Measurement for unknown components (MEP views
@@ -187,6 +203,7 @@ namespace RoomPlanner.Import
             import.BuildScene(ToBuilding(data));
             RestoreElectrical(data);
             RestoreMeasurements(data);
+            RestoreFurniture(data);
             if (blueprint != null)
                 blueprint.SetPlacement(data.PlanScale, data.PlanRotationDeg,
                     data.PlanOffsetX, data.PlanOffsetZ);
@@ -208,6 +225,23 @@ namespace RoomPlanner.Import
             }
             foreach (var f in data.Fixtures) electric.RestoreFixture(f);
             foreach (var w in data.Wires) electric.RestoreWire(w);
+        }
+
+        /// <summary>
+        /// Recreate placed furniture (format v4, design/27). Same late-binding as the
+        /// electrical layer: the controller is found at load time, so a project loads on a
+        /// rig built before the tool existed. Public for round-trip tests.
+        /// </summary>
+        public static void RestoreFurniture(ProjectData data)
+        {
+            if (data.Furniture.Count == 0) return;
+            var tool = Object.FindFirstObjectByType<Furniture.FurnitureController>();
+            if (tool == null)
+            {
+                Debug.LogWarning("[Project] file carries furniture but the rig has no FurnitureController");
+                return;
+            }
+            foreach (var f in data.Furniture) tool.RestoreItem(f);
         }
 
         /// <summary>The full surface finish of an object, v2 (audit B2) — v1 kept only a

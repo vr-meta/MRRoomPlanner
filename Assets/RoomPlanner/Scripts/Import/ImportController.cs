@@ -675,6 +675,7 @@ namespace RoomPlanner.Import
             foreach (var m in TeleportCommand.CollectMeasurements())
                 if (m != null) Destroy(m.gameObject);
             ClearElectrical();
+            ClearFurniture();
             _created.Clear();
             _importedSegments.Clear();
             _building = null;
@@ -692,6 +693,17 @@ namespace RoomPlanner.Import
             foreach (var item in new List<ISelectable>(sceneModel.Items))
                 if (item is Selectable s && s.IsAlive
                     && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                    Destroy(s.gameObject);
+        }
+
+        /// <summary>Destroy placed furniture (design/27, v4 projects) — same rule as the
+        /// electrical layer: a loaded project starts clean, or yesterday's sofa haunts
+        /// today's room (the bug measurements already taught us, audit B3).</summary>
+        private void ClearFurniture()
+        {
+            if (sceneModel == null) return;
+            foreach (var item in new List<ISelectable>(sceneModel.Items))
+                if (item is Selectable s && s.IsAlive && s.Kind == SelectableKind.Furniture)
                     Destroy(s.gameObject);
         }
 

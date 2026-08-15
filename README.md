@@ -141,3 +141,9 @@ Design docs and the development checklist are in Russian:
   ceramic tiles are generated procedurally by this project. The laminate source scans
   are proprietary and are **not** part of the repository; release APKs contain only
   baked derivatives embedded in the product.
+- **Furniture models**: the bundled catalog packs are CC0 and ship inside the APK —
+  [Kenney Furniture Kit](https://kenney.nl/assets/furniture-kit) (120 curated items in
+  `Assets/StreamingAssets/Furniture/`). Real-world sizes are curated by this project;
+  the models themselves are unmodified. Packs that forbid redistribution or commercial
+  use (Amazon Berkeley Objects, 3D-FUTURE, manufacturer BIM libraries) are deliberately
+  excluded — see `docs/design/27-furniture.md`.

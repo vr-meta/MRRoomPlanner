@@ -107,7 +107,7 @@ namespace RoomPlanner.Measure
 
         /// <summary>Thumbstick vector — RIGHT stick only (cursor depth, Blueprint pan,
         /// popup scroll). The left stick belongs to locomotion / the radial flick.</summary>
-        public Vector2 Thumbstick()
+        public virtual Vector2 Thumbstick()
         {
 #if UNITY_EDITOR
             var k = new Vector2(

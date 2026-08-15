@@ -35,6 +35,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private PaintController paint;
         [SerializeField] private RoomPlanner.Walls.OpeningsController openings;
         [SerializeField] private RoomPlanner.Import.ProjectsController projects;
+        [SerializeField] private RoomPlanner.Furniture.FurnitureController furniture;
         [SerializeField] private TeleportLocomotion locomotion;
         [SerializeField] private GroundService ground;
         [SerializeField] private float wallThickness = 0.2f;
@@ -114,7 +115,7 @@ namespace RoomPlanner.Tools
             ("wall", "wall", "Wall", new Color(0.60f, 0.65f, 0.75f)),                 // Structure
             ("floor", "floor-slab", "Floor", new Color(0.60f, 0.65f, 0.75f)),
             ("openings", "door-window", "Openings", new Color(0.60f, 0.65f, 0.75f)),   // Structure
-            (null, "furniture", "Furniture", Color.gray),
+            ("furniture", "furniture", "Furniture", new Color(0.72f, 0.63f, 0.86f)),  // Interior
             ("blueprint", "blueprint", "Blueprint", new Color(0.54f, 0.82f, 0.78f)),  // Blueprint
             ("import", "import-file", "Import", new Color(0.91f, 0.93f, 0.96f)),
             ("electric", "electric-plug", "Electric", new Color(1f, 0.79f, 0.30f)),   // Electrical
@@ -129,7 +130,7 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (the radial's fixed slot table above maps tools to compass positions).
-            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture };
 
             Debug.Log($"[Tools] v13 registry: {_tools.Length} tools, radial={(radial != null)} scene={(sceneModel != null)} inspector={(inspector != null)}");
             foreach (var t in _tools)
@@ -528,7 +529,8 @@ namespace RoomPlanner.Tools
                 TeleportCommand.CollectMep(),
                 TeleportCommand.CollectFixtures(),
                 TeleportCommand.CollectRoutes(),
-                TeleportCommand.CollectMeasurements());   // tape stays on the model (feedback 2026-08-10)
+                TeleportCommand.CollectMeasurements(),    // tape stays on the model (feedback 2026-08-10)
+                TeleportCommand.CollectFurniture());      // and so does furniture (feedback 2026-08-12)
             if (record) sceneModel.History.Execute(cmd);
             else cmd.Do();
             if (ground != null) ground.Invalidate();

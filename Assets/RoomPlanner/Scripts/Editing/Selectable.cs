@@ -43,6 +43,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Electrical.ElectricFixture _fixture;
         private RoomPlanner.Electrical.WireRoute _route;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
+        private RoomPlanner.Furniture.FurnitureItemView _furniture;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -80,7 +81,9 @@ namespace RoomPlanner.Editing
             _fixture = GetComponent<RoomPlanner.Electrical.ElectricFixture>();
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
             _leafView = GetComponent<OpeningLeafView>();
-            if (_wall != null) _kind = SelectableKind.Wall;
+            _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
+            if (_furniture != null) _kind = SelectableKind.Furniture;
+            else if (_wall != null) _kind = SelectableKind.Wall;
             else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
             else if (_stair != null) _kind = SelectableKind.Stair;
@@ -353,7 +356,8 @@ namespace RoomPlanner.Editing
         {
             Resolve();
             if (_leafView != null) return;   // doors move with the Openings tool, not Select
-            if (_wall != null) _wall.MoveBy(delta);
+            if (_furniture != null) _furniture.MoveBy(delta);
+            else if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
             else if (_fixture != null) MoveFixture(delta);
@@ -420,6 +424,8 @@ namespace RoomPlanner.Editing
                         return $"{_floor.Area:0.0} m², {_floor.Outline.Count} corners";
                     }
                     return "Floor";
+                case SelectableKind.Furniture:
+                    return _furniture != null ? _furniture.Describe() : "Furniture";
                 case SelectableKind.Fixture:
                     return DescribeFixture();
                 case SelectableKind.Wire:
