@@ -65,6 +65,12 @@ namespace RoomPlanner.Core
         public Color[] Palette;
         public string[] TextureOptions;   // texture-catalog ids — textured chips instead of colors
 
+        // Preview chips (design/27 §3a): images supplied by the tool, e.g. catalog
+        // thumbnails that live next to the models rather than in the finish catalog.
+        public Func<int> PreviewCount;
+        public Func<int, Texture2D> PreviewProvider;
+        public Func<int, string> PreviewLabel;
+
         // Action
         public bool Destructive;       // outline + hold-to-fill Danger (design/20 §2.8)
 
@@ -216,6 +222,26 @@ namespace RoomPlanner.Core
             {
                 Id = id, Caption = caption, Kind = SettingKind.Swatch,
                 TextureOptions = textureIds, GetIndex = getIndex, SetIndex = setIndex,
+            });
+            return this;
+        }
+
+        /// <summary>
+        /// Swatch row whose chips are pictures supplied by the caller — catalog previews
+        /// (design/27 §3a). Same grid as the texture swatch; the difference is where the
+        /// image comes from, so packs can carry their own thumbnails without the finish
+        /// catalog knowing about them. A provider returning null renders an empty chip
+        /// with its label, which is what a pack without previews degrades to.
+        /// </summary>
+        public SettingsSchema PreviewSwatch(string id, string caption,
+            Func<int> count, Func<int, Texture2D> preview, Func<int, string> label,
+            Func<int> getIndex, Action<int> setIndex)
+        {
+            _fields.Add(new SettingField
+            {
+                Id = id, Caption = caption, Kind = SettingKind.Swatch,
+                PreviewCount = count, PreviewProvider = preview, PreviewLabel = label,
+                GetIndex = getIndex, SetIndex = setIndex,
             });
             return this;
         }

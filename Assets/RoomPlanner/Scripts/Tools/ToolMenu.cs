@@ -23,6 +23,38 @@ namespace RoomPlanner.Tools
         [SerializeField] private MenuButton scanBtn;
         [SerializeField] private TMPro.TMP_Text tooltipLabel;      // full-word hint under the strip
 
+        // Tabs (#85): snapping matters while drawing walls and almost never otherwise, so
+        // it no longer owns the strip permanently — the first tab holds what is reached
+        // constantly (jumping to the tools actually used), snapping sits on its own.
+        [SerializeField] private GameObject toolsRow;
+        [SerializeField] private GameObject snapRow;
+        [SerializeField] private MenuButton tabToolsBtn;
+        [SerializeField] private MenuButton tabSnapBtn;
+        [SerializeField] private MenuButton[] toolShortcuts;
+
+        /// <summary>0 = tools, 1 = snapping.</summary>
+        public int Tab { get; private set; }
+
+        public void SetTab(int tab)
+        {
+            Tab = Mathf.Clamp(tab, 0, 1);
+            if (toolsRow != null) toolsRow.SetActive(Tab == 0);
+            if (snapRow != null) snapRow.SetActive(Tab == 1);
+            if (tabToolsBtn != null) tabToolsBtn.SetActiveTool(Tab == 0);
+            if (tabSnapBtn != null) tabSnapBtn.SetActiveTool(Tab == 1);
+        }
+
+        /// <summary>
+        /// Entering a tool picks the tab that tool needs: walls and openings live on
+        /// snapping, everything else on the shortcuts. Only automatic on a tool CHANGE —
+        /// a tab the user chose by hand is not overridden while they stay in the tool.
+        /// </summary>
+        public void OnToolChanged(string toolId)
+        {
+            bool wantsSnap = toolId == "wall" || toolId == "openings" || toolId == "floor";
+            SetTab(wantsSnap ? 1 : 0);
+        }
+
         private Transform _cam;
         private MenuButton _hi;
         private bool _placed;
@@ -44,7 +76,7 @@ namespace RoomPlanner.Tools
             {
                 // no hover → the radial discoverability hint
                 string tip = _hi != null ? _hi.Tooltip : null;
-                if (string.IsNullOrEmpty(tip)) tip = "Tools: hold A";
+                if (string.IsNullOrEmpty(tip)) tip = "Tools: press A";
                 tooltipLabel.gameObject.SetActive(true);
                 tooltipLabel.text = tip;
             }
@@ -52,6 +84,9 @@ namespace RoomPlanner.Tools
 
         public void Refresh(int activeTool, bool snapCorner, bool snapEdge, bool snapGrid, bool snapAngle, bool scanOn)
         {
+            if (toolShortcuts != null)
+                foreach (var b in toolShortcuts)
+                    if (b != null) b.SetActiveTool(b.ToolIndex == activeTool);
             if (snapCornerBtn != null) snapCornerBtn.SetActiveTool(snapCorner);
             if (snapEdgeBtn != null) snapEdgeBtn.SetActiveTool(snapEdge);
             if (snapGridBtn != null) snapGridBtn.SetActiveTool(snapGrid);

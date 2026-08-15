@@ -46,7 +46,7 @@
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
 | Blueprint | загрузка плана, калибровка 2 парами | — | (файлы устройства) |
-| Teleport | A-тап: модель к ногам, 1 undo | ✓ | `NavGesturePlayTests` |
+| Teleport | A больше не телепортирует (#87); X/Y отменяют/повторяют записанное | ✓ | `NavGesturePlayTests` |
 | Teleport | портал левым триггером | — | (команда — к, `TeleportPlayTests`) |
 | Teleport | сдвиг всех слоёв + undo | к | `TeleportPlayTests` |
 | Undo/Redo | X/Y глобально | ✓ | `NavGesturePlayTests` |

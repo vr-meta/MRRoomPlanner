@@ -81,6 +81,9 @@ namespace RoomPlanner.Furniture
                 }
             }
 
+            AddPartitions();
+            packs++;
+
             Ready = true;
             Status = packs == 0
                 ? "no furniture packs found"
@@ -109,6 +112,98 @@ namespace RoomPlanner.Furniture
             }
             count = collection.Items.Count;
             return true;
+        }
+
+        /// <summary>Id of the generated collection (design/27 §3c).</summary>
+        public const string PartitionsId = "partitions";
+
+        /// <summary>
+        /// The generated pack: slat screens are parameters, not files, so they are always
+        /// available — even with no packs installed at all — and always fit the opening
+        /// they are sized to (#86).
+        /// </summary>
+        private void AddPartitions()
+        {
+            var collection = new FurnitureCollection
+            {
+                Id = PartitionsId,
+                Title = "Partitions",
+                Author = "MRRoomPlanner",
+                License = "CC0",
+                Source = FurnitureSource.Bundled,
+                RootPath = null,
+            };
+
+            void Add(string id, string name, string sub, Vector3 size) =>
+                collection.Items.Add(new FurnitureItem
+                {
+                    Id = id, Name = name, Category = FurnitureCategory.Storage,
+                    Subcategory = sub, Anchor = FurnitureAnchor.Floor,
+                    Fit = FurnitureFit.Stretch, Size = size, CollectionId = collection.Id,
+                });
+
+            Add("slat-room", "Slat divider", "Partition", new Vector3(1.20f, 2.20f, 0.05f));
+            Add("slat-half", "Slat screen (half)", "Partition", new Vector3(1.20f, 1.20f, 0.05f));
+            Add("slat-wide", "Slat divider (wide)", "Partition", new Vector3(2.40f, 2.20f, 0.05f));
+            Add("slat-head", "Slat headboard", "Partition", new Vector3(1.60f, 1.00f, 0.05f));
+
+            Catalog.Add(collection);
+        }
+
+        private readonly Dictionary<string, Texture2D> _previews = new();
+        private readonly HashSet<string> _previewsMissing = new();
+
+        /// <summary>
+        /// Thumbnail for a catalog item, or null when the pack ships none (the picker then
+        /// falls back to text). Cached per item and loaded lazily — the picker asks for a
+        /// few dozen at a time and must not read the disk twice for the same chip.
+        /// </summary>
+        public Texture2D PreviewOf(FurnitureItem item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.Preview)) return null;
+            string key = item.Key;
+            if (_previews.TryGetValue(key, out var cached)) return cached;
+            if (_previewsMissing.Contains(key)) return null;
+
+            var collection = Catalog.Find(item.CollectionId);
+            if (collection == null) return null;
+            string path = Path.Combine(collection.RootPath, item.Preview);
+
+            byte[] bytes = null;
+            if (File.Exists(path)) bytes = File.ReadAllBytes(path);
+            else if (collection.Source == FurnitureSource.Bundled)
+            {
+                // Inside the APK: StreamingAssets is not a file system on Android.
+                using var request = UnityWebRequest.Get(ToUrl(path));
+                request.SendWebRequest();
+                while (!request.isDone) { }          // previews are tiny and load-time only
+                if (request.result == UnityWebRequest.Result.Success)
+                    bytes = request.downloadHandler.data;
+            }
+
+            if (bytes == null || bytes.Length == 0)
+            {
+                _previewsMissing.Add(key);
+                return null;
+            }
+
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
+            if (!tex.LoadImage(bytes))
+            {
+                Destroy(tex);
+                _previewsMissing.Add(key);
+                return null;
+            }
+            tex.wrapMode = TextureWrapMode.Clamp;
+            _previews[key] = tex;
+            return tex;
+        }
+
+        // Textures created here are ours to release (rules 12 §1.5).
+        private void OnDestroy()
+        {
+            foreach (var t in _previews.Values) if (t != null) Destroy(t);
+            _previews.Clear();
         }
 
         /// <summary>Absolute path of an item's model file (a URL on Android).</summary>
