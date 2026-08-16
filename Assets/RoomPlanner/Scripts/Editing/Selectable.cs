@@ -44,6 +44,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Electrical.WireRoute _route;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
+        private RoomPlanner.Import.MepView _mep;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -53,6 +54,12 @@ namespace RoomPlanner.Editing
         public string Id { get; set; }
         public Transform Transform => transform;
         public bool IsHidden => !gameObject.activeSelf;
+
+        /// <summary>Paint and highlight cover EVERY submesh, not just the body (material
+        /// 0). Set by the IFC importer for elements split into per-material parts
+        /// (design/29 §2): their submeshes are all «body», there is no glass slot to
+        /// protect. Walls, doors and furniture leave it false.</summary>
+        public bool PaintAllSubmeshes { get; set; }
 
         // `this` is compile-time typed as a UnityEngine.Object here, so the overloaded
         // null-check correctly reports a destroyed component (unlike interface-typed refs).
@@ -82,7 +89,11 @@ namespace RoomPlanner.Editing
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
+            _mep = GetComponent<RoomPlanner.Import.MepView>();
             if (_furniture != null) _kind = SelectableKind.Furniture;
+            // baked IFC elements: their own kind since issue #135, so they can be picked,
+            // deleted and re-dressed instead of silently reading as «Measurement»
+            else if (_mep != null) _kind = SelectableKind.Mep;
             else if (_wall != null) _kind = SelectableKind.Wall;
             else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
@@ -273,7 +284,10 @@ namespace RoomPlanner.Editing
                 // a leaf view's "body" is every panel renderer, not just the first
                 bool body = i == 0 || _leafView != null;
                 bool needBlock = tint || (body && hasFinish);
-                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
+                // Imported elements wear one material PER PART (design/29 §2), so paint
+                // and highlight must cover every submesh; walls/doors keep the body-only
+                // rule that protects their glass and joinery.
+                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1 && !PaintAllSubmeshes;
 
                 if (needBlock)
                 {

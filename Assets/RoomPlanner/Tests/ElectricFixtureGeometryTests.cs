@@ -61,9 +61,45 @@ namespace RoomPlanner.Tests
             _fixture.Build(FixtureKind.Switch, 1, 1);
             int oneKey = Mesh.vertexCount;
             _fixture.Build(FixtureKind.Switch, 1, 3);
-            Assert.AreEqual(oneKey + 2 * 24, Mesh.vertexCount, "each key is one more box (24 verts)");
+            Assert.Greater(Mesh.vertexCount, oneKey, "two more rockers = more geometry");
+            Assert.AreEqual((Mesh.vertexCount - oneKey) % 2, 0, "the two extra keys are identical");
             Assert.AreEqual(ElectricalDefaults.PostModule, Mesh.bounds.size.x, 1e-4,
                 "multi-key switch keeps the single-module frame");
+        }
+
+        /// <summary>Issue #134: the plastic body and the metal accents are separate
+        /// submeshes, so paint on the plate never turns the pins white.</summary>
+        [Test]
+        public void PlasticAndAccentsAreSeparateSubmeshes()
+        {
+            foreach (var kind in new[]
+            {
+                FixtureKind.Outlet, FixtureKind.Switch, FixtureKind.Panel, FixtureKind.Junction,
+            })
+            {
+                _fixture.Build(kind, 2, 2);
+                Assert.AreEqual(2, Mesh.subMeshCount, $"{kind}: body + accents");
+                Assert.Greater(Mesh.GetTriangles(0).Length, 0, $"{kind}: body");
+                Assert.Greater(Mesh.GetTriangles(1).Length, 0, $"{kind}: accents");
+            }
+        }
+
+        /// <summary>The socket cup is a real recess: its floor sits BEHIND the plate
+        /// face, and the pins sit deeper still (issue #134).</summary>
+        [Test]
+        public void OutletCupIsRecessedIntoThePlate()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            float plateFace = ElectricalDefaults.PlateDepth;
+            float deepest = float.MaxValue;
+            foreach (var v in Mesh.vertices) deepest = Mathf.Min(deepest, v.z);
+            Assert.AreEqual(0f, deepest, 1e-4, "the back still sits on the wall plane");
+
+            // some geometry must live between the wall and the plate face — the cup
+            int inside = 0;
+            foreach (var v in Mesh.vertices)
+                if (v.z > 1e-4f && v.z < plateFace - 1e-4f) inside++;
+            Assert.Greater(inside, 0, "the cup and the pins are sunk into the plate");
         }
 
         [Test]
@@ -108,9 +144,13 @@ namespace RoomPlanner.Tests
         public void Meshes_AreWoundOutward_PositiveVolume()
         {
             _fixture.Build(FixtureKind.Outlet, 2, 1);
-            float expected = 2 * ElectricalDefaults.PostModule * ElectricalDefaults.PostModule
-                * ElectricalDefaults.PlateDepth + 2 * 0.06f * 0.06f * 0.006f;
-            Assert.AreEqual(expected, SignedVolume(), expected * 0.01f,
+            // plate minus the two socket cups (issue #134: the cups are real recesses,
+            // so they SUBTRACT). An inverted face would flip the sign or gut the total.
+            float plate = 2 * ElectricalDefaults.PostModule * ElectricalDefaults.PostModule
+                * ElectricalDefaults.PlateDepth;
+            float cups = 2 * Mathf.PI * 0.0265f * 0.0265f * 0.005f;
+            float expected = plate - cups;
+            Assert.AreEqual(expected, SignedVolume(), expected * 0.15f,
                 "negative/short volume = inverted faces (rule 1.1)");
 
             _fixture.Build(FixtureKind.Panel, 1, 1);

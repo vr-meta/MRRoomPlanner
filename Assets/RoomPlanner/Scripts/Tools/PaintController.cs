@@ -114,6 +114,9 @@ namespace RoomPlanner.Tools
             ("Floors", "Material", "aim a floor · Trigger = apply"),
             ("Tiles", "Tile", "walls & floors · Trigger = apply"),
             ("Ceiling", "Material", "aim a slab · Trigger = apply"),
+            // design/29: what OBJECTS are made of — wood, fabric, leather, metal,
+            // plastic, ceramic. Aimed at imported elements and catalog furniture.
+            ("Objects", "Material", "aim furniture · Trigger = apply"),
         };
 
         private int _preset;
@@ -130,7 +133,15 @@ namespace RoomPlanner.Tools
         // texture rotation per category tab, degrees (turn laminate/tiles); 15° steps
         private readonly float[] _rot = new float[TexTabs.Length];
         // gloss override per TAB (index 0 = Color); -1 = auto (catalog / matte paint)
-        private readonly float[] _gloss = { -1f, -1f, -1f, -1f, -1f };
+        private readonly float[] _gloss = NewGloss();
+
+        /// <summary>Gloss overrides: Color tab + one per texture tab, all «auto».</summary>
+        private static float[] NewGloss()
+        {
+            var g = new float[TexTabs.Length + 1];
+            for (int i = 0; i < g.Length; i++) g[i] = -1f;
+            return g;
+        }
         private readonly string[][] _catIds = new string[TexTabs.Length][];
         private Selectable _hover;
         private SettingsSchema _settings;
@@ -238,6 +249,9 @@ namespace RoomPlanner.Tools
                 case "Floors": return kind == SelectableKind.Floor || kind == SelectableKind.Stair;
                 case "Tiles": return kind == SelectableKind.Wall || kind == SelectableKind.Floor;
                 case "Ceiling": return kind == SelectableKind.Floor;
+                // object materials go on things, not on the building (design/29 §3):
+                // catalog furniture and imported elements, which became pickable in #135
+                case "Objects": return kind == SelectableKind.Furniture || kind == SelectableKind.Mep;
                 default: return true;   // Color tab (null) — anything paintable
             }
         }
