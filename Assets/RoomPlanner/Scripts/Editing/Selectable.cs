@@ -44,6 +44,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Electrical.WireRoute _route;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
+        private RoomPlanner.Import.MepView _mep;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -88,7 +89,11 @@ namespace RoomPlanner.Editing
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
+            _mep = GetComponent<RoomPlanner.Import.MepView>();
             if (_furniture != null) _kind = SelectableKind.Furniture;
+            // baked IFC elements: their own kind since issue #135, so they can be picked,
+            // deleted and re-dressed instead of silently reading as «Measurement»
+            else if (_mep != null) _kind = SelectableKind.Mep;
             else if (_wall != null) _kind = SelectableKind.Wall;
             else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;

@@ -364,7 +364,9 @@ namespace RoomPlanner.Import
             int mepCount = 0, submeshCount = 0, vertsBefore = 0, vertsAfter = 0;
             foreach (var mep in building.Plumbing)
             {
-                var go = new GameObject($"{mep.Category} {mep.Name}");
+                // selectable layer since issue #135 — a file always brings furniture the
+                // user does not want, and there was no way to delete it
+                var go = new GameObject($"{mep.Category} {mep.Name}") { layer = SelectableLayer };
                 go.transform.SetParent(transform, false);
                 go.transform.position = mep.Origin;
                 var mesh = new Mesh { name = "MepMesh" };
@@ -427,9 +429,12 @@ namespace RoomPlanner.Import
                 if (parts != null) view.Parts.AddRange(parts);   // survives save/load (v5)
                 view.StoreyIndex = mep.StoreyIndex;   // survives capture — storey filter after load (B6)
                 view.ApplyShadowMode();   // interior objects cast sun shadows (toggleable)
-                // Selectable only for the hide/show machinery (undo, storey filter) — no
-                // collider, so it is invisible to picking and never registered for it.
+                // Pickable since issue #135: one MeshCollider per element (cooked once at
+                // import), registered in the model — Select highlights it, B deletes it
+                // through DeleteCommand (undoable), and the paint tools can re-dress it.
+                go.AddComponent<MeshCollider>().sharedMesh = mesh;
                 var sel = go.AddComponent<Selectable>();
+                if (sceneModel != null) sceneModel.Register(sel);
                 // A multi-part element wears its materials, so user paint has to cover
                 // every submesh — otherwise painting a sofa would only hit its leather.
                 sel.PaintAllSubmeshes = parts != null;

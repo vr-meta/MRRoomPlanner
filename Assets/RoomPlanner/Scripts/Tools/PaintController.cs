@@ -249,10 +249,9 @@ namespace RoomPlanner.Tools
                 case "Floors": return kind == SelectableKind.Floor || kind == SelectableKind.Stair;
                 case "Tiles": return kind == SelectableKind.Wall || kind == SelectableKind.Floor;
                 case "Ceiling": return kind == SelectableKind.Floor;
-                // object materials go on things, not on the building (design/29 §3).
-                // Imported IFC elements wear their materials from the file and carry no
-                // collider, so the only pickable target here is catalog furniture.
-                case "Objects": return kind == SelectableKind.Furniture;
+                // object materials go on things, not on the building (design/29 §3):
+                // catalog furniture and imported elements, which became pickable in #135
+                case "Objects": return kind == SelectableKind.Furniture || kind == SelectableKind.Mep;
                 default: return true;   // Color tab (null) — anything paintable
             }
         }

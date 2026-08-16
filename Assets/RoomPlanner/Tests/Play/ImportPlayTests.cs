@@ -227,6 +227,45 @@ namespace RoomPlanner.Tests.Play
                 "paint must cover every part, not just the first");
         }
 
+        /// <summary>Issue #135: an imported element is a first-class scene object — it
+        /// has a collider on the selectable layer, it is registered in the model, B
+        /// deletes it (undoable), and a deleted one is not saved.</summary>
+        [UnityTest]
+        public IEnumerator ImportedElementCanBePickedAndDeleted()
+        {
+            var (import, walls, model) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            b.Plumbing.Add(TwoPartSofa());
+            import.BuildScene(b);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            var sel = view.GetComponent<Selectable>();
+            Assert.AreEqual(SelectableKind.Mep, sel.Kind, "its own kind, not «Measurement»");
+            Assert.AreEqual(6, view.gameObject.layer, "on the selectable layer");
+            var collider = view.GetComponent<MeshCollider>();
+            Assert.IsNotNull(collider, "pickable at all");
+            Assert.Contains(sel, new List<ISelectable>(model.Items), "registered for picking");
+
+            // a ray from above hits it
+            Physics.SyncTransforms();
+            var ray = new Ray(view.transform.position + Vector3.up * 5f, Vector3.down);
+            Assert.IsTrue(collider.Raycast(ray, out _, 20f), "the ray finds the element");
+
+            model.History.Execute(new DeleteCommand(sel));
+            yield return null;
+            Assert.IsTrue(sel.IsHidden, "B removes it");
+
+            var afterDelete = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(0, afterDelete.Plumbing.Count, "a deleted element is not saved");
+
+            model.History.Undo();
+            yield return null;
+            Assert.IsFalse(sel.IsHidden, "undo brings it back");
+        }
+
         /// <summary>Round-trip (design/29 §6, format v5): capture → load restores both
         /// parts with their names, colours and triangle ranges.</summary>
         [UnityTest]
@@ -274,7 +313,7 @@ namespace RoomPlanner.Tests.Play
                 new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, -0.5f),
                 new Vector3(0.5f, 0f, 0.5f), new Vector3(-0.5f, 0f, 0.5f),
             });
-            sofa.Triangles.AddRange(new[] { 0, 1, 2, 0, 2, 3 });
+            sofa.Triangles.AddRange(new[] { 0, 2, 1, 0, 3, 2 });
             RoomPlanner.Core.BoxUv.Fill(sofa.Vertices, sofa.Triangles, sofa.Uvs);
             sofa.Parts.Add(new MepPart
             {

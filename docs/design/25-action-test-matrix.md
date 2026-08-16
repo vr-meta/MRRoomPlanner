@@ -48,6 +48,7 @@
 | Import | материалы: части по стилям, имя → отделка, box-UV | к | `ObjectMaterialTests` |
 | Import | сабмеш+материал на часть, круг save/load (v5) | к | `ImportPlayTests` |
 | Import | нормали: острые рёбра режутся, кривые остаются гладкими | к | `MeshSmoothingTests` |
+| Import | импортированный элемент: пик, удаление, undo, не сохраняется скрытым | к | `ImportPlayTests` |
 | Openings | материал рамы/створки из IFC на joinery и створке | к | `WallOpeningPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
 | Blueprint | загрузка плана, калибровка 2 парами | — | (файлы устройства) |
