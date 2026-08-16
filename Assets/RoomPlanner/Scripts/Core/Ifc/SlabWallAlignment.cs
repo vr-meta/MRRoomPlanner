@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Walls;
 
 namespace RoomPlanner.Core.Ifc
 {
@@ -62,7 +63,33 @@ namespace RoomPlanner.Core.Ifc
                     float overlap = Mathf.Min(Mathf.Max(ta, tc), wlen)
                                   - Mathf.Max(Mathf.Min(ta, tc), 0f);
                     if (overlap < 0.2f) continue;
-                    offsets[i] = Mathf.Max(offsets[i], w.Thickness * 0.5f);
+                    // Extend to the far face of the wall BODY, not of the axis: offset
+                    // walls (Outer/Inner + SideSign) sit entirely on one side, and the
+                    // blanket t/2 push made slab rims JUT OUT of the facade while the
+                    // interior ledge stayed (fitting round 4). Body outward of the
+                    // polygon → the full thickness; body inward → the axis IS the far
+                    // face and the edge stays put.
+                    var mode = w.OffsetOverride >= 0
+                        ? (WallOffsetMode)w.OffsetOverride : WallOffsetMode.Center;
+                    float ext;
+                    if (mode == WallOffsetMode.Center)
+                    {
+                        ext = w.Thickness * 0.5f;
+                    }
+                    else
+                    {
+                        Vector3 edgeDir = outline[(i + 1) % n] - outline[i];
+                        edgeDir.y = 0f;
+                        if (edgeDir.sqrMagnitude < 1e-10f) continue;
+                        Vector3 outN = OutNormal(edgeDir.normalized, outSign);
+                        float side = w.SideSignOverride != 0f ? w.SideSignOverride : 1f;
+                        Vector3 wallOut = new Vector3(wd.z, 0f, -wd.x) * side;
+                        bool bodyOutward = Vector3.Dot(outN, wallOut) > 0f;
+                        ext = mode == WallOffsetMode.Outer
+                            ? (bodyOutward ? w.Thickness : 0f)
+                            : (bodyOutward ? 0f : w.Thickness);
+                    }
+                    offsets[i] = Mathf.Max(offsets[i], ext);
                 }
             }
 
