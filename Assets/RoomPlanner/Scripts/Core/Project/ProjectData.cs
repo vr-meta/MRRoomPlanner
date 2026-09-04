@@ -27,6 +27,9 @@ namespace RoomPlanner.Core.Project
         /// <summary>Leaf openness 0..1 (v3, issue #50). Pre-v3 readers derive 0.75
         /// from a non-zero Swing (the old "imported doors stand open" look).</summary>
         public float Open;
+        /// <summary>v5: frame + leaf finish from the IFC material (issue #133); Kind 0 =
+        /// the rig's joinery material, as every file before v5.</summary>
+        public ProjectFinish Frame = new();
     }
 
     /// <summary>
@@ -93,6 +96,20 @@ namespace RoomPlanner.Core.Project
         public ProjectFinish Finish = new();
     }
 
+    /// <summary>v5: one material of a baked element (design/29 §6). Triangles are the
+    /// range [TriStart, TriStart+TriCount) of the element's own index list — no second
+    /// copy of the indices in the file.</summary>
+    [Serializable]
+    public class ProjectMepPart
+    {
+        public string Name;
+        public bool Painted;
+        public Color Paint = Color.white;
+        public float Transparency;
+        public int TriStart, TriCount;
+        public ProjectFinish Finish = new();
+    }
+
     [Serializable]
     public class ProjectMep
     {
@@ -100,6 +117,11 @@ namespace RoomPlanner.Core.Project
         public Vector3 Origin;
         public List<Vector3> Vertices = new();
         public List<int> Triangles = new();
+        /// <summary>v5: metric box UVs; empty in older files (the mesh then has none,
+        /// exactly as it did when it was saved).</summary>
+        public List<Vector2> Uvs = new();
+        /// <summary>v5: per-material parts; empty = one part, the whole element.</summary>
+        public List<ProjectMepPart> Parts = new();
         public int Storey = -1;
         public int Category;               // MepCategory as int (0 = plumbing, old files)
         public float Transparency;
@@ -165,9 +187,10 @@ namespace RoomPlanner.Core.Project
         /// 2 = + electrical layer; 3 = per-side wall finishes (issue #34) — in v3
         /// ProjectWall.Finish is the INNER side and FinishB the outer, while a v2
         /// file's single Finish paints the whole wall; 4 = + placed furniture
-        /// (design/27). Readers accept anything up to this and refuse newer — an
+        /// (design/27); 5 = + per-material parts and box UVs of imported elements
+        /// (design/29). Readers accept anything up to this and refuse newer — an
         /// older build silently dropping the furniture would be worse than refusing.</summary>
-        public const int CurrentVersion = 4;
+        public const int CurrentVersion = 5;
 
         public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();

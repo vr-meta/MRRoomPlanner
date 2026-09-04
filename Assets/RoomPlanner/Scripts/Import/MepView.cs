@@ -22,6 +22,11 @@ namespace RoomPlanner.Import
         /// but Capture never filled it — the storey filter died after save/load (audit B6).</summary>
         public int StoreyIndex = -1;
 
+        /// <summary>Materials of the element, one per submesh (design/29 §2); empty for
+        /// single-material elements. Kept here so a save round-trip restores the leather
+        /// sofa with aluminium legs and not a single-coloured blob.</summary>
+        public System.Collections.Generic.List<RoomPlanner.Core.Ifc.MepPart> Parts = new();
+
         /// <summary>Apply the current global shadow-casting choice to this element.</summary>
         public void ApplyShadowMode()
         {
