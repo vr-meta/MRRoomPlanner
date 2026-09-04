@@ -90,6 +90,9 @@ namespace RoomPlanner.Editing
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
             _mep = GetComponent<RoomPlanner.Import.MepView>();
+            // Every material slot of a baked IFC product is a physical part of the same
+            // paintable object. Do not rely on one specific importer call to opt it in.
+            if (_mep != null) PaintAllSubmeshes = true;
             if (_furniture != null) _kind = SelectableKind.Furniture;
             // baked IFC elements: their own kind since issue #135, so they can be picked,
             // deleted and re-dressed instead of silently reading as «Measurement»
@@ -213,6 +216,13 @@ namespace RoomPlanner.Editing
         {
             Resolve();
             if (_wall == null) { SetFinish(finish, texture, normal); return; }
+            // Rectangular IFC columns reuse Wall's five-submesh mesh, but have no
+            // semantic inside/outside. A finish chosen on any face covers the object.
+            if (_wall.Segment != null && _wall.Segment.IsColumn)
+            {
+                SetFinish(finish, texture, normal);
+                return;
+            }
             var tex = finish.Kind == FinishKind.Texture ? texture : null;
             var nrm = finish.Kind == FinishKind.Texture ? normal : null;
             if (side == WallSide.Outer)
@@ -288,18 +298,32 @@ namespace RoomPlanner.Editing
                 // and highlight must cover every submesh; walls/doors keep the body-only
                 // rule that protects their glass and joinery.
                 bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1 && !PaintAllSubmeshes;
+                bool everySubmesh = i == 0 && PaintAllSubmeshes
+                    && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
                 {
                     var finish = body ? _finish : SurfaceFinish.None;
                     FillBlock(finish, body ? _finishTexture : null, body ? _finishNormal : null,
                         tint, stateColor, t, _ownColors[i]);
-                    if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
+                    if (everySubmesh)
+                    {
+                        r.SetPropertyBlock(null);
+                        for (int slot = 0; slot < r.sharedMaterials.Length; slot++)
+                            r.SetPropertyBlock(_mpb, slot);
+                    }
+                    else if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
                 else
                 {
-                    if (bodyOnly) r.SetPropertyBlock(null, 0);
+                    if (everySubmesh)
+                    {
+                        r.SetPropertyBlock(null);
+                        for (int slot = 0; slot < r.sharedMaterials.Length; slot++)
+                            r.SetPropertyBlock(null, slot);
+                    }
+                    else if (bodyOnly) r.SetPropertyBlock(null, 0);
                     else r.SetPropertyBlock(null);   // restore the material's own color
                 }
             }

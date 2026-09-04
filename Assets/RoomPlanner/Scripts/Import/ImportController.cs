@@ -284,6 +284,7 @@ namespace RoomPlanner.Import
                     if (iw.JoinOverride >= 0) seg.Join = (WallJoin)iw.JoinOverride;
                     if (iw.SideSignOverride != 0f) seg.SideSign = iw.SideSignOverride;
                     seg.BaseHeight = iw.BaseHeight;
+                    seg.IsColumn = iw.FromColumn;
                     touched.Add(a);
                     touched.Add(b);
                     segments.Add((seg, iw.StoreyIndex, wi));
