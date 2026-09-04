@@ -88,21 +88,18 @@ namespace RoomPlanner.Core
         public const float RadialScrimRadius = RadialOuterRadius * 1.25f;
         public const float RadialScrimAlpha = 0.55f;
         public const float RadialSpawnDistance = 0.60f;
+        public const float MenuRayDistance = 1.20f;
+        public const float MaxPanelHeight = 0.42f;
 
         // ---- motion budget (§4): nothing above 150 ms except the destructive hold ----
-        public const float HoverInSeconds = 0.06f;
         public const float HoverOutSeconds = 0.09f;
         public const float PressFlashSeconds = 0.08f;
-        public const float ToggleSlideSeconds = 0.06f;
-        public const float PopupOpenSeconds = 0.10f;
-        public const float PopupCloseSeconds = 0.08f;
         public const float RadialOpenSeconds = 0.12f;
         public const float RadialCloseSeconds = 0.08f;
-        public const float PanelFadeSeconds = 0.15f;
         public const float DestructiveHoldSeconds = 0.5f;
-        public const float DestructiveDisarmSeconds = 3f;
         public const float PostCloseDebounceSeconds = 0.15f;
         public const float TooltipDelaySeconds = 0.35f;
+        public const float LiveRefreshSeconds = 0.50f;
 
         private static Color FromHex(int rgb) => new Color(
             ((rgb >> 16) & 0xFF) / 255f,

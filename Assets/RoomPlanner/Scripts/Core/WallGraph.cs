@@ -177,8 +177,8 @@ namespace RoomPlanner.Walls
         /// </summary>
         public readonly List<WallOpening> Openings = new();
 
-        /// <summary>Copy the editable parameters from another segment (used when splitting).</summary>
-        internal void CopyParamsFrom(WallSegment s)
+        /// <summary>Copy the editable parameters from another segment (split/duplicate).</summary>
+        public void CopyParamsFrom(WallSegment s)
         {
             Thickness = s.Thickness;
             Height = s.Height;
@@ -240,6 +240,16 @@ namespace RoomPlanner.Walls
         {
             var existing = FindNode(p, tolerance);
             if (existing != null) return existing;
+            return CreateNode(p);
+        }
+
+        /// <summary>
+        /// Create an independent node even when another node is nearby. CAD duplicate/offset
+        /// uses this path: a requested 20 mm parallel copy must not collapse back onto the
+        /// source merely because the normal drawing snap tolerance is 50 mm.
+        /// </summary>
+        public WallNode CreateNode(Vector3 p)
+        {
             var node = new WallNode(_nextNodeId++, p);
             _nodes.Add(node);
             return node;

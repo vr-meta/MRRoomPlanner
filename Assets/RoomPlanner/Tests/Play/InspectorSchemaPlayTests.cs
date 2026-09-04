@@ -40,6 +40,7 @@ namespace RoomPlanner.Tests.Play
         }
 
         private Transform _tabsRoot;
+        private TMP_Text _titleLabel;
 
         private InspectorPanel MakePanel(out Transform rowsRoot, out GameObject panelRoot, out GameObject selectionGroup)
         {
@@ -53,13 +54,22 @@ namespace RoomPlanner.Tests.Play
             rows.transform.SetParent(panelRoot.transform, false);
             var tabs = new GameObject("Tabs");
             tabs.transform.SetParent(panelRoot.transform, false);
+            var popups = panelRoot.AddComponent<UiPopups>();
+            SetPrivate(popups, "anchor", panelRoot.transform);
             selectionGroup = new GameObject("SelectionGroup");
             selectionGroup.transform.SetParent(panelRoot.transform, false);
+            var title = new GameObject("Title");
+            title.transform.SetParent(panelRoot.transform, false);
+            var titleText = new GameObject("TitleText");
+            titleText.transform.SetParent(title.transform, false);
+            _titleLabel = titleText.AddComponent<TextMeshPro>();
 
             SetPrivate(panel, "panelRoot", panelRoot);
             SetPrivate(panel, "rowsRoot", rows.transform);
             SetPrivate(panel, "tabsRoot", tabs.transform);
             SetPrivate(panel, "selectionGroup", selectionGroup);
+            SetPrivate(panel, "titleLabel", _titleLabel);
+            SetPrivate(panel, "popups", popups);
             rowsRoot = rows.transform;
             _tabsRoot = tabs.transform;
             return panel;
@@ -90,23 +100,6 @@ namespace RoomPlanner.Tests.Play
         }
 
         [Test]
-        public void CycleRow_BuildsCaptionValueButton_NotRepeatable()
-        {
-            int i = 0;
-            var names = new[] { "Miter", "Bevel" };
-            var schema = new SettingsSchema()
-                .Cycle("j", "Corner", () => names[i], () => i = (i + 1) % names.Length);
-            var panel = MakePanel(out var rows, out _, out _);
-
-            panel.ShowFor(schema, showSelection: false);
-
-            Assert.AreEqual(3, rows.childCount, "caption + value + [>]");
-            var buttons = rows.GetComponentsInChildren<MenuButton>(true);
-            Assert.AreEqual(1, buttons.Length);
-            Assert.IsFalse(buttons[0].Repeatable, "holding on a cycle must not spin modes");
-        }
-
-        [Test]
         public void Click_MutatesValue_AndRefreshUpdatesLabel()
         {
             int v = 5;
@@ -134,16 +127,16 @@ namespace RoomPlanner.Tests.Play
             int a = 0, b = 0;
             var first = new SettingsSchema().Stepper("a", "A", () => a.ToString(), () => a--, () => a++);
             var second = new SettingsSchema()
-                .Cycle("c1", "C1", () => b.ToString(), () => b++)
-                .Cycle("c2", "C2", () => b.ToString(), () => b++);
+                .Readout("c1", "C1", () => b.ToString())
+                .Readout("c2", "C2", () => b.ToString());
             var panel = MakePanel(out var rows, out _, out _);
 
             panel.ShowFor(first, showSelection: false);
             panel.ShowFor(second, showSelection: false);
             yield return null;   // deferred Destroy of the old rows applies
 
-            Assert.AreEqual(6, rows.childCount, "two cycle rows: 2 × (caption + value + [>])");
-            Assert.AreEqual(2, rows.GetComponentsInChildren<MenuButton>(true).Length);
+            Assert.AreEqual(4, rows.childCount, "two readout rows: caption + value each");
+            Assert.AreEqual(0, rows.GetComponentsInChildren<MenuButton>(true).Length);
         }
 
         // ---- v2 widget rows (design/20 §2) ----
@@ -172,6 +165,35 @@ namespace RoomPlanner.Tests.Play
             Assert.AreNotEqual(2.7f, v, "preview moves the value");
             widget.EndDrag();
             Assert.AreEqual(v, committedAfter, 1e-5f, "release commits the final value once");
+        }
+
+        [Test]
+        public void SliderValue_AndOptedInStepperValue_OpenTheSharedNumpad()
+        {
+            float sliderValue = 2f;
+            var slider = new SettingsSchema().Slider("s", "Scale", 1f, 10f, 0.5f,
+                () => sliderValue, v => sliderValue = v, (_, v) => sliderValue = v,
+                () => sliderValue.ToString("0.0"));
+            var panel = MakePanel(out var rows, out _, out _);
+            panel.ShowFor(slider, false);
+
+            var exact = System.Array.Find(rows.GetComponentsInChildren<MenuButton>(true),
+                b => b.name == "sValExact");
+            Assert.IsNotNull(exact, "slider display must be a separate exact-entry target");
+            exact.OnClick();
+            Assert.IsTrue(panel.Popups.IsOpen);
+            panel.Popups.CloseAll();
+
+            int count = 2;
+            var stepper = new SettingsSchema().NumericStepper("n", "Posts", 1f, 5f,
+                () => count, (_, v) => count = Mathf.RoundToInt(v), () => count.ToString(),
+                () => count--, () => count++);
+            panel.ShowFor(stepper, false);
+            exact = System.Array.Find(rows.GetComponentsInChildren<MenuButton>(true),
+                b => b.name == "nValExact");
+            Assert.IsNotNull(exact, "numeric steppers opt in to exact entry");
+            exact.OnClick();
+            Assert.IsTrue(panel.Popups.IsOpen);
         }
 
         [Test]
@@ -235,6 +257,36 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, tab, "tab click routes through SelectTab");
             Assert.AreEqual(1, rows.GetComponentsInChildren<MenuButton>(true).Length,
                 "wire page: the toggle row");
+        }
+
+        [Test]
+        public void TabbedSchema_SeparatesIconsFromLabels_AndRefreshesContextTitle()
+        {
+            int tab = 0;
+            var names = new[] { "Outlet", "Switch", "Wire", "Box", "Panel" };
+            var pages = new SettingsSchema[names.Length];
+            for (int i = 0; i < pages.Length; i++) pages[i] = new SettingsSchema();
+            var schema = SettingsSchema.Tabbed(names, () => tab, i => tab = i, pages);
+            var panel = MakePanel(out _, out _, out _);
+
+            panel.ShowFor(schema, showSelection: false, title: "Electric");
+
+            Assert.AreEqual("Electric · Outlet", _titleLabel.text);
+            var buttons = _tabsRoot.GetComponentsInChildren<MenuButton>(true);
+            Assert.AreEqual(names.Length, buttons.Length);
+            foreach (var button in buttons)
+            {
+                var label = button.GetComponentInChildren<TMP_Text>(true);
+                var icon = button.transform.Find("Icon");
+                Assert.IsNotNull(label);
+                Assert.IsNotNull(icon);
+                Assert.Greater(label.rectTransform.localPosition.x,
+                    icon.localPosition.x + 0.006f, $"{button.name}: icon must own the left column");
+                Assert.LessOrEqual(label.fontSize, UiTokens.RowHeight * 1.85f + 1e-5f);
+            }
+
+            buttons[2].OnClick();
+            Assert.AreEqual("Electric · Wire", _titleLabel.text);
         }
 
         [Test]
@@ -358,7 +410,7 @@ namespace RoomPlanner.Tests.Play
             var s = wall.GetSettings();
             Assert.IsNotNull(s);
             // No "Corner" row: graph joints always miter, the row changed nothing (audit B8).
-            Assert.AreEqual(5, s.Fields.Count, "Thickness/Height/Angle/Offset/Place");
+            Assert.AreEqual(6, s.Fields.Count, "Thickness/Height/Angle/Grid/Offset/Place");
 
             // v2 (design/20 §2.2): thickness is a slider — preview + commit route to the store
             var thk = s.Fields[0];
@@ -369,7 +421,7 @@ namespace RoomPlanner.Tests.Play
             Assert.LessOrEqual(mgr.WallThickness, 1f + 1e-5f, "store clamps stay enforced");
 
             // §2.3: offset mode is segmented — all options visible, set by index
-            var off = s.Fields[3];
+            var off = s.Fields[4];
             Assert.AreEqual(SettingKind.Segmented, off.Kind);
             Assert.AreEqual(3, off.ResolveOptions().Length);
             off.SetIndex(2);

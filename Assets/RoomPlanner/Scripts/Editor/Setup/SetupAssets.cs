@@ -3,6 +3,7 @@ using System.IO;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Tools;
 using RoomPlanner.Electrical;
 
@@ -22,13 +23,13 @@ namespace RoomPlanner.EditorTools
             Directory.CreateDirectory(MatDir);
             Directory.CreateDirectory(PrefabDir);
 
-            // Colors follow the UiColors system (design/16 P1.6): states keep the reserved
+            // Colors follow UiTokens (design/16 P1.6): states keep the reserved
             // cyan/mint; data hues come from the layer palette — measurement visuals moved to
             // the Measurements violet family, freeing green (selected) and yellow (Electrical).
             ctx.LineMat = CreateMat("Measure_Line", new Color(0.94f, 0.96f, 1f));            // neutral
-            ctx.MarkerMat = CreateMat("Measure_Marker", UiColors.LayerMeasurements);
+            ctx.MarkerMat = CreateMat("Measure_Marker", UiTokens.LayerMeasurements);
             ctx.ReticleMat = CreateMat("Measure_Reticle", new Color(0.94f, 0.96f, 1f));      // yellow → Electrical reserve
-            ctx.ContMat = CreateMat("Measure_Continue", UiColors.Selected);
+            ctx.ContMat = CreateMat("Measure_Continue", UiTokens.Selected);
             Texture2D badgeTex = CreateRoundedBadgeTexture();
             ctx.BadgeMat = CreateBadgeMat("Measure_Badge", new Color(0.45f, 0.32f, 0.82f), badgeTex);
 
@@ -120,10 +121,10 @@ namespace RoomPlanner.EditorTools
             ctx.PipeMat = CreatePlainLitMat("Plumb_Pipe", new Color(0.58f, 0.60f, 0.62f));
             MakeGlossy(ctx.PipeMat, 0.40f);
 
-            ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
-            ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
-            ctx.BtnMat = CreateMat("Menu_Button", UiColors.ButtonBg);
-            ctx.ActiveMat = CreateMat("Menu_Active", UiColors.Selected);
+            ctx.PanelMat = CreateMat("Menu_Panel", UiTokens.PanelBg);   // opaque (no shader-variant stripping on device)
+            ctx.RimMat = CreateMat("Menu_Rim", UiTokens.PanelRim);
+            ctx.BtnMat = CreateMat("Menu_Button", UiTokens.ButtonBg);
+            ctx.ActiveMat = CreateMat("Menu_Active", UiTokens.Selected);
 
             // UI v2 (design/20 §6): icons/plates are white and MPB-tinted per state;
             // inset wells are darker "carved-in" surfaces; the radial scrim is a
@@ -600,7 +601,7 @@ namespace RoomPlanner.EditorTools
             tmp.text = text;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Color.white;
-            tmp.enableWordWrapping = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
             // allow text to use the full width of its cell
             tmp.rectTransform.sizeDelta = new Vector2(size.x * 1.6f, size.y * 0.95f);
             // fixed size + ellipsis, same rationale as InspectorPanel.MakeText (issue #55):

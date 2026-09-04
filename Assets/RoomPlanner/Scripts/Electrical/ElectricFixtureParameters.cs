@@ -41,13 +41,15 @@ namespace RoomPlanner.Electrical
             switch (kind)
             {
                 case FixtureKind.Outlet:
-                    s.Stepper("fposts", "Posts", () => $"{Fx.Posts}",
+                    s.NumericStepper("fposts", "Posts", 1f, ElectricalDefaults.MaxPosts,
+                        () => Fx.Posts, (_, v) => ApplyPosts(Mathf.RoundToInt(v)), () => $"{Fx.Posts}",
                         () => ApplyPosts(Fx.Posts - 1), () => ApplyPosts(Fx.Posts + 1));
                     AddHeightRow(s, ElectricalDefaults.MinOutletHeight);
                     AddVariantRow(s);
                     break;
                 case FixtureKind.Switch:
-                    s.Stepper("fkeys", "Keys", () => $"{Fx.Keys}",
+                    s.NumericStepper("fkeys", "Keys", 1f, ElectricalDefaults.MaxKeys,
+                        () => Fx.Keys, (_, v) => ApplyKeys(Mathf.RoundToInt(v)), () => $"{Fx.Keys}",
                         () => ApplyKeys(Fx.Keys - 1), () => ApplyKeys(Fx.Keys + 1));
                     AddHeightRow(s, ElectricalDefaults.MinSwitchHeight);
                     AddVariantRow(s);
@@ -58,7 +60,9 @@ namespace RoomPlanner.Electrical
                     AddVariantRow(s);
                     break;
                 default:
-                    s.Stepper("fres", "Reserve", () => $"{Fx.ReservePercent} %",
+                    s.NumericStepper("fres", "Reserve", 0f, ElectricalDefaults.MaxReservePercent,
+                        () => Fx.ReservePercent, (_, v) => ApplyReserve(Mathf.RoundToInt(v)),
+                        () => $"{Fx.ReservePercent} %",
                         () => ApplyReserve(Fx.ReservePercent - ElectricalDefaults.ReserveStep),
                         () => ApplyReserve(Fx.ReservePercent + ElectricalDefaults.ReserveStep));
                     AddVariantRow(s);

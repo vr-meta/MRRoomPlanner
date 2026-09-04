@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using RoomPlanner.Core;
+using RoomPlanner.Tools;
 using UnityEngine;
 
 namespace RoomPlanner.Tests
@@ -64,6 +65,81 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(0f, right.y, 1e-4f);
             for (int s = 0; s < RadialMath.Slots; s++)
                 Assert.AreEqual(1f, RadialMath.SlotDirection(s).magnitude, 1e-4f);
+        }
+
+        [Test]
+        public void Hint_MatchesTheLastInputPath()
+        {
+            Assert.AreEqual("trigger to select", RadialMenu.SelectionHint(true, true));
+            Assert.AreEqual("release to select", RadialMenu.SelectionHint(true, false));
+            Assert.AreEqual("coming soon", RadialMenu.SelectionHint(true, true, reserved: true));
+            Assert.AreEqual("walls only", RadialMenu.SelectionHint(true, true,
+                disabled: true, disabledHint: "walls only"));
+            Assert.AreEqual("flick to pick · B to cancel", RadialMenu.SelectionHint(false, false));
+        }
+
+        [Test]
+        public void SelectionContext_KeepsActionsCardinal_AndExplainsUnsupportedOnes()
+        {
+            var definitions = ToolManager.CreateSelectionContextDefinitions(
+                canDuplicate: false, canQuickMeasure: true, canOffset: false);
+
+            Assert.AreEqual(RadialMath.Slots, definitions.Length);
+            Assert.AreEqual((int)SelectionAction.Duplicate, definitions[0].ToolIndex);
+            Assert.IsTrue(definitions[0].Disabled);
+            Assert.AreEqual((int)SelectionAction.QuickMeasure, definitions[3].ToolIndex);
+            Assert.IsTrue(definitions[3].Available);
+            Assert.AreEqual((int)SelectionAction.OffsetWall, definitions[6].ToolIndex);
+            Assert.AreEqual("walls only", definitions[6].DisabledHint);
+            Assert.AreEqual((int)SelectionAction.Delete, definitions[9].ToolIndex);
+            Assert.IsTrue(definitions[9].Available);
+            Assert.IsTrue(definitions[1].Reserved, "unused sectors remain non-actions");
+        }
+
+        [Test]
+        public void Reconfigure_SwapsAvailableIconAndReservedDot()
+        {
+            var radialGo = new GameObject("Radial");
+            var headGo = new GameObject("Head");
+            try
+            {
+                var radial = radialGo.AddComponent<RadialMenu>();
+                radial.Configure(ToolManager.CreateRadialDefinitions(ToolManager.DefaultToolIndex));
+                radial.Open(headGo.transform, ToolManager.DefaultToolIndex("select"));
+
+                var icon = radialGo.transform.Find("Icon1");
+                var dot = radialGo.transform.Find("Dot1");
+                Assert.IsNotNull(icon);
+                Assert.IsNotNull(dot);
+                Assert.IsTrue(icon.gameObject.activeSelf, "Measure is an available tool slot");
+                Assert.IsFalse(dot.gameObject.activeSelf);
+
+                radial.Configure(ToolManager.CreateSelectionContextDefinitions(true, true, true));
+                Assert.IsFalse(icon.gameObject.activeSelf,
+                    "unused context sectors must not look like disabled plus buttons");
+                Assert.IsTrue(dot.gameObject.activeSelf);
+
+                radial.Configure(ToolManager.CreateRadialDefinitions(ToolManager.DefaultToolIndex));
+                Assert.IsTrue(icon.gameObject.activeSelf);
+                Assert.IsFalse(dot.gameObject.activeSelf);
+            }
+            finally
+            {
+                Object.DestroyImmediate(radialGo);
+                Object.DestroyImmediate(headGo);
+            }
+        }
+
+        [Test]
+        public void ReticleSnapKinds_HaveDistinctSilhouettes()
+        {
+            Assert.AreEqual(16, ReticleVisual.Shape(ReticleSnapKind.None).Length);
+            Assert.AreEqual(4, ReticleVisual.Shape(ReticleSnapKind.Corner).Length);
+            Assert.AreEqual(2, ReticleVisual.Shape(ReticleSnapKind.Edge).Length);
+            Assert.AreEqual(4, ReticleVisual.Shape(ReticleSnapKind.Grid).Length);
+            Assert.AreEqual(3, ReticleVisual.Shape(ReticleSnapKind.Angle).Length);
+            Assert.AreNotEqual(ReticleVisual.Shape(ReticleSnapKind.Corner)[0],
+                ReticleVisual.Shape(ReticleSnapKind.Grid)[0]);
         }
     }
 

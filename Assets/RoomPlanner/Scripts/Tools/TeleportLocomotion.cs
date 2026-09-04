@@ -39,8 +39,7 @@ namespace RoomPlanner.Tools
         private bool _hasTarget;
         private Vector3 _target;
 
-        /// <summary>Whether the portal aim is live this frame (ToolManager keeps the A-tap
-        /// teleport away while the left hand is already aiming one).</summary>
+        /// <summary>Whether the left-trigger portal aim is live this frame.</summary>
         public bool IsAiming => _aiming;
 
         /// <summary>Called by ToolManager every frame. uiCaptured = the radial owns the
@@ -94,7 +93,7 @@ namespace RoomPlanner.Tools
 
             // walk the parabola segment by segment; the first surface hit ends the arc, and
             // only a slab, a stair tread or the GROUND makes it a valid landing (design/26 —
-            // the ground is a first-class surface, the same rule as A-tap otherwise)
+            // the ground is a first-class surface alongside slabs and stair treads)
             _hasTarget = false;
             int last = _arc.Count - 1;
             for (int i = 1; i < _arc.Count; i++)

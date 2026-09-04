@@ -3,6 +3,7 @@
     "rootNamespace": "RoomPlanner.Tests",
     "references": [
         "RoomPlanner.Core",
+        "RoomPlanner.App",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

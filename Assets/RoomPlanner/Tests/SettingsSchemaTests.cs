@@ -24,6 +24,12 @@ namespace RoomPlanner.Tests
             Assert.AreEqual("1.", PanelLayout.NumpadPress("1", "."));
             Assert.AreEqual("1.5", PanelLayout.NumpadPress("1.", "5"));
             Assert.AreEqual("1.5", PanelLayout.NumpadPress("1.5", "."), "second dot refused");
+            Assert.AreEqual("0.", PanelLayout.NumpadPress("", ","),
+                "localized comma is accepted but stored canonically");
+            Assert.AreEqual("1.5", PanelLayout.NumpadPress("1.5", ","),
+                "a comma cannot add a second decimal separator");
+            Assert.AreEqual("-12,5", PanelLayout.LocalizeNumpadEntry("-12.5", ","));
+            Assert.AreEqual("-12.5", PanelLayout.LocalizeNumpadEntry("-12.5", "."));
         }
 
         [Test]
@@ -40,13 +46,13 @@ namespace RoomPlanner.Tests
         {
             var s = new SettingsSchema()
                 .Stepper("a", "Alpha", () => "1", () => { }, () => { })
-                .Cycle("b", "Beta", () => "x", () => { });
+                .Readout("b", "Beta", () => "x");
 
             Assert.AreEqual(2, s.Fields.Count);
             Assert.AreEqual("a", s.Fields[0].Id);
             Assert.AreEqual(SettingKind.Stepper, s.Fields[0].Kind);
             Assert.AreEqual("b", s.Fields[1].Id);
-            Assert.AreEqual(SettingKind.Cycle, s.Fields[1].Kind);
+            Assert.AreEqual(SettingKind.Readout, s.Fields[1].Kind);
         }
 
         [Test]
@@ -65,17 +71,19 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
-        public void Cycle_UsesIncreaseAsNext_AndHasNoDecrease()
+        public void NumericStepper_OptsIntoExactEntryWithoutLosingStepActions()
         {
-            int i = 0;
-            var names = new[] { "Miter", "Bevel", "Round" };
-            var s = new SettingsSchema()
-                .Cycle("j", "Corner", () => names[i], () => i = (i + 1) % names.Length);
+            float value = 10f;
+            var field = new SettingsSchema()
+                .NumericStepper("v", "Value", 0f, 20f, () => value,
+                    (_, after) => value = after, () => value.ToString("0"),
+                    () => value--, () => value++)
+                .Fields[0];
 
-            var f = s.Fields[0];
-            Assert.IsNull(f.Decrease, "cycle rows have no decrease action");
-            f.Increase();
-            Assert.AreEqual("Bevel", f.Value());
+            Assert.AreEqual(SettingKind.Stepper, field.Kind);
+            field.Increase();
+            field.CommitNumber(11f, 17f);
+            Assert.AreEqual(17f, value);
         }
 
         // ---- v2 vocabulary (design/20 §2) ----
@@ -221,6 +229,18 @@ namespace RoomPlanner.Tests
             float h3 = PanelLayout.PanelHeight(3, false);
             Assert.AreEqual(3 * UiTokens.RowStep - (UiTokens.RowStep - UiTokens.RowHeight),
                 h3 - h0, 1e-5f);
+        }
+
+        [Test]
+        public void TallPanel_IsCappedAndScrollsWithinItsContent()
+        {
+            float content = PanelLayout.PanelHeight(20, hasTabs: true);
+            Assert.AreEqual(UiTokens.MaxPanelHeight, PanelLayout.VisiblePanelHeight(content));
+            Assert.AreEqual(content - UiTokens.MaxPanelHeight,
+                PanelLayout.ScrollRange(content), 1e-5f);
+            Assert.Greater(PanelLayout.ScrollBy(0f, -1f, 1f, content), 0f);
+            Assert.AreEqual(PanelLayout.ScrollRange(content),
+                PanelLayout.ScrollBy(999f, -1f, 1f, content), 1e-5f);
         }
 
         [Test]

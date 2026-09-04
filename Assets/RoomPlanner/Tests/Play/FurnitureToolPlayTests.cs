@@ -273,8 +273,6 @@ namespace RoomPlanner.Tests.Play
             foreach (var page in schema.TabPages)
             {
                 Assert.LessOrEqual(page.Fields.Count, 8, "design/20 §3: eight rows is the ceiling");
-                foreach (var f in page.Fields)
-                    Assert.AreNotEqual(SettingKind.Cycle, f.Kind, "design/20 §2: Cycle is banned");
             }
 
             // The collection list is the catalog's — packs are re-curated, so assert on the

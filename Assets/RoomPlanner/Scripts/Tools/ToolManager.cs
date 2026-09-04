@@ -10,6 +10,9 @@ namespace RoomPlanner.Tools
     /// <summary>Where points land: on scanned geometry, free in the air, or snapped to the floor.</summary>
     public enum PlaceMode { Surface, Free, Floor }
 
+    /// <summary>Stable action ids carried by the selection-context radial slots.</summary>
+    public enum SelectionAction { Duplicate, QuickMeasure, OffsetWall, Delete }
+
     /// <summary>
     /// «Мозг» инструментов: держит РЕЕСТР инструментов (ITool[], без enum/switch — см.
     /// design/14-modularity.md), каждый кадр решает — указатель над меню (блокируем
@@ -82,6 +85,11 @@ namespace RoomPlanner.Tools
         public void AdjustWallThickness(float d) => wallThickness = Mathf.Clamp(wallThickness + d, 0.02f, 1f);
         public void AdjustWallHeight(float d) => wallHeight = Mathf.Clamp(wallHeight + d, 0.2f, 5f);
         public void AdjustAngleStep(float d) => angleStep = Mathf.Clamp(angleStep + d, 5f, 90f);
+        public void AdjustGridSize(float d) =>
+            gridSize = Mathf.Round(Mathf.Clamp(gridSize + d, 0.01f, 0.50f) * 100f) / 100f;
+        public void SetAngleStep(float value) => angleStep = Mathf.Clamp(Mathf.Round(value), 5f, 90f);
+        public void SetGridSize(float value) =>
+            gridSize = Mathf.Round(Mathf.Clamp(value, 0.01f, 0.50f) * 100f) / 100f;
         public void AdjustLevel(float d) => level = Mathf.Round((level + d) * 100f) / 100f;
 
         // absolute setters for the v2 sliders/numpad (design/20 §2.2, §2.6)
@@ -100,6 +108,7 @@ namespace RoomPlanner.Tools
         private int _active;
         private bool _showRenderSettings;   // gear on the snap strip → Rendering page
         private SettingsSchema _renderSchema;
+        private ReticleVisual _reticleVisual;
 
         private ITool ActiveTool() =>
             _tools != null && _active >= 0 && _active < _tools.Length ? _tools[_active] : null;
@@ -141,10 +150,71 @@ namespace RoomPlanner.Tools
         /// <summary>Index of a tool in the registry, or -1 — for Editor-side wiring.</summary>
         public static int RegistryIndexOf(string id)
         {
+            if (string.IsNullOrEmpty(id)) return -1;
             for (int i = 0; i < RegistryIds.Length; i++)
                 if (RegistryIds[i] == id) return i;
             return -1;
         }
+
+        /// <summary>Stable controller order used by the rig, radial preview and inventory tests.</summary>
+        public static System.Collections.Generic.IReadOnlyList<string> RegisteredToolIds => RegistryIds;
+
+        public static int DefaultToolIndex(string id) => RegistryIndexOf(id);
+
+        /// <summary>One source for runtime and editor-preview radial definitions.</summary>
+        public static RadialSlotDef[] CreateRadialDefinitions(System.Func<string, int> indexOfTool)
+        {
+            var defs = new RadialSlotDef[RadialSlots.Length];
+            for (int i = 0; i < RadialSlots.Length; i++)
+            {
+                var slot = RadialSlots[i];
+                defs[i] = new RadialSlotDef
+                {
+                    IconId = slot.icon,
+                    Label = slot.label,
+                    Tint = slot.tint,
+                    ToolIndex = slot.toolId == null || indexOfTool == null
+                        ? -1 : indexOfTool(slot.toolId),
+                };
+            }
+            return defs;
+        }
+
+        /// <summary>
+        /// One-level selection wheel. The four verbs keep fixed cardinal positions; actions
+        /// unsupported by the selected object stay visible and explain why they are disabled.
+        /// </summary>
+        public static RadialSlotDef[] CreateSelectionContextDefinitions(
+            bool canDuplicate, bool canQuickMeasure, bool canOffset)
+        {
+            var defs = new RadialSlotDef[Core.RadialMath.Slots];
+            for (int i = 0; i < defs.Length; i++)
+                defs[i] = new RadialSlotDef
+                {
+                    IconId = "plus", Label = "", Tint = UiTokens.LabelDim, ToolIndex = -1,
+                };
+
+            defs[0] = ContextSlot(SelectionAction.Duplicate, "copy", "Duplicate",
+                new Color(0.61f, 0.78f, 1f), !canDuplicate, "not supported for this object");
+            defs[3] = ContextSlot(SelectionAction.QuickMeasure, "tape-measure", "Quick measure",
+                new Color(0.61f, 0.48f, 1f), !canQuickMeasure, "measurement already has dimensions");
+            defs[6] = ContextSlot(SelectionAction.OffsetWall, "wall", "Exact offset",
+                new Color(0.60f, 0.65f, 0.75f), !canOffset, "walls only");
+            defs[9] = ContextSlot(SelectionAction.Delete, "trash", "Delete",
+                UiTokens.Danger, false, null);
+            return defs;
+        }
+
+        private static RadialSlotDef ContextSlot(SelectionAction action, string icon,
+            string label, Color tint, bool disabled, string disabledHint) => new()
+        {
+            IconId = icon,
+            Label = label,
+            Tint = tint,
+            ToolIndex = (int)action,
+            Disabled = disabled,
+            DisabledHint = disabledHint,
+        };
 
         private void Start()
         {
@@ -162,22 +232,10 @@ namespace RoomPlanner.Tools
                 if (t != null) t.OnDeactivate();
             _active = 0;
             if (ActiveTool() != null) ActiveTool().OnActivate();
+            ConfigureReticle(ActiveTool(), showGesture: true);
 
             if (radial != null)
-            {
-                var defs = new RadialSlotDef[RadialSlots.Length];
-                for (int i = 0; i < RadialSlots.Length; i++)
-                {
-                    var s = RadialSlots[i];
-                    defs[i] = new RadialSlotDef
-                    {
-                        IconId = s.icon, Label = s.label, Tint = s.tint,
-                        ToolIndex = IndexOfTool(s.toolId),
-                    };
-                }
-                radial.Configure(defs);
-                radial.OnPicked = i => { if (i >= 0) SetActiveTool(i); };
-            }
+                ConfigureToolRadial();
             RefreshMenu();
 
             // SSAO ships ACTIVE in the URP asset (so its shaders survive build stripping)
@@ -217,7 +275,9 @@ namespace RoomPlanner.Tools
         private float _uiDebounceUntil;
         private int _prevTool = -1;   // R3 = previous tool (16 P2.3)
 
-        // A button: the tool radial, nothing else (#87 removed the tap teleport).
+        // A opens a context wheel for the selected object; otherwise it opens the tool wheel.
+        // Teleport remains exclusively on the left-trigger portal (#87).
+        private float _selectionOffsetMeters = 0.20f;
 
         // slider drag capture (design/20 §2.2)
         private SliderWidget _slider;
@@ -233,10 +293,27 @@ namespace RoomPlanner.Tools
         private float _repeatStart;
         private float _repeatNext;
         private MenuButton _hoverBtn;   // for hover-enter haptics
+        private float _nextChromeRefreshAt;
 
         private void Update()
         {
             if (pointer == null || input == null) return;
+
+            if (Time.unscaledTime >= _nextChromeRefreshAt)
+            {
+                _nextChromeRefreshAt = Time.unscaledTime + Core.UiTokens.LiveRefreshSeconds;
+                if (select != null)
+                {
+                    select.RefreshSelectionInfo();
+                    inspector?.SetSelection(select.SelectionTitle, select.SelectionInfo);
+                }
+                if (menu != null)
+                    menu.Refresh(_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn,
+                        _showRenderSettings,
+                        sceneModel != null && sceneModel.History.CanUndo,
+                        sceneModel != null && sceneModel.History.CanRedo,
+                        gridSize);
+            }
 
             // Global Undo/Redo (X/Y) — works regardless of the active tool, but not while a
             // drag is accumulating its delta (replaying history mid-drag corrupts the total).
@@ -260,19 +337,23 @@ namespace RoomPlanner.Tools
 
             Ray ray = pointer.GetRay();
 
-            // ---- tool radial captures ALL input while open (design/20 §1) ----
-            // A is single-purpose since 2026-08-15 (#87): the aim-and-tap teleport is gone
-            // — the portal arc on the trigger replaced it — so the radial opens on PRESS,
-            // with no hold window to disambiguate against.
+            // ---- radial captures ALL input while open (design/20 §1) ----
+            // A is contextual in Select: a selected object opens its action wheel; without
+            // a selection it opens the tool wheel. L3/Menu always opens the tool wheel.
             var cam = Camera.main != null ? Camera.main.transform : null;
             if (radial != null)
             {
-                if (input.RadialPressed() || input.TeleportPressed())
+                bool aPressed = input.TeleportPressed();
+                bool toolsPressed = input.RadialPressed();
+                if (toolsPressed || aPressed)
                 {
                     if (radial.IsOpen) radial.Close();
                     else if (cam != null)
                     {
-                        radial.Open(cam, _active);
+                        if (aPressed && HasSelectionContext)
+                            OpenSelectionRadial(cam);
+                        else
+                            OpenToolRadial(cam);
                         input.PulseLeft(0.3f, 0.012f);
                     }
                 }
@@ -297,7 +378,7 @@ namespace RoomPlanner.Tools
                 {
                     // just closed: swallow trailing clicks so a confirm can't leak into the scene
                     _radialWasCapturing = false;
-                    _uiDebounceUntil = Time.time + 0.15f;
+                    _uiDebounceUntil = Time.time + Core.UiTokens.PostCloseDebounceSeconds;
                 }
             }
 
@@ -313,7 +394,8 @@ namespace RoomPlanner.Tools
             // colliders too, so the trigger can't shoot through the gaps between buttons.
             // 1.2 m limit: menus live at arm's length; a menu collider far across the room
             // must not silently freeze the active tool (design/16 P1.2).
-            bool overMenu = Physics.Raycast(ray, out hit, 1.2f, 1 << MenuLayer, QueryTriggerInteraction.Ignore);
+            bool overMenu = Physics.Raycast(ray, out hit, Core.UiTokens.MenuRayDistance,
+                1 << MenuLayer, QueryTriggerInteraction.Ignore);
             if (overMenu)
             {
                 mb = hit.collider.GetComponentInParent<MenuButton>();
@@ -336,10 +418,14 @@ namespace RoomPlanner.Tools
                 // debounce — otherwise the same B press reaches the tool and deletes
                 // the selection (review 2026-08-10, finding 1)
                 overMenu = true;
-                if (!popups.IsOpen) _uiDebounceUntil = Time.time + 0.15f;
+                if (!popups.IsOpen)
+                    _uiDebounceUntil = Time.time + Core.UiTokens.PostCloseDebounceSeconds;
             }
 
             // ---- slider drag (design/20 §2.2): trigger captured, grip = fine ×0.1 ----
+            if (overMenu && inspector != null && inspector.Owns(hit.collider))
+                inspector.TickScroll(input.Thumbstick());
+
             if (_slider != null)
             {
                 if (!input.ConfirmHeld())
@@ -404,8 +490,8 @@ namespace RoomPlanner.Tools
             _grabbing = false;
 
             // The aim-and-tap teleport that used to live on A is gone (#87): the portal arc
-            // (design/21) is the only way to travel, so one button no longer carries two
-            // meanings. TeleportModelTo stays — the portal and the gravity settle use it.
+            // (design/21) is the only way to travel. TeleportModelTo stays as the portal's
+            // shared command entry point.
 
             ITool act = ActiveTool();
             if (act != null) act.Tick(overMenu || debounced);
@@ -500,8 +586,8 @@ namespace RoomPlanner.Tools
 
         /// <summary>
         /// Bring the aimed spot under your feet — the model moves, never the camera
-        /// (passthrough; design/18 I6). Shared by the A-tap teleport and the left-trigger
-        /// portal (design/21): both roads lead into the same undoable TeleportCommand.
+        /// (passthrough; design/18 I6). Called by the left-trigger portal (design/21)
+        /// and recorded as one undoable TeleportCommand.
         /// </summary>
         public void TeleportModelTo(Vector3 point)
         {
@@ -552,6 +638,145 @@ namespace RoomPlanner.Tools
                 if (_tools[i] != null && _tools[i].Id == id) { SetActiveTool(i); return; }
         }
 
+        /// <summary>Finish-create handoff: activate Select and focus the object just created.</summary>
+        public void SelectObject(ISelectable selectable)
+        {
+            int index = IndexOfTool("select");
+            if (index >= 0) SetActiveTool(index);
+            select?.SelectObject(selectable);
+            RefreshMenu();
+        }
+
+        private bool HasSelectionContext => ReferenceEquals(ActiveTool(), select)
+            && select != null && select.HasSelection;
+
+        private Wall SelectedWall()
+        {
+            var current = select != null ? select.CurrentSelection : null;
+            return current != null && current.Kind == SelectableKind.Wall && current.Transform != null
+                ? current.Transform.GetComponent<Wall>()
+                : null;
+        }
+
+        private bool CanDuplicateSelection()
+        {
+            var current = select != null ? select.CurrentSelection : null;
+            if (current == null) return false;
+            if (current.Kind == SelectableKind.Wall)
+            {
+                var view = SelectedWall();
+                return view != null && view.Segment != null
+                    && view.GetComponentInParent<WallGraphRenderer>() != null;
+            }
+            return current.Kind == SelectableKind.Measurement && measure != null;
+        }
+
+        private void ConfigureToolRadial()
+        {
+            if (radial == null) return;
+            radial.Configure(CreateRadialDefinitions(IndexOfTool));
+            radial.OnPicked = i => { if (i >= 0) SetActiveTool(i); };
+        }
+
+        private void OpenToolRadial(Transform cam)
+        {
+            ConfigureToolRadial();
+            radial?.Open(cam, _active);
+        }
+
+        private void OpenSelectionRadial(Transform cam)
+        {
+            if (radial == null || !HasSelectionContext) return;
+            var current = select.CurrentSelection;
+            radial.Configure(CreateSelectionContextDefinitions(
+                CanDuplicateSelection(),
+                measure != null && current != null && current.Kind != SelectableKind.Measurement,
+                SelectedWall() != null));
+            radial.OnPicked = ExecuteSelectionAction;
+            radial.Open(cam, -1);
+        }
+
+        private void ExecuteSelectionAction(int raw)
+        {
+            if (!System.Enum.IsDefined(typeof(SelectionAction), raw)) return;
+            switch ((SelectionAction)raw)
+            {
+                case SelectionAction.Duplicate:
+                    DuplicateSelection();
+                    break;
+                case SelectionAction.QuickMeasure:
+                    if (measure != null && select?.CurrentSelection != null)
+                        measure.QuickMeasure(select.CurrentSelection);
+                    break;
+                case SelectionAction.OffsetWall:
+                    OpenExactWallOffset();
+                    break;
+                case SelectionAction.Delete:
+                    select?.DeleteSelection();
+                    break;
+            }
+            RefreshMenu();
+        }
+
+        private bool DuplicateSelection()
+        {
+            var current = select != null ? select.CurrentSelection : null;
+            if (current == null) return false;
+            if (current.Kind == SelectableKind.Wall)
+            {
+                float nudge = Mathf.Max(0.10f, gridSize);
+                return DuplicateWall(SelectedWall(), new Vector3(nudge, 0f, nudge));
+            }
+            if (current.Kind == SelectableKind.Measurement && measure != null)
+            {
+                float nudge = Mathf.Max(0.10f, gridSize);
+                var copy = measure.DuplicateMeasurement(current, new Vector3(nudge, 0f, nudge));
+                if (copy == null) return false;
+                select.SelectObject(copy);
+                RefreshMenu();
+                return true;
+            }
+            return false;
+        }
+
+        private bool DuplicateWall(Wall view, Vector3 delta)
+        {
+            if (view == null || view.Segment == null || delta.sqrMagnitude < 1e-10f) return false;
+            var renderer = view.GetComponentInParent<WallGraphRenderer>();
+            if (renderer == null) return false;
+            var command = new WallDuplicateCommand(renderer, view, delta);
+            if (sceneModel != null) sceneModel.History.Execute(command);
+            else command.Do();
+            if (command.Result == null) return false;
+            select?.SelectObject(command.Result);
+            RefreshMenu();
+            return true;
+        }
+
+        private void OpenExactWallOffset()
+        {
+            var view = SelectedWall();
+            var popup = inspector != null ? inspector.Popups : null;
+            if (view == null || view.Segment == null || popup == null) return;
+            var field = new SettingField
+            {
+                Id = "selection-wall-offset",
+                Caption = "Wall offset",
+                Kind = SettingKind.Numeric,
+                Min = -10f,
+                Max = 10f,
+                DisplayScale = 100f,
+                GetNumber = () => _selectionOffsetMeters,
+                Value = () => $"{_selectionOffsetMeters * 100f:0} cm",
+                CommitNumber = (_, after) =>
+                {
+                    _selectionOffsetMeters = after;
+                    DuplicateWall(view, WallDuplicateCommand.OffsetDelta(view.Segment, after));
+                },
+            };
+            popup.OpenNumpad(field, RefreshMenu);
+        }
+
         private void Execute(MenuButton mb)
         {
             // Runtime-bound rows (inspector schema) take precedence over the global enum.
@@ -574,6 +799,8 @@ namespace RoomPlanner.Tools
                 case MenuAction.SelectStripTab:
                     if (menu != null) menu.SetTab(mb.ToolIndex);
                     break;
+                case MenuAction.Undo: sceneModel?.History.Undo(); break;
+                case MenuAction.Redo: sceneModel?.History.Redo(); break;
             }
             RefreshMenu();
         }
@@ -653,6 +880,7 @@ namespace RoomPlanner.Tools
             _active = index;
             ITool next = ActiveTool();
             if (next != null) next.OnActivate();
+            ConfigureReticle(next, showGesture: true);
             if (inspector != null) inspector.NoteToolChanged();
             // The strip follows the tool: drawing walls needs snapping, everything else
             // needs the shortcuts (#85).
@@ -667,7 +895,11 @@ namespace RoomPlanner.Tools
         {
             if (menu != null)
             {
-                menu.Refresh(_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn);
+                menu.Refresh(_active, snapCorner, snapEdge, snapGrid, snapAngle, scanOn,
+                    _showRenderSettings,
+                    sceneModel != null && sceneModel.History.CanUndo,
+                    sceneModel != null && sceneModel.History.CanRedo,
+                    gridSize);
                 ITool a = ActiveTool();
                 if (a != null)
                     foreach (var s in RadialSlots)
@@ -685,9 +917,50 @@ namespace RoomPlanner.Tools
                 if (select != null) inspector.SetSelection(select.SelectionTitle, select.SelectionInfo);
                 // gear page replaces the tool schema until toggled off or a tool is picked
                 var schema = _showRenderSettings ? RenderSettingsSchema() : act?.GetSettings();
-                inspector.ShowFor(schema, showSelection && !_showRenderSettings);
+                string title = _showRenderSettings ? "Rendering"
+                    : showSelection ? select.SelectionTitle
+                    : ToolTitle(act);
+                inspector.ShowFor(schema, showSelection && !_showRenderSettings, title);
             }
         }
+
+        private static string ToolTitle(ITool tool)
+        {
+            if (tool == null) return "Settings";
+            foreach (var slot in RadialSlots)
+                if (slot.toolId == tool.Id) return slot.label;
+            return string.IsNullOrWhiteSpace(tool.PaletteLabel) ? "Settings" : tool.PaletteLabel;
+        }
+
+        private void ConfigureReticle(ITool tool, bool showGesture)
+        {
+            if (reticle == null || tool == null) return;
+            _reticleVisual ??= ReticleVisual.Ensure(reticle);
+            string icon = tool.IconId;
+            Color tint = UiTokens.LabelLight;
+            foreach (var slot in RadialSlots)
+                if (slot.toolId == tool.Id)
+                {
+                    icon = slot.icon;
+                    tint = slot.tint;
+                    break;
+                }
+            _reticleVisual.ConfigureTool(tool.Id, icon, tint, GestureHint(tool.Id), showGesture);
+        }
+
+        private static string GestureHint(string toolId) => toolId switch
+        {
+            "select" => "Trigger: select / drag · A: actions · B: delete",
+            "measure" => "Trigger: pin · B: clear",
+            "wall" => "Trigger: point · B: finish",
+            "floor" => "Trigger: corner · B: close",
+            "openings" => "Trigger: place · B: delete",
+            "blueprint" => "Trigger: calibrate point",
+            "electric" => "Trigger: place / route · B: finish",
+            "paint" => "Trigger: apply finish",
+            "furniture" => "Trigger: place / drag · stick: rotate",
+            _ => "Trigger: use tool · B: back",
+        };
 
         // ---- Rendering page (gear on the snap strip; moved out of Paint 2026-08-11) ----
 
@@ -708,6 +981,9 @@ namespace RoomPlanner.Tools
                 .Toggle("edges", "Edges", () => Core.MeshShading.ShowEdges, _ => ToggleEdges());
             return _renderSchema;
         }
+
+        /// <summary>Editor gallery seam; the gear page is still owned by this manager.</summary>
+        public SettingsSchema GetRenderingSettings() => RenderSettingsSchema();
 
         /// <summary>One switch for EVERY content caster — walls, floors, stairs,
         /// furniture, fixtures (feedback 2026-08-11). Imports go two-sided (arbitrary

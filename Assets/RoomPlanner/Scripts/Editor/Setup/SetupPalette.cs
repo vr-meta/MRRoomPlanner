@@ -22,19 +22,19 @@ namespace RoomPlanner.EditorTools
             var menu = root.AddComponent<ToolMenu>();
 
             var panel = SetupAssets.MakePlateGo(root.transform, "Panel",
-                new Vector3(0f, 0f, 0.006f), 0.31f, 0.115f, RoomPlanner.Core.UiTokens.RadiusL,
+                new Vector3(0f, 0f, 0.006f), 0.31f, 0.155f, RoomPlanner.Core.UiTokens.RadiusL,
                 ctx.PanelMat);
             var panelCol = panel.AddComponent<BoxCollider>();
-            panelCol.size = new Vector3(0.31f, 0.115f, 0.01f);
+            panelCol.size = new Vector3(0.31f, 0.155f, 0.01f);
             var grab = panel.AddComponent<InspectorGrab>();
             grab.MoveTarget = root.transform;   // grip anywhere on the strip = park it
             SetupAssets.MakePlateGo(panel.transform, "Rim", new Vector3(0f, 0f, 0.002f),
-                0.316f, 0.121f, RoomPlanner.Core.UiTokens.RadiusL + 0.003f, ctx.RimMat);
+                0.316f, 0.161f, RoomPlanner.Core.UiTokens.RadiusL + 0.003f, ctx.RimMat);
 
             // ---- tabs (#85): file-folder tabs sitting ON TOP of the strip, not inside it.
             // The first build put them at y=0.048, overlapping the button row at 0.026
             // (headset feedback 2026-08-15 — "они наезжают на кнопки").
-            const float panelTop = 0.115f * 0.5f;          // 0.0575
+            const float panelTop = 0.155f * 0.5f;
             var tabSize = new Vector2(0.072f, 0.022f);
             float tabY = panelTop + tabSize.y * 0.5f - 0.004f;   // overlap 4 mm = attached, not floating
 
@@ -59,9 +59,6 @@ namespace RoomPlanner.EditorTools
 
             // ---- tab 1: shortcuts to the tools reached constantly ----
             var snapSize = new Vector2(0.042f, 0.042f);
-            const float stepX = 0.047f;
-            float x0 = -0.1175f;
-
             // Radial slot order is permanent, so these indices are stable labels, not magic:
             // the strip mirrors the tools a session actually cycles through.
             var shortcuts = new List<MenuButton>();
@@ -78,7 +75,7 @@ namespace RoomPlanner.EditorTools
             {
                 var def = shortcutDefs[i];
                 var b = SetupAssets.MakeMenuButton(toolsRow.transform, "Btn_" + def.id, null,
-                    MenuAction.SelectTool, new Vector3(x0 + i * stepX, 0.026f, 0f), snapSize,
+                    MenuAction.SelectTool, new Vector3(ToolMenu.SnapButtonX(i), 0.048f, 0f), snapSize,
                     ctx.BtnMat, ctx.ActiveMat, withActiveMark: false, kind: MenuButtonKind.Radio,
                     iconId: def.icon, iconMat: ctx.IconMat);
                 b.Tooltip = def.tip;
@@ -93,7 +90,7 @@ namespace RoomPlanner.EditorTools
                 MenuButtonKind kind)
             {
                 var b = SetupAssets.MakeMenuButton(snapRow.transform, name, null, action,
-                    new Vector3(x0 + i * stepX, 0.026f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat,
+                    new Vector3(ToolMenu.SnapButtonX(i), 0.048f, 0f), snapSize, ctx.BtnMat, ctx.ActiveMat,
                     withActiveMark: false, kind: kind, iconId: icon, iconMat: ctx.IconMat);
                 b.Tooltip = tooltip;
                 return b;
@@ -109,13 +106,23 @@ namespace RoomPlanner.EditorTools
             var scanBtn = Btn(4, "BtnScan", MenuAction.ToggleScan, "scan",
                 "Room scan on / virtual world off", MenuButtonKind.Toggle);
             var gearBtn = Btn(5, "BtnRender", MenuAction.ToggleRenderSettings, "gear",
-                "Rendering settings", MenuButtonKind.Momentary);
-            _ = gearBtn;
+                "Rendering settings", MenuButtonKind.Radio);
+
+            var undoBtn = SetupAssets.MakeMenuButton(root.transform, "BtnUndo", null,
+                MenuAction.Undo, new Vector3(0.045f, -0.003f, 0f), snapSize,
+                ctx.BtnMat, ctx.ActiveMat, withActiveMark: false,
+                kind: MenuButtonKind.Momentary, iconId: "undo", iconMat: ctx.IconMat);
+            undoBtn.Tooltip = "Undo (X)";
+            var redoBtn = SetupAssets.MakeMenuButton(root.transform, "BtnRedo", null,
+                MenuAction.Redo, new Vector3(0.100f, -0.003f, 0f), snapSize,
+                ctx.BtnMat, ctx.ActiveMat, withActiveMark: false,
+                kind: MenuButtonKind.Momentary, iconId: "redo", iconMat: ctx.IconMat);
+            redoBtn.Tooltip = "Redo (Y)";
 
             // ---- row 2: passive current-tool chip + hint ----
             var chip = new GameObject("ToolChip");
             chip.transform.SetParent(root.transform, false);
-            chip.transform.localPosition = new Vector3(-0.078f, -0.028f, 0f);
+            chip.transform.localPosition = new Vector3(-0.078f, -0.003f, 0f);
             SetupAssets.MakePlateGo(chip.transform, "Bg", Vector3.zero,
                 0.135f, 0.036f, RoomPlanner.Core.UiTokens.RadiusM, ctx.BtnMat);
             var stripe = SetupAssets.MakePlateGo(chip.transform, "Stripe",
@@ -136,8 +143,9 @@ namespace RoomPlanner.EditorTools
             chipLabel.rectTransform.localPosition = new Vector3(0.014f, 0f, -0.004f);
 
             var tooltip = SetupAssets.MakeTextChild(root.transform, "Tooltip",
-                "Tools: press A", new Vector2(0.15f, 0.016f));
-            tooltip.rectTransform.localPosition = new Vector3(0.078f, -0.028f, -0.004f);
+                "Tools: press A", new Vector2(0.17f, 0.016f));
+            tooltip.rectTransform.localPosition = new Vector3(0f, -0.054f, -0.004f);
+            tooltip.rectTransform.sizeDelta = new Vector2(0.27f, 0.016f);
 
             var so = new SerializedObject(menu);
             so.FindProperty("snapCornerBtn").objectReferenceValue = snapCornerBtn;
@@ -145,6 +153,9 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("snapGridBtn").objectReferenceValue = snapGridBtn;
             so.FindProperty("snapAngleBtn").objectReferenceValue = snapAngleBtn;
             so.FindProperty("scanBtn").objectReferenceValue = scanBtn;
+            so.FindProperty("gearBtn").objectReferenceValue = gearBtn;
+            so.FindProperty("undoBtn").objectReferenceValue = undoBtn;
+            so.FindProperty("redoBtn").objectReferenceValue = redoBtn;
             so.FindProperty("tooltipLabel").objectReferenceValue = tooltip;
             so.FindProperty("chipIcon").objectReferenceValue = chipIcon;
             so.FindProperty("chipLabel").objectReferenceValue = chipLabel;

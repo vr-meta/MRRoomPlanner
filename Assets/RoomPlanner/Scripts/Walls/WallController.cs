@@ -19,7 +19,7 @@ namespace RoomPlanner.Walls
         [SerializeField] private MeasureInput input;
         [SerializeField] private SceneRaycaster raycaster;
         [SerializeField] private Transform reticle;
-        [SerializeField] private WallGraphRenderer renderer;   // owns the graph and the wall views
+        [SerializeField] private new WallGraphRenderer renderer;   // owns the graph and the wall views
         [SerializeField] private LineRenderer previewLine;
         [SerializeField] private ToolManager manager;
         [SerializeField] private float snapDistance = 0.12f;
@@ -28,6 +28,7 @@ namespace RoomPlanner.Walls
         // Chain state. The walls themselves live in the graph (renderer owns them) — the tool
         // only remembers where the current chain is attached (Phase B / B3).
         private WallNode _lastNode;
+        private WallSegment _lastSegment;
         private float _chainLevel;
         private float _cursorDistance = 2f;
         private SettingsSchema _settings;
@@ -53,9 +54,15 @@ namespace RoomPlanner.Walls
                     () => manager.WallHeight, v => manager.SetWallHeight(v),
                     (_, v) => manager.SetWallHeight(v),
                     () => $"{manager.WallHeight * 100f:0} cm", displayScale: 100f)
-                .Stepper("ang", "Angle step",
+                .NumericStepper("ang", "Angle step", 5f, 90f,
+                    () => manager.AngleStep, (_, v) => manager.SetAngleStep(v),
                     () => $"{manager.AngleStep:0}°",
                     () => manager.AdjustAngleStep(-5f), () => manager.AdjustAngleStep(5f))
+                .NumericStepper("grid", "Grid step", 0.01f, 0.50f,
+                    () => manager.GridSize, (_, v) => manager.SetGridSize(v),
+                    () => $"{manager.GridSize * 100f:0} cm",
+                    () => manager.AdjustGridSize(-0.01f), () => manager.AdjustGridSize(0.01f),
+                    displayScale: 100f)
                 .Segmented("off", "Offset", new[] { "Outer", "Center", "Inner" },
                     () => manager.OffsetModeIndex, i => manager.OffsetModeIndex = i)
                 // NOTE: no "Corner" row — graph joints always miter; the old row changed
@@ -65,11 +72,17 @@ namespace RoomPlanner.Walls
             return _settings;
         }
 
-        public void OnActivate() { }
+        public bool HasActiveChain => _lastNode != null;
+
+        public void OnActivate()
+        {
+            if (_lastNode != null && !GraphContains(_lastNode)) CancelChain();
+        }
 
         public void OnDeactivate()
         {
-            FinishChain();
+            // A tool switch is an interruption, not an explicit finish. Keep the graph node
+            // so returning to Wall resumes exactly where the user left the chain.
             if (reticle != null) reticle.gameObject.SetActive(false);
             if (previewLine != null) previewLine.enabled = false;
         }
@@ -118,16 +131,36 @@ namespace RoomPlanner.Walls
             bool edges = manager == null || manager.SnapEdge;
 
             Vector3 target = cursor;
+            ReticleSnapKind snapKind = ReticleSnapKind.None;
             if (_lastNode != null && angleOn)
+            {
                 target = MeasureMath.SnapToAngleXZ(_lastNode.Position, cursor, step);
+                snapKind = ReticleSnapKind.Angle;
+            }
 
             // Remember WHICH wall an edge-snap landed on: committing there splits it into a
             // real T-junction rather than just dropping a point on top of it.
             _snapEdge = null;
-            if ((corners || edges) && TrySnap(cursor, out var sp, out _snapEdge, corners, edges)) target = sp;
-            else if (manager != null && manager.SnapGrid) target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
+            if ((corners || edges) && TrySnap(cursor, out var sp, out _snapEdge, corners, edges))
+            {
+                target = sp;
+                snapKind = _snapEdge != null ? ReticleSnapKind.Edge : ReticleSnapKind.Corner;
+            }
+            else if (manager != null && manager.SnapGrid)
+            {
+                target = MeasureMath.SnapToGridXZ(target, manager.GridSize);
+                snapKind = ReticleSnapKind.Grid;
+            }
 
-            if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = target; }
+            if (reticle != null)
+            {
+                reticle.gameObject.SetActive(true);
+                reticle.position = target;
+                var visual = ReticleVisual.For(reticle);
+                visual?.SetSnap(snapKind);
+                visual?.SetDimension(_lastNode != null
+                    ? $"{Vector3.Distance(_lastNode.Position, target):0.00} m" : null);
+            }
 
             if (previewLine != null)
             {
@@ -178,6 +211,7 @@ namespace RoomPlanner.Walls
                 renderer.RebuildAround(seg.A);
                 renderer.RebuildAround(seg.B);
                 _lastNode = node;                             // chain continues
+                _lastSegment = seg;
             }
             else
             {
@@ -204,9 +238,32 @@ namespace RoomPlanner.Walls
 
         private void FinishChain()
         {
+            WallSegment completed = _lastSegment;
             _lastNode = null;
+            _lastSegment = null;
             _snapEdge = null;
             if (previewLine != null) previewLine.enabled = false;
+
+            var view = completed != null && renderer != null ? renderer.ViewOf(completed) : null;
+            var selectable = view != null ? view.GetComponent<Selectable>() : null;
+            if (selectable != null && manager != null) manager.SelectObject(selectable);
+        }
+
+        private void CancelChain()
+        {
+            _lastNode = null;
+            _lastSegment = null;
+            _snapEdge = null;
+            if (previewLine != null) previewLine.enabled = false;
+        }
+
+        private bool GraphContains(WallNode node)
+        {
+            var graph = Graph;
+            if (graph == null || node == null) return false;
+            for (int i = 0; i < graph.Nodes.Count; i++)
+                if (ReferenceEquals(graph.Nodes[i], node)) return true;
+            return false;
         }
 
         // Intersect a ray with the horizontal plane y = planeY.
