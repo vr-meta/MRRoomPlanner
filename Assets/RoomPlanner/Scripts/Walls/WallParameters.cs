@@ -20,6 +20,7 @@ namespace RoomPlanner.Walls
     {
         private const float MinThickness = 0.02f, MaxThickness = 1f;
         private const float MinHeight = 0.2f, MaxHeight = 5f;
+        private const float MinLength = 0.01f, MaxLength = 100f;
 
         private Wall _wall;
         private WallGraphRenderer _renderer;
@@ -39,6 +40,10 @@ namespace RoomPlanner.Walls
             // v2 widgets: numeric fields commit ONE command per entry (design/20 §2.6),
             // segmented rows replace the blind cycles (§2.3).
             _schema ??= new SettingsSchema()
+                .Numeric("wlen", "Length", MinLength, MaxLength,
+                    () => Segment?.Length ?? 0f,
+                    (_, v) => SetLength(v),
+                    () => $"{(Segment?.Length ?? 0f):0.00} m")
                 .Numeric("wthk", "Thickness", MinThickness, MaxThickness,
                     () => Segment?.Thickness ?? 0f,
                     (_, v) => SetThickness(v),
@@ -69,6 +74,14 @@ namespace RoomPlanner.Walls
             Apply(WallParamCommand.ForThickness(this, Mathf.Clamp(value, MinThickness, MaxThickness)));
         }
 
+        private void SetLength(float value)
+        {
+            var s = Segment;
+            float clamped = Mathf.Clamp(value, MinLength, MaxLength);
+            if (s == null || Mathf.Approximately(s.Length, clamped)) return;
+            Apply(WallLengthCommand.Create(this, clamped));
+        }
+
         private void SetHeight(float value)
         {
             var s = Segment;
@@ -76,8 +89,9 @@ namespace RoomPlanner.Walls
             Apply(WallParamCommand.ForHeight(this, Mathf.Clamp(value, MinHeight, MaxHeight)));
         }
 
-        private void Apply(WallParamCommand cmd)
+        private void Apply(ICommand cmd)
         {
+            if (cmd == null) return;
             var model = SceneModel.Instance;
             if (model != null) model.History.Execute(cmd);
             else cmd.Do();                 // no history in a bare test rig — still apply

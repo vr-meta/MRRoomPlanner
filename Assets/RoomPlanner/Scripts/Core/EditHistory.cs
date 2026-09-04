@@ -20,6 +20,7 @@ namespace RoomPlanner.Core
         public bool CanRedo => _redo.Count > 0;
         public int UndoCount => _undo.Count;
         public int RedoCount => _redo.Count;
+        public int Version { get; private set; }
 
         /// <summary>Apply the command and push it onto the undo stack.</summary>
         public void Execute(ICommand cmd)
@@ -28,6 +29,7 @@ namespace RoomPlanner.Core
             cmd.Do();
             _undo.Push(cmd);
             _redo.Clear();
+            Version++;
         }
 
         /// <summary>Push an already-applied command (its effect is live) without re-running Do().</summary>
@@ -36,6 +38,7 @@ namespace RoomPlanner.Core
             if (cmd == null) return;
             _undo.Push(cmd);
             _redo.Clear();
+            Version++;
         }
 
         public void Undo()
@@ -47,6 +50,7 @@ namespace RoomPlanner.Core
             cmd.Undo();
             _undo.Pop();
             _redo.Push(cmd);
+            Version++;
         }
 
         public void Redo()
@@ -56,12 +60,14 @@ namespace RoomPlanner.Core
             cmd.Do();
             _redo.Pop();
             _undo.Push(cmd);
+            Version++;
         }
 
         public void Clear()
         {
             _undo.Clear();
             _redo.Clear();
+            Version++;
         }
 
         /// <summary>
@@ -73,6 +79,7 @@ namespace RoomPlanner.Core
             if (shouldRemove == null) return;
             PurgeStack(_undo, shouldRemove);
             PurgeStack(_redo, shouldRemove);
+            Version++;
         }
 
         private static void PurgeStack(Stack<ICommand> stack, Func<ICommand, bool> shouldRemove)

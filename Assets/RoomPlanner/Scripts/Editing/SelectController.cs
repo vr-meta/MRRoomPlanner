@@ -58,12 +58,21 @@ namespace RoomPlanner.Editing
         public SettingsSchema GetSettings() => HasSelection ? _selected.GetSettings() : null;
 
         public bool HasSelection => _selected != null && _selected.IsAlive && !_selected.IsHidden;
+        public ISelectable CurrentSelection => HasSelection ? _selected : null;
 
         /// <summary>True while a drag is in progress (ToolManager suppresses undo/redo then).</summary>
         public bool IsDragging => _dragging != null || _draggingHandle != null;
 
         public string SelectionTitle { get; private set; } = "Nothing selected";
         public string SelectionInfo { get; private set; } = "";
+
+        /// <summary>Refresh dynamic descriptions (notably panel BOM) without changing selection.</summary>
+        public void RefreshSelectionInfo()
+        {
+            SelectionInfo = HasSelection ? _selected.Describe() : "";
+        }
+
+        public void SelectObject(ISelectable selectable) => Select(selectable);
 
         public void OnActivate() { }
 
@@ -96,7 +105,11 @@ namespace RoomPlanner.Editing
                 _armedDoor = null;
                 SetHover(null);
                 UpdateHandles();
-                if (reticle != null) reticle.gameObject.SetActive(false);
+                if (reticle != null)
+                {
+                    reticle.gameObject.SetActive(false);
+                    ReticleVisual.For(reticle)?.SetDimension(null);
+                }
                 return;
             }
 
@@ -236,19 +249,21 @@ namespace RoomPlanner.Editing
             if (reticle != null)
             {
                 reticle.gameObject.SetActive(over);
-                if (over) reticle.position = hitPoint;
+                var visual = ReticleVisual.For(reticle);
+                if (over)
+                {
+                    reticle.position = hitPoint;
+                    visual?.SetDimension(picked is Selectable selectable
+                        ? selectable.CompactDimensions()
+                        : picked.Describe());
+                }
+                else visual?.SetDimension(null);
             }
 
             // --- Delete (B) ---
             if (input.ClearPressed() && HasSelection)
             {
-                // A selected door deletes its OPENING (undo restores it in the wall);
-                // hiding just the leaf child would orphan the doorway (issue #50).
-                ICommand del = null;
-                if (_selected is Selectable dsel && dsel.Kind == SelectableKind.Door)
-                    del = dsel.GetComponent<RoomPlanner.Walls.OpeningParameters>()?.BuildDeleteCommand();
-                sceneModel.History.Execute(del ?? new DeleteCommand(_selected));
-                Deselect();
+                DeleteSelection();
                 return;
             }
 
@@ -431,6 +446,20 @@ namespace RoomPlanner.Editing
             SelectionTitle = "Nothing selected";
             SelectionInfo = "";
             Notify();
+        }
+
+        /// <summary>Selection-context delete; shares the exact B-button semantics.</summary>
+        public bool DeleteSelection()
+        {
+            if (!HasSelection || sceneModel == null) return false;
+            // A selected door deletes its OPENING (undo restores it in the wall);
+            // hiding just the leaf child would orphan the doorway (issue #50).
+            ICommand command = null;
+            if (_selected is Selectable door && door.Kind == SelectableKind.Door)
+                command = door.GetComponent<RoomPlanner.Walls.OpeningParameters>()?.BuildDeleteCommand();
+            sceneModel.History.Execute(command ?? new DeleteCommand(_selected));
+            Deselect();
+            return true;
         }
 
         private void SetHover(ISelectable s)

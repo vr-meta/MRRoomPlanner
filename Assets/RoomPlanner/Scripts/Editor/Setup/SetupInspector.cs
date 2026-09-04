@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 using RoomPlanner.Core;
@@ -44,8 +45,17 @@ namespace RoomPlanner.EditorTools
             SetupAssets.MakePlateGo(title.transform, "TitleBg", Vector3.zero,
                 PanelLayout.Width - 0.008f, UiTokens.TitleBarHeight, UiTokens.RadiusM, ctx.BtnMat);
             var titleText = SetupAssets.MakeTextChild(title.transform, "TitleText",
-                "Settings (grip to move)", new Vector2(0.24f, 0.020f));
-            titleText.rectTransform.localPosition = new Vector3(0f, 0f, -0.006f);
+                "Settings", new Vector2(0.11f, 0.020f));
+            titleText.alignment = TextAlignmentOptions.MidlineLeft;
+            titleText.rectTransform.localPosition = new Vector3(-0.0415f, 0f, -0.006f);
+            titleText.rectTransform.sizeDelta = new Vector2(0.173f, 0.022f);
+            var titleHint = SetupAssets.MakeTextChild(title.transform, "GripHint",
+                "grip to move", new Vector2(0.05f, 0.014f));
+            titleHint.alignment = TextAlignmentOptions.MidlineRight;
+            titleHint.color = UiTokens.LabelDim;
+            titleHint.fontSize = UiTokens.RowHeight * 1.35f;
+            titleHint.rectTransform.localPosition = new Vector3(0.089f, 0f, -0.006f);
+            titleHint.rectTransform.sizeDelta = new Vector2(0.078f, 0.018f);
 
             // runtime roots
             var tabsRoot = new GameObject("Tabs");
@@ -88,6 +98,8 @@ namespace RoomPlanner.EditorTools
             so.FindProperty("tabsRoot").objectReferenceValue = tabsRoot.transform;
             so.FindProperty("selectionGroup").objectReferenceValue = selectionGroup;
             so.FindProperty("background").objectReferenceValue = bg.transform;
+            so.FindProperty("titleLabel").objectReferenceValue = titleText;
+            so.FindProperty("titleHintLabel").objectReferenceValue = titleHint;
             so.FindProperty("selTitleLabel").objectReferenceValue = selTitleLabel;
             so.FindProperty("selInfoLabel").objectReferenceValue = selInfoLabel;
             so.FindProperty("buttonMaterial").objectReferenceValue = ctx.BtnMat;

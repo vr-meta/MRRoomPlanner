@@ -112,7 +112,11 @@ namespace RoomPlanner.Walls
             if (reticle != null)
             {
                 reticle.gameObject.SetActive(aimed);
-                if (aimed) reticle.position = hitPoint;
+                if (aimed)
+                {
+                    reticle.position = hitPoint;
+                    ReticleVisual.For(reticle)?.SetSnap(ReticleSnapKind.Edge);
+                }
             }
 
             // --- gesture in progress: slide the opening along its wall ---

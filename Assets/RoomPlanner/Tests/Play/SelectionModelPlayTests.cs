@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using RoomPlanner.Core;
 using RoomPlanner.Editing;
+using RoomPlanner.Measure;
 
 namespace RoomPlanner.Tests.Play
 {
@@ -247,6 +248,28 @@ namespace RoomPlanner.Tests.Play
 
             model.Unregister(a);
             Assert.AreEqual(1, model.Items.Count);
+        }
+
+        [Test]
+        public void QuickMeasure_CreatesPersistentUndoableMeasurement()
+        {
+            var model = MakeModel();
+            var target = MakePickable("Sized", Vector3.zero);
+            model.Register(target);
+            var host = new GameObject("Measure");
+            _spawned.Add(host);
+            var measure = host.AddComponent<MeasureController>();
+
+            var result = measure.QuickMeasure(target);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(SelectableKind.Measurement, result.Kind);
+            Assert.AreEqual(2, model.Items.Count);
+            Assert.AreEqual(1, model.History.UndoCount);
+            model.History.Undo();
+            Assert.IsTrue(result.IsHidden);
+            model.History.Redo();
+            Assert.IsFalse(result.IsHidden);
         }
     }
 }

@@ -111,11 +111,13 @@ namespace RoomPlanner.Tools
             _entryLabel = MakeText(_root.transform, "Entry",
                 CurrentDisplay(), new Vector3(-key * 0.5f, top - 0.015f, -0.002f),
                 new Vector2(w - key - gap, 0.026f));
-            MakeButton(_root.transform, "KeyBack", "⌫",
+            var back = MakeButton(_root.transform, "KeyBack", null,
                 new Vector3((w - key) * 0.5f, top - 0.015f, 0f),
                 new Vector2(key, 0.026f), () => PressKey("⌫"));
+            AddIcon(back.transform, "backspace", Vector3.back * 0.004f, 0.012f,
+                UiTokens.LabelLight);
 
-            string[] keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "±", "0", "." };
+            string[] keys = { "7", "8", "9", "4", "5", "6", "1", "2", "3", "±", "0" };
             for (int i = 0; i < keys.Length; i++)
             {
                 int r = i / 3, c = i % 3;
@@ -124,6 +126,10 @@ namespace RoomPlanner.Tools
                     new Vector3((c - 1) * (key + gap), top - 0.036f - r * (key + gap), 0f),
                     new Vector2(key, key), () => PressKey(k));
             }
+            string decimalLabel = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
+            MakeButton(_root.transform, "KeyDecimal", decimalLabel,
+                new Vector3(key + gap, top - 0.036f - 3f * (key + gap), 0f),
+                new Vector2(key, key), () => PressKey("."));
             float by = top - 0.036f - 4f * (key + gap) + 0.004f;
             MakeButton(_root.transform, "Cancel", "Cancel",
                 new Vector3(-w * 0.25f, by, 0f), new Vector2(w * 0.46f, 0.024f), CloseAll);
@@ -224,7 +230,9 @@ namespace RoomPlanner.Tools
 
         private string CurrentDisplay()
         {
-            if (_entry.Length > 0) return _entry;
+            if (_entry.Length > 0)
+                return PanelLayout.LocalizeNumpadEntry(_entry,
+                    CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
             return _field?.Value != null ? _field.Value() : "";
         }
 
@@ -237,7 +245,8 @@ namespace RoomPlanner.Tools
         private void CommitNumpad()
         {
             if (_field != null && _entry.Length > 0
-                && float.TryParse(_entry, NumberStyles.Float, CultureInfo.InvariantCulture, out float typed))
+                && float.TryParse(_entry.Replace(',', '.'), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float typed))
             {
                 float before = _field.GetNumber?.Invoke() ?? 0f;
                 // typed in display units (cm) → back to native (m) via DisplayScale (§2.6)
@@ -317,14 +326,15 @@ namespace RoomPlanner.Tools
             return go;
         }
 
-        private void AddIcon(Transform parent, string iconId, Vector3 lp, float size)
+        private void AddIcon(Transform parent, string iconId, Vector3 lp, float size,
+            Color? tint = null)
         {
             var go = new GameObject("Icon") { layer = MenuLayer };
             go.transform.SetParent(parent, false);
             go.transform.localPosition = lp;
             var ir = go.AddComponent<IconRenderer>();
             ir.Init(iconId, iconMaterial, size);
-            ir.SetTint(UiTokens.Selected);
+            ir.SetTint(tint ?? UiTokens.Selected);
         }
 
         private static TMP_Text MakeText(Transform parent, string name, string text,
@@ -337,7 +347,7 @@ namespace RoomPlanner.Tools
             tmp.text = text;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Color.white;
-            tmp.enableWordWrapping = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
             tmp.rectTransform.sizeDelta = size;
             // fixed size + ellipsis, same rationale as InspectorPanel.MakeText (issue #55)
             tmp.enableAutoSizing = false;

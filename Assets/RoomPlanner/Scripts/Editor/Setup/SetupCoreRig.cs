@@ -49,6 +49,7 @@ namespace RoomPlanner.EditorTools
             reticle.transform.localScale = Vector3.one * 0.04f;
             SetupAssets.RemoveCollider(reticle);
             reticle.GetComponent<Renderer>().sharedMaterial = ctx.ReticleMat;
+            reticle.AddComponent<ReticleVisual>();
             ctx.Reticle = reticle;
 
             Transform anchor = FindControllerAnchor();

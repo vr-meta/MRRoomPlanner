@@ -6,6 +6,7 @@ using UnityEngine.TestTools;
 using RoomPlanner.Core;
 using RoomPlanner.Editing;
 using RoomPlanner.Measure;
+using RoomPlanner.Tools;
 using RoomPlanner.Walls;
 
 namespace RoomPlanner.Tests.Play
@@ -20,10 +21,11 @@ namespace RoomPlanner.Tests.Play
     {
         private class FakeInput : MeasureInput
         {
-            public bool Pressed, Held, Clear;
+            public bool Pressed, Held, Clear, APressed;
             public override bool ConfirmPressed() => Pressed;
             public override bool ConfirmHeld() => Held;
             public override bool ClearPressed() => Clear;
+            public override bool TeleportPressed() => APressed;
             public override void Pulse(float amplitude = 0.5f, float duration = 0.06f) { }
             public override void PulseLeft(float amplitude = 0.5f, float duration = 0.02f) { }
         }
@@ -225,6 +227,72 @@ namespace RoomPlanner.Tests.Play
 
             Assert.AreEqual(1, model.History.UndoCount, "one drag = one MoveCommand");
             Assert.AreEqual(0.5f, slab.Outline[0].x, 1e-2f, "the slab moved with the hand");
+        }
+
+        [UnityTest]
+        public IEnumerator SelectedWall_AContextRadial_DuplicatesAsOneUndoableGesture()
+        {
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+
+            var template = Track(new GameObject("WallTemplate"));
+            template.SetActive(false);
+            template.AddComponent<MeshFilter>();
+            template.AddComponent<MeshRenderer>();
+            var prefab = template.AddComponent<Wall>();
+            template.AddComponent<Selectable>();
+            var walls = rig.AddComponent<WallGraphRenderer>();
+            walls.Configure(prefab, model);
+            var source = walls.Graph.AddSegment(
+                walls.Graph.SnapOrCreateNode(Vector3.zero),
+                walls.Graph.SnapOrCreateNode(new Vector3(3f, 0f, 0f)));
+            walls.Sync();
+
+            var host = Track(new GameObject("SelectionShortcut"));
+            var input = host.AddComponent<FakeInput>();
+            var pointer = host.AddComponent<FakePointer>();
+            pointer.Ray = new Ray(new Vector3(100f, 10f, 100f), Vector3.up);
+            var cameraGo = Track(new GameObject("MainCamera"));
+            cameraGo.tag = "MainCamera";
+            cameraGo.AddComponent<Camera>();
+            var radialGo = Track(new GameObject("SelectionRadial"));
+            var radial = radialGo.AddComponent<RadialMenu>();
+            var select = host.AddComponent<SelectController>();
+            SetField(select, "input", input);
+            SetField(select, "pointer", pointer);
+            SetField(select, "sceneModel", model);
+            var manager = host.AddComponent<ToolManager>();
+            SetField(manager, "input", input);
+            SetField(manager, "pointer", pointer);
+            SetField(manager, "sceneModel", model);
+            SetField(manager, "select", select);
+            SetField(manager, "radial", radial);
+            yield return null;                 // ToolManager.Start builds its registry
+
+            var sourceSelection = walls.ViewOf(source).GetComponent<Selectable>();
+            select.SelectObject(sourceSelection);
+            input.APressed = true;
+            yield return null;                 // A opens the selection-context wheel immediately
+            input.APressed = false;
+            Assert.IsTrue(radial.IsOpen);
+
+            // Slot 0 is Duplicate. Aim at its cardinal-up sector and confirm with trigger.
+            Vector3 duplicateSlot = radial.transform.position
+                + radial.transform.up * UiTokens.RadialIconRadius;
+            pointer.Ray = new Ray(cameraGo.transform.position,
+                (duplicateSlot - cameraGo.transform.position).normalized);
+            input.Pressed = true;
+            yield return null;
+            input.Pressed = false;
+
+            Assert.AreEqual(2, walls.Graph.Segments.Count);
+            Assert.AreEqual(1, model.History.UndoCount,
+                "one radial confirmation is one edit command");
+            var duplicate = select.CurrentSelection;
+            Assert.AreNotSame(sourceSelection, duplicate);
+            model.History.Undo();
+            Assert.IsTrue(duplicate.IsHidden,
+                "undo hides the same duplicated instance selected by the gesture");
         }
     }
 }

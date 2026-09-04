@@ -86,12 +86,21 @@ namespace RoomPlanner.Floors
             cursor.y = level;
             if (manager != null && manager.SnapGrid) cursor = MeasureMath.SnapToGridXZ(cursor, manager.GridSize);
 
-            if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = cursor; }
-
             // Hovering the first point closes the ring — show that by looping the preview.
             bool canClose = _pts.Count >= 3 &&
                             Vector3.Distance(cursor, _pts[0]) <= closeRadius;
-            if (canClose && reticle != null) reticle.position = _pts[0];
+            Vector3 target = canClose ? _pts[0] : cursor;
+            if (reticle != null)
+            {
+                reticle.gameObject.SetActive(true);
+                reticle.position = target;
+                var visual = ReticleVisual.For(reticle);
+                visual?.SetSnap(canClose ? ReticleSnapKind.Corner
+                    : manager != null && manager.SnapGrid ? ReticleSnapKind.Grid
+                    : ReticleSnapKind.None);
+                visual?.SetDimension(_pts.Count > 0
+                    ? $"{Vector3.Distance(_pts[_pts.Count - 1], target):0.00} m" : null);
+            }
 
             DrawOutlinePreview(cursor, canClose);
 

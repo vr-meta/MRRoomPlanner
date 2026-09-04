@@ -82,7 +82,9 @@ namespace RoomPlanner.Floors
                     v => { planScale = Mathf.Clamp(v, MinPlanScale, MaxPlanScale); Refresh(); },
                     (_, v) => { planScale = Mathf.Clamp(v, MinPlanScale, MaxPlanScale); Refresh(); },
                     () => $"{planScale:0.0} m")
-                .Stepper("rot", "Rotation",
+                .NumericStepper("rot", "Rotation", 0f, 360f,
+                    () => planRotationDeg,
+                    (_, v) => { planRotationDeg = Mathf.Repeat(v, 360f); Refresh(); },
                     () => $"{planRotationDeg:0}°",
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg - 5f, 360f); Refresh(); },
                     () => { planRotationDeg = Mathf.Repeat(planRotationDeg + 5f, 360f); Refresh(); })

@@ -66,8 +66,9 @@ namespace RoomPlanner.Measure
             return OVRInput.GetDown(OVRInput.Button.Four);
         }
 
-        /// <summary>A just pressed (Button.One, right hand). Editor: T. Short press =
-        /// teleport, 0.35 s hold = tool radial — ToolManager owns the timing.</summary>
+        /// <summary>A just pressed (Button.One, right hand). Editor: T. With no selection:
+        /// tap = teleport, hold = tool radial. In Select with an object: tap = duplicate,
+        /// hold = selection actions. ToolManager owns the timing/context.</summary>
         public virtual bool TeleportPressed()
         {
 #if UNITY_EDITOR

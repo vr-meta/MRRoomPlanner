@@ -13,7 +13,8 @@ namespace RoomPlanner.Core
         /// <summary>
         /// One numpad keypress applied to the entry string — pure, so the editing rules
         /// are testable (audit 10 §Б1: the pad had no decimal point and zero tests).
-        /// "." starts "0." on an empty/sign-only entry and is refused once present.
+        /// "." or "," starts canonical "0." on an empty/sign-only entry and is refused
+        /// once present. Storage stays invariant; the popup localizes it for display.
         /// </summary>
         public static string NumpadPress(string entry, string key, int maxLen = 7)
         {
@@ -23,10 +24,19 @@ namespace RoomPlanner.Core
                 case "⌫": return entry.Length > 0 ? entry.Substring(0, entry.Length - 1) : entry;
                 case "±": return entry.StartsWith("-") ? entry.Substring(1) : "-" + entry;
                 case ".":
+                case ",":
                     if (entry.Contains(".") || entry.Length >= maxLen) return entry;
                     return entry.Length == 0 || entry == "-" ? entry + "0." : entry + ".";
                 default: return entry.Length < maxLen ? entry + key : entry;
             }
+        }
+
+        /// <summary>Render a canonical numpad entry using the culture's decimal separator.</summary>
+        public static string LocalizeNumpadEntry(string entry, string decimalSeparator)
+        {
+            entry ??= "";
+            return string.IsNullOrEmpty(decimalSeparator) || decimalSeparator == "."
+                ? entry : entry.Replace(".", decimalSeparator);
         }
 
         public const float Width = UiTokens.PanelWidth;                 // 0.288
@@ -55,6 +65,20 @@ namespace RoomPlanner.Core
             if (hasTabs) h += TabStripHeight;
             if (rows > 0) h += rows * UiTokens.RowStep - (UiTokens.RowStep - UiTokens.RowHeight);
             return h;
+        }
+
+        public static float VisiblePanelHeight(float contentHeight) =>
+            Mathf.Min(contentHeight, UiTokens.MaxPanelHeight);
+
+        public static float ScrollRange(float contentHeight) =>
+            Mathf.Max(0f, contentHeight - UiTokens.MaxPanelHeight);
+
+        public static float ScrollBy(float current, float stickY, float deltaTime,
+            float contentHeight, float speed = 0.18f)
+        {
+            if (Mathf.Abs(stickY) < 0.20f) return Mathf.Clamp(current, 0f, ScrollRange(contentHeight));
+            return Mathf.Clamp(current - stickY * deltaTime * speed,
+                0f, ScrollRange(contentHeight));
         }
 
         // ---- slider mapping (§2.2) ----

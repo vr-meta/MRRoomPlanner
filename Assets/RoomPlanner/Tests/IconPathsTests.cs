@@ -1,5 +1,7 @@
+using System;
 using NUnit.Framework;
 using RoomPlanner.Core;
+using RoomPlanner.Tools;
 using UnityEngine;
 
 namespace RoomPlanner.Tests
@@ -81,6 +83,29 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(RadialMath.Slots, slotIcons.Length);
             foreach (var id in slotIcons)
                 Assert.IsTrue(IconPaths.All.ContainsKey(id), $"radial slot icon '{id}' missing");
+        }
+
+        [Test]
+        public void RuntimeRadialDefinitions_MatchTheRegisteredToolInventory()
+        {
+            var definitions = ToolManager.CreateRadialDefinitions(ToolManager.DefaultToolIndex);
+            Assert.AreEqual(RadialMath.Slots, definitions.Length);
+
+            int reserved = 0;
+            foreach (var definition in definitions)
+            {
+                Assert.IsTrue(IconPaths.All.ContainsKey(definition.IconId),
+                    $"radial slot icon '{definition.IconId}' missing");
+                if (definition.Reserved) reserved++;
+            }
+
+            Assert.AreEqual(2, reserved, "only Furniture and Plumbing should be reserved");
+            foreach (string id in ToolManager.RegisteredToolIds)
+                Assert.GreaterOrEqual(ToolManager.DefaultToolIndex(id), 0,
+                    $"registered tool '{id}' has no stable index");
+
+            Assert.IsFalse(Array.Find(definitions, d => d.Label == "Openings").Reserved);
+            Assert.IsFalse(Array.Find(definitions, d => d.Label == "Projects").Reserved);
         }
 
         [Test]

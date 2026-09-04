@@ -12,7 +12,10 @@ namespace RoomPlanner.Tools
         public string Label;      // hub name while highlighted
         public Color Tint;        // layer hue of the tool (sector icon tint)
         public int ToolIndex;     // ToolManager registry index; −1 = reserved
+        public bool Disabled;     // visible action which is invalid for the current context
+        public string DisabledHint;
         public bool Reserved => ToolIndex < 0;
+        public bool Available => !Reserved && !Disabled;
     }
 
     /// <summary>
@@ -37,6 +40,7 @@ namespace RoomPlanner.Tools
         private MeshRenderer[] _sectorRenderers;
         private Transform[] _sectors;
         private IconRenderer[] _icons;
+        private GameObject[] _dots;
         private GameObject _activeStripe;
         private GameObject _hoverStripe;
         private IconRenderer _hubIcon;
@@ -54,6 +58,7 @@ namespace RoomPlanner.Tools
         private float _openedAt;
         private float _closingUntil;
         private int _lastRaySlot = -1;
+        private bool _rayDrivenHighlight;
         private int _currentToolSlot = -1;
         private Vector3 _spawnHeadPos;
         private Vector3 _spawnHeadFwd;
@@ -89,6 +94,7 @@ namespace RoomPlanner.Tools
 
             _tracker.Reset();
             _lastRaySlot = -1;
+            _rayDrivenHighlight = false;
             _open = true;
             _openedAt = Time.time;
             _closingUntil = 0f;
@@ -146,22 +152,24 @@ namespace RoomPlanner.Tools
             }
 
             int before = _tracker.HighlightedSlot;
+            bool rayDrivenBefore = _rayDrivenHighlight;
 
             // ray path: hover a sector, trigger confirms (last mover wins via SetHighlight)
             int raySlot = RaySlot(pointerRay, out bool overHub);
             if (raySlot != _lastRaySlot)
             {
                 _lastRaySlot = raySlot;
-                if (raySlot >= 0 && !_slots[raySlot].Reserved)
+                if (raySlot >= 0)
                 {
                     _tracker.SetHighlight(raySlot, Time.time);
-                    haptics?.PulseLeft(0.25f, 0.008f);
+                    _rayDrivenHighlight = true;
+                    if (_slots[raySlot].Available) haptics?.PulseLeft(0.25f, 0.008f);
                 }
             }
             if (confirmPressed)
             {
                 if (overHub) { Close(); return true; }               // hub = cancel (§1.7)
-                if (raySlot >= 0 && !_slots[raySlot].Reserved) { Pick(raySlot, haptics); return true; }
+                if (raySlot >= 0 && _slots[raySlot].Available) { Pick(raySlot, haptics); return true; }
             }
 
             // stick path
@@ -169,20 +177,22 @@ namespace RoomPlanner.Tools
             switch (ev)
             {
                 case RadialEvent.SlotChanged:
-                    if (_tracker.HighlightedSlot >= 0 && _slots[_tracker.HighlightedSlot].Reserved)
-                        break;                                        // reserved: highlight shows nothing
+                    _rayDrivenHighlight = false;
+                    if (_tracker.HighlightedSlot >= 0 && !_slots[_tracker.HighlightedSlot].Available)
+                        break;                                        // unavailable: describe, but don't pulse
                     haptics?.PulseLeft(0.25f, 0.008f);
                     break;
                 case RadialEvent.Confirmed:
                     int slot = _tracker.HighlightedSlot;
-                    if (slot >= 0 && !_slots[slot].Reserved) { Pick(slot, haptics); return true; }
+                    if (slot >= 0 && _slots[slot].Available) { Pick(slot, haptics); return true; }
                     break;
                 case RadialEvent.BrowseCancelled:
+                    _rayDrivenHighlight = false;
                     break;                                            // stay open, highlight cleared
             }
 
             if (_tracker.HighlightedSlot != before) RefreshVisuals();
-            else if (ev != RadialEvent.None) RefreshVisuals();
+            else if (ev != RadialEvent.None || rayDrivenBefore != _rayDrivenHighlight) RefreshVisuals();
             return true;
         }
 
@@ -212,7 +222,7 @@ namespace RoomPlanner.Tools
             overHub = false;
             HasRayPoint = false;
             var plane = new Plane(-transform.forward, transform.position);
-            if (!plane.Raycast(ray, out float dist)) return -1;
+            if (!plane.Raycast(ray, out float dist) || dist > UiTokens.MenuRayDistance) return -1;
             Vector3 world = ray.GetPoint(dist);
             Vector3 local = transform.InverseTransformPoint(world);
             float r = new Vector2(local.x, local.y).magnitude;
@@ -235,6 +245,7 @@ namespace RoomPlanner.Tools
             _sectors = new Transform[n];
             _sectorRenderers = new MeshRenderer[n];
             _icons = new IconRenderer[n];
+            _dots = new GameObject[n];
 
             float half = RadialMath.SlotSpanDeg * 0.5f - UiTokens.RadialSectorGapDeg * 0.5f;
             _sectorMesh = IconRenderer.ToMesh(
@@ -279,32 +290,29 @@ namespace RoomPlanner.Tools
                 _sectorRenderers[i] = mr;
 
                 Vector2 dir = RadialMath.SlotDirection(i);
-                if (_slots != null && i < _slots.Length && _slots[i].Reserved)
-                {
-                    // reserved: a faint small dot — must NOT read as a button (design/20 §1.6)
-                    var dot = new GameObject($"Dot{i}") { layer = gameObject.layer };
-                    dot.transform.SetParent(transform, false);
-                    dot.transform.localPosition = new Vector3(
-                        dir.x * UiTokens.RadialIconRadius, dir.y * UiTokens.RadialIconRadius, -0.002f);
-                    var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.006f, 20), "ReservedDot");
-                    _ownedMeshes.Add(dotMesh);
-                    dot.AddComponent<MeshFilter>().sharedMesh = dotMesh;
-                    var dr = dot.AddComponent<MeshRenderer>();
-                    dr.sharedMaterial = iconMaterial;
-                    SetTint(dr, UiTokens.LabelDim);
-                }
-                else
-                {
-                    var icon = new GameObject($"Icon{i}") { layer = gameObject.layer };
-                    icon.transform.SetParent(transform, false);
-                    icon.transform.localPosition =
-                        new Vector3(dir.x, dir.y, 0f) * UiTokens.RadialIconRadius
-                        + new Vector3(0f, 0f, -0.002f);
-                    var ir = icon.AddComponent<IconRenderer>();
-                    ir.Init(_slots != null && i < _slots.Length ? _slots[i].IconId : null,
-                        iconMaterial, 0.034f);
-                    _icons[i] = ir;
-                }
+                // Build both presentations: Configure can swap this same component between
+                // the tool and selection wheels, changing which slots are reserved.
+                var dot = new GameObject($"Dot{i}") { layer = gameObject.layer };
+                dot.transform.SetParent(transform, false);
+                dot.transform.localPosition = new Vector3(
+                    dir.x * UiTokens.RadialIconRadius, dir.y * UiTokens.RadialIconRadius, -0.002f);
+                var dotMesh = IconRenderer.ToMesh(UiMeshes.Disc(0.006f, 20), "ReservedDot");
+                _ownedMeshes.Add(dotMesh);
+                dot.AddComponent<MeshFilter>().sharedMesh = dotMesh;
+                var dr = dot.AddComponent<MeshRenderer>();
+                dr.sharedMaterial = iconMaterial;
+                SetTint(dr, UiTokens.LabelDim);
+                _dots[i] = dot;
+
+                var icon = new GameObject($"Icon{i}") { layer = gameObject.layer };
+                icon.transform.SetParent(transform, false);
+                icon.transform.localPosition =
+                    new Vector3(dir.x, dir.y, 0f) * UiTokens.RadialIconRadius
+                    + new Vector3(0f, 0f, -0.002f);
+                var ir = icon.AddComponent<IconRenderer>();
+                ir.Init(_slots != null && i < _slots.Length ? _slots[i].IconId : null,
+                    iconMaterial, 0.034f);
+                _icons[i] = ir;
             }
 
             _activeStripe = new GameObject("ActiveStripe") { layer = gameObject.layer };
@@ -357,7 +365,7 @@ namespace RoomPlanner.Tools
             var tmp = go.AddComponent<TextMeshPro>();
             if (font != null) tmp.font = font;
             tmp.alignment = TextAlignmentOptions.Center;
-            tmp.enableWordWrapping = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
             tmp.rectTransform.sizeDelta = new Vector2(UiTokens.RadialHubRadius * 2.2f, glyphSize * 1.4f);
             tmp.enableAutoSizing = false;
             tmp.fontSize = glyphSize * 6.5f;   // TMP world glyph ≈ fontSize × 0.15
@@ -368,9 +376,21 @@ namespace RoomPlanner.Tools
         private void RefreshStatic()
         {
             if (_icons == null || _slots == null) return;
-            for (int i = 0; i < _icons.Length && i < _slots.Length; i++)
-                if (_icons[i] != null && !_slots[i].Reserved)
-                    _icons[i].SetTint(_slots[i].Tint);
+            for (int i = 0; i < _icons.Length; i++)
+            {
+                bool reserved = i >= _slots.Length || _slots[i].Reserved;
+                if (_dots != null && i < _dots.Length && _dots[i] != null)
+                    _dots[i].SetActive(reserved);
+                if (_icons[i] != null)
+                {
+                    _icons[i].gameObject.SetActive(!reserved);
+                    if (!reserved)
+                    {
+                        _icons[i].SetIcon(_slots[i].IconId);
+                        _icons[i].SetTint(_slots[i].Available ? _slots[i].Tint : UiTokens.LabelDim);
+                    }
+                }
+            }
         }
 
         private void RefreshVisuals()
@@ -383,18 +403,26 @@ namespace RoomPlanner.Tools
                 bool hovered = i == hot;
                 bool active = i == _currentToolSlot;
                 bool reserved = i < _slots.Length && _slots[i].Reserved;
+                bool disabled = i < _slots.Length && _slots[i].Disabled;
+                bool available = !reserved && !disabled;
 
                 _sectors[i].GetComponent<MeshFilter>().sharedMesh =
-                    hovered && !reserved ? _sectorHoverMesh : _sectorMesh;
-                Color bg = reserved ? UiTokens.ButtonDisabledBg
+                    hovered && available ? _sectorHoverMesh : _sectorMesh;
+                Color bg = !available ? UiTokens.ButtonDisabledBg
                     : hovered ? UiTokens.ButtonHoverBg
                     : UiTokens.ButtonBg;
                 SetTint(_sectorRenderers[i], bg);
 
                 if (_icons[i] != null && i < _slots.Length)
-                    _icons[i].SetTint(hovered ? UiTokens.LabelLight
+                {
+                    Color iconTint = !available ? UiTokens.LabelDim
+                        : hovered ? UiTokens.LabelLight
                         : active ? UiTokens.Selected
-                        : _slots[i].Tint);
+                        : _slots[i].Tint;
+                    if (reserved) iconTint.a = 0.25f;
+                    else if (disabled) iconTint.a = 0.45f;
+                    _icons[i].SetTint(iconTint);
+                }
             }
 
             bool showStripe = _currentToolSlot >= 0;
@@ -403,7 +431,7 @@ namespace RoomPlanner.Tools
                 _activeStripe.transform.localRotation =
                     Quaternion.Euler(0f, 0f, -_currentToolSlot * RadialMath.SlotSpanDeg);
 
-            bool showHover = hot >= 0 && hot < _slots.Length && !_slots[hot].Reserved;
+            bool showHover = hot >= 0 && hot < _slots.Length && _slots[hot].Available;
             _hoverStripe.SetActive(showHover);
             if (showHover)
             {
@@ -414,15 +442,27 @@ namespace RoomPlanner.Tools
             }
 
             // hub: highlighted tool wins, else the current tool (§1.7)
-            int show = hot >= 0 && hot < _slots.Length && !_slots[hot].Reserved ? hot : _currentToolSlot;
+            int show = hot >= 0 && hot < _slots.Length ? hot : _currentToolSlot;
             if (show >= 0 && show < _slots.Length)
             {
                 _hubIcon.SetIcon(_slots[show].IconId);
                 _hubIcon.SetTint(UiTokens.LabelLight);
                 _hubLabel.text = _slots[show].Label;
             }
-            _hubHint.text = hot >= 0 ? "release to select" : "flick to pick · B to cancel";
+            bool reservedHot = hot >= 0 && hot < _slots.Length && _slots[hot].Reserved;
+            bool disabledHot = hot >= 0 && hot < _slots.Length && _slots[hot].Disabled;
+            string disabledHint = disabledHot ? _slots[hot].DisabledHint : null;
+            _hubHint.text = SelectionHint(hot >= 0, _rayDrivenHighlight, reservedHot,
+                disabledHot, disabledHint);
         }
+
+        public static string SelectionHint(bool hasHighlight, bool rayDriven, bool reserved = false,
+            bool disabled = false, string disabledHint = null) =>
+            reserved ? "coming soon"
+            : disabled ? (string.IsNullOrWhiteSpace(disabledHint) ? "not available" : disabledHint)
+            : hasHighlight
+                ? rayDriven ? "trigger to select" : "release to select"
+                : "flick to pick · B to cancel";
 
         private void SetTint(Renderer r, Color c)
         {

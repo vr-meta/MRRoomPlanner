@@ -17,6 +17,7 @@ namespace RoomPlanner.Editing
         private readonly List<ISelectable> _items = new();
         private readonly RaycastHit[] _hits = new RaycastHit[32];
         private int _nextId = 1;
+        private int _registryVersion;
 
         /// <summary>Scene-wide instance so Selectable.OnDestroy can self-unregister even when
         /// a destroy site forgets to (safety net; the primary path is explicit Unregister).</summary>
@@ -24,6 +25,7 @@ namespace RoomPlanner.Editing
 
         public EditHistory History { get; } = new();
         public IReadOnlyList<ISelectable> Items => _items;
+        public int Version => unchecked((_registryVersion * 397) ^ History.Version);
 
         private void Awake() => Instance = this;
 
@@ -41,6 +43,7 @@ namespace RoomPlanner.Editing
             // object could mint a duplicate id (audit B1).
             else if (int.TryParse(s.Id, out int n) && n >= _nextId) _nextId = n + 1;
             _items.Add(s);
+            _registryVersion++;
         }
 
         /// <summary>
@@ -51,7 +54,7 @@ namespace RoomPlanner.Editing
         public void Unregister(ISelectable s)
         {
             if (s == null) return;
-            _items.Remove(s);
+            if (_items.Remove(s)) _registryVersion++;
             History.PurgeWhere(c => c is ISelectableCommand sc && ReferenceEquals(sc.Target, s));
         }
 

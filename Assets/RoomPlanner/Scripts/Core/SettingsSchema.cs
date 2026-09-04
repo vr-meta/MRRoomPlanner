@@ -6,14 +6,12 @@ namespace RoomPlanner.Core
 {
     /// <summary>
     /// Row types the inspector can render — the full widget vocabulary of
-    /// docs/design/20-ui-design-system.md §2. Twelve kinds, hard cap: every kind is a
+    /// docs/design/20-ui-design-system.md §2. Eleven kinds, hard cap: every kind is a
     /// state machine to maintain and a pattern the user must learn.
     /// </summary>
     public enum SettingKind
     {
         Stepper,    // caption  [−]  value  [+]        — discrete steps, ≤ ~20 values or unbounded
-        Cycle,      // caption  value  [>]             — LEGACY (design/20 §2): migrating to
-                    //                                   Segmented / Select / Action / Tabs
         Slider,     // caption  track+handle  value    — bounded continuous range
         Segmented,  // caption  [opt|opt|opt]          — ≤4 mutually exclusive options, all visible
         Select,     // caption  value  ⌄  → popup list — 5+ options or dynamic lists
@@ -38,9 +36,9 @@ namespace RoomPlanner.Core
         public SettingKind Kind;
         public string IconId;          // optional IconPaths id (Action rows, headers)
 
-        public Func<string> Value;     // display string (Stepper/Cycle/Numeric/Readout/Select)
+        public Func<string> Value;     // display string (Stepper/Numeric/Readout/Select)
         public Action Decrease;        // Stepper −
-        public Action Increase;        // Stepper +; Cycle next; Action invoke
+        public Action Increase;        // Stepper +; Action invoke
 
         // Slider / Numeric range
         public float Min;
@@ -140,14 +138,20 @@ namespace RoomPlanner.Core
             return this;
         }
 
-        /// <summary>LEGACY — kept alive until every tool migrates to Segmented / Select /
-        /// Action / Tabs (checklist 2m U7); do not add new Cycle rows.</summary>
-        public SettingsSchema Cycle(string id, string caption, Func<string> value, Action next)
+        /// <summary>
+        /// A stepper whose value plate also accepts exact numpad entry. Increment/decrement
+        /// stay convenient; CommitNumber remains the single undo boundary for typed input.
+        /// </summary>
+        public SettingsSchema NumericStepper(string id, string caption, float min, float max,
+            Func<float> get, Action<float, float> commit, Func<string> value,
+            Action decrease, Action increase, float displayScale = 1f)
         {
             _fields.Add(new SettingField
             {
-                Id = id, Caption = caption, Kind = SettingKind.Cycle,
-                Value = value, Increase = next,
+                Id = id, Caption = caption, Kind = SettingKind.Stepper,
+                Min = min, Max = max, DisplayScale = displayScale,
+                GetNumber = get, CommitNumber = commit, Value = value,
+                Decrease = decrease, Increase = increase,
             });
             return this;
         }

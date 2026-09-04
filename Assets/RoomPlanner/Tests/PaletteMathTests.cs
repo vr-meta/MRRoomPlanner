@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 using RoomPlanner.Core;
+using RoomPlanner.Tools;
 
 namespace RoomPlanner.Tests
 {
@@ -46,6 +47,14 @@ namespace RoomPlanner.Tests
             // hidden stays hidden until clearly facing
             Assert.IsFalse(PaletteMath.GateVisible(false, 0.5f), "0.5 is between thresholds → keep hidden");
             Assert.IsTrue(PaletteMath.GateVisible(false, 0.7f), "above 0.6 → show");
+        }
+
+        [Test]
+        public void SnapStripTargets_HaveTwentyPercentAirGap()
+        {
+            const float targetWidth = 0.042f;
+            float gap = ToolMenu.SnapButtonX(1) - ToolMenu.SnapButtonX(0) - targetWidth;
+            Assert.GreaterOrEqual(gap, targetWidth * 0.20f);
         }
     }
 }

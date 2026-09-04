@@ -28,6 +28,10 @@ namespace RoomPlanner.Tools
         [SerializeField] private UiPopups popups;
         [SerializeField] private RoomPlanner.Editing.FinishLibrary finishLibrary;   // texture chips
 
+        [Header("Title labels")]
+        [SerializeField] private TMP_Text titleLabel;
+        [SerializeField] private TMP_Text titleHintLabel;
+
         [Header("Selection labels")]
         [SerializeField] private TMP_Text selTitleLabel;
         [SerializeField] private TMP_Text selInfoLabel;
@@ -46,15 +50,42 @@ namespace RoomPlanner.Tools
 
         private Transform _cam;
         private bool _everPlaced;   // grip-parked position is sacred — never auto-recenter
+        private string _titleBase = "Settings";
+        private float _nextLiveRefreshAt;
+        private float _contentHeight;
+        private float _visibleHeight;
+        private float _scrollOffset;
+        private bool _hasTabs;
+        private GameObject _scrollTrack;
+        private GameObject _scrollThumb;
+        private float _indicatorViewport = -1f;
+        private float _indicatorThumbHeight;
+        private float _indicatorContent = -1f;
 
         public bool IsShown => panelRoot != null && panelRoot.activeSelf;
         public Transform Panel => panelRoot != null ? panelRoot.transform : transform;
         public UiPopups Popups => popups;
 
+        public bool Owns(Collider collider) => collider != null && panelRoot != null
+            && collider.transform.IsChildOf(panelRoot.transform);
+
+        public void TickScroll(Vector2 stick)
+        {
+            if (!IsShown || popups != null && popups.IsOpen) return;
+            float next = PanelLayout.ScrollBy(_scrollOffset, stick.y, Time.unscaledDeltaTime,
+                _contentHeight);
+            if (Mathf.Approximately(next, _scrollOffset)) return;
+            _scrollOffset = next;
+            ApplyScroll();
+        }
+
         /// <summary>Show rows for the schema (null/empty → none) and/or the selection group.</summary>
-        public void ShowFor(SettingsSchema schema, bool showSelection)
+        public void ShowFor(SettingsSchema schema, bool showSelection, string title = null)
         {
             if (panelRoot == null) return;
+            _titleBase = string.IsNullOrWhiteSpace(title) ? "Settings" : title.Trim();
+            EnsureTitleUi();
+            RefreshTitle(schema);
             var page = schema?.ActivePage();
             bool showSettings = schema != null
                 && ((page != null && page.Fields.Count > 0) || schema.HasTabs);
@@ -124,6 +155,7 @@ namespace RoomPlanner.Tools
             _boundPage = null;
             _boundSelRows = -1;
             _boundVersion = 0;
+            _scrollOffset = 0f;
         }
 
         private void Bind(SettingsSchema schema, int selRows)
@@ -166,17 +198,103 @@ namespace RoomPlanner.Tools
             for (int i = 0; i < n; i++)
             {
                 int tab = i;
+                float buttonW = w - 0.003f;
                 var mb = MakeButton(tabsRoot, $"Tab{i}", schema.Tabs[i],
-                    new Vector3(x0 + i * w, y, 0f), new Vector2(w - 0.003f, UiTokens.RowHeight),
-                    () => { schema.SelectTab(tab); Bind(schema, selRows); RefreshValues(); });
+                    new Vector3(x0 + i * w, y, 0f), new Vector2(buttonW, UiTokens.RowHeight),
+                    () =>
+                    {
+                        schema.SelectTab(tab);
+                        Bind(schema, selRows);
+                        FitBackground(VisibleRowCount(schema.ActivePage()) + selRows, true);
+                        RefreshTitle(schema);
+                        RefreshValues();
+                    });
                 // page icons: Electric tabs carry the sub-mode icons (design/20 §6.1)
                 var pageIcon = TabIconFor(schema.Tabs[i]);
                 if (pageIcon != null)
-                    AddRowIcon(mb.transform, pageIcon, new Vector3(-w * 0.5f + 0.014f, 0f, -0.004f), 0.012f);
+                    LayoutTabWithIcon(mb.transform, pageIcon, buttonW);
                 // active = dark plate + Selected underline (design/20 §2.12), not inversion
                 var underline = MakeUnderline(mb.transform, w - 0.014f);
                 int captured = i;
                 _refreshers.Add(() => underline.SetActive(schema.ActiveTab() == captured));
+            }
+        }
+
+        /// <summary>Give a tab icon its own column instead of painting it over centered text.</summary>
+        private void LayoutTabWithIcon(Transform tab, string iconId, float buttonWidth)
+        {
+            const float sidePadding = 0.004f;
+            const float iconLabelGap = 0.003f;
+            float iconSize = Mathf.Min(0.011f, buttonWidth * 0.20f);
+            float iconX = -buttonWidth * 0.5f + sidePadding + iconSize * 0.5f;
+            AddRowIcon(tab, iconId, new Vector3(iconX, 0f, -0.004f), iconSize);
+
+            var label = tab.GetComponentInChildren<TMP_Text>();
+            if (label == null) return;
+            float labelLeft = iconX + iconSize * 0.5f + iconLabelGap;
+            float labelRight = buttonWidth * 0.5f - sidePadding;
+            var rt = label.rectTransform;
+            rt.localPosition = new Vector3((labelLeft + labelRight) * 0.5f, 0f, -0.006f);
+            rt.sizeDelta = new Vector2(Mathf.Max(0.012f, labelRight - labelLeft),
+                UiTokens.RowHeight * 0.8f);
+            label.fontSize = Mathf.Min(label.fontSize, UiTokens.RowHeight * 1.85f);
+        }
+
+        private void RefreshTitle(SettingsSchema schema)
+        {
+            EnsureTitleUi();
+            if (titleLabel == null) return;
+            string value = _titleBase;
+            if (schema != null && schema.HasTabs)
+            {
+                int tab = Mathf.Clamp(schema.ActiveTab?.Invoke() ?? 0, 0, schema.Tabs.Length - 1);
+                value += $" · {schema.Tabs[tab]}";
+            }
+            titleLabel.text = value;
+        }
+
+        /// <summary>
+        /// Upgrade old generated scenes at runtime: their single title still contains the grip
+        /// instruction. The semantic title gets the wide left region; the affordance has a
+        /// quiet, independent label on the right. A rebuilt rig serializes both references.
+        /// </summary>
+        private void EnsureTitleUi()
+        {
+            if (panelRoot == null) return;
+            var title = panelRoot.transform.Find("Title");
+            if (title == null) return;
+            if (titleLabel == null)
+                titleLabel = title.Find("TitleText")?.GetComponent<TMP_Text>();
+            if (titleHintLabel == null)
+                titleHintLabel = title.Find("GripHint")?.GetComponent<TMP_Text>();
+
+            if (titleHintLabel == null && titleLabel != null)
+            {
+                var go = new GameObject("GripHint") { layer = MenuLayer };
+                go.transform.SetParent(title, false);
+                titleHintLabel = go.AddComponent<TextMeshPro>();
+                titleHintLabel.font = titleLabel.font;
+                titleHintLabel.fontSharedMaterial = titleLabel.fontSharedMaterial;
+            }
+
+            if (titleLabel != null)
+            {
+                titleLabel.alignment = TextAlignmentOptions.MidlineLeft;
+                titleLabel.rectTransform.localPosition = new Vector3(-0.0415f, 0f, -0.006f);
+                titleLabel.rectTransform.sizeDelta = new Vector2(0.173f, 0.022f);
+                titleLabel.overflowMode = TextOverflowModes.Ellipsis;
+            }
+            if (titleHintLabel != null)
+            {
+                titleHintLabel.text = "grip to move";
+                titleHintLabel.alignment = TextAlignmentOptions.MidlineRight;
+                titleHintLabel.color = UiTokens.LabelDim;
+                titleHintLabel.textWrappingMode = TextWrappingModes.NoWrap;
+                titleHintLabel.enableAutoSizing = false;
+                titleHintLabel.fontSize = UiTokens.RowHeight * 1.35f;
+                titleHintLabel.overflowMode = TextOverflowModes.Ellipsis;
+                titleHintLabel.rectTransform.localPosition = new Vector3(0.089f, 0f, -0.006f);
+                titleHintLabel.rectTransform.sizeDelta = new Vector2(0.078f, 0.018f);
             }
         }
 
@@ -213,7 +331,6 @@ namespace RoomPlanner.Tools
             switch (f.Kind)
             {
                 case SettingKind.Stepper: BuildStepper(f, y); break;
-                case SettingKind.Cycle: BuildCycle(f, y); break;
                 case SettingKind.Slider: BuildSlider(f, y); break;
                 case SettingKind.Segmented: BuildSegmented(f, y); break;
                 case SettingKind.Select: BuildSelect(f, y); break;
@@ -232,21 +349,14 @@ namespace RoomPlanner.Tools
             float right = PanelLayout.ControlRight;
             MakeButton(rowsRoot, f.Id + "+", null, new Vector3(right - btn * 0.5f, y, 0f),
                 new Vector2(btn, btn), f.Increase, repeatable: true, iconId: "plus");
-            var value = MakeValue(f.Id + "Val", "—",
-                new Vector3(right - btn - 0.036f, y, 0f), new Vector2(0.062f, UiTokens.RowHeight));
+            Vector3 valuePosition = new Vector3(right - btn - 0.036f, y, 0f);
+            Vector2 valueSize = new Vector2(0.062f, UiTokens.RowHeight);
+            var value = f.GetNumber != null && f.CommitNumber != null
+                ? MakeExactValue(f, f.Id + "Val", valuePosition, valueSize)
+                : MakeValue(f.Id + "Val", "—", valuePosition, valueSize);
             MakeButton(rowsRoot, f.Id + "-", null,
                 new Vector3(right - btn * 1.5f - 0.072f, y, 0f),
                 new Vector2(btn, btn), f.Decrease, repeatable: true, iconId: "minus");
-            _refreshers.Add(() => { if (f.Value != null) value.text = f.Value(); });
-        }
-
-        private void BuildCycle(SettingField f, float y)
-        {
-            float right = PanelLayout.ControlRight;
-            var value = MakeValue(f.Id + "Val", "—",
-                new Vector3(right - 0.024f - 0.045f, y, 0f), new Vector2(0.08f, UiTokens.RowHeight));
-            MakeButton(rowsRoot, f.Id + ">", null, new Vector3(right - 0.012f, y, 0f),
-                new Vector2(0.024f, 0.024f), f.Increase, iconId: "chevron-right");
             _refreshers.Add(() => { if (f.Value != null) value.text = f.Value(); });
         }
 
@@ -273,7 +383,7 @@ namespace RoomPlanner.Tools
                 new Vector3(0f, 0f, -0.003f), 0.016f, 0.016f, 0.008f, buttonMaterial);
             Tint(knob.GetComponent<Renderer>(), UiTokens.Knob);
 
-            var value = MakeValue(f.Id + "Val", "—",
+            var value = MakeExactValue(f, f.Id + "Val",
                 new Vector3(PanelLayout.ControlRight - valueW * 0.5f, y, 0f),
                 new Vector2(valueW, UiTokens.RowHeight));
 
@@ -375,6 +485,17 @@ namespace RoomPlanner.Tools
             var value = MakeText(mb.transform, "Val", "—",
                 new Vector2(w - 0.008f, UiTokens.RowHeight - 0.012f));
             _refreshers.Add(() => { if (f.Value != null) value.text = f.Value(); });
+        }
+
+        private TMP_Text MakeExactValue(SettingField f, string name, Vector3 position, Vector2 size)
+        {
+            var mb = MakeButton(rowsRoot, name + "Exact", null, position,
+                new Vector2(size.x, UiTokens.RowHeight - 0.004f),
+                () => popups?.OpenNumpad(f, RefreshValues), background: false);
+            MakePlate(mb.transform, "Bg", new Vector3(0f, 0f, 0.001f),
+                size.x, UiTokens.RowHeight - 0.006f, UiTokens.RadiusM, insetMaterial);
+            return MakeText(mb.transform, "Val", "—",
+                new Vector2(size.x - 0.008f, UiTokens.RowHeight - 0.012f));
         }
 
         /// <summary>Small palettes render INLINE — every color visible and one tap away
@@ -705,7 +826,7 @@ namespace RoomPlanner.Tools
             tmp.text = text;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = Color.white;
-            tmp.enableWordWrapping = false;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
             tmp.rectTransform.sizeDelta = new Vector2(size.x, size.y);
             // Fixed size, NO auto-sizing (issue #55): TMP auto-fit misbehaves on
             // world-space text with sub-unit rects — re-fits on every panel SetActive
@@ -741,7 +862,11 @@ namespace RoomPlanner.Tools
         private void FitBackground(int rows, bool hasTabs)
         {
             if (background == null) return;
-            float h = PanelLayout.PanelHeight(rows, hasTabs);
+            _hasTabs = hasTabs;
+            _contentHeight = PanelLayout.PanelHeight(rows, hasTabs);
+            float h = PanelLayout.VisiblePanelHeight(_contentHeight);
+            _visibleHeight = h;
+            _scrollOffset = Mathf.Clamp(_scrollOffset, 0f, PanelLayout.ScrollRange(_contentHeight));
 
             var plate = background.GetComponent<RoundedPlate>();
             if (plate != null)
@@ -763,6 +888,77 @@ namespace RoomPlanner.Tools
             }
             var lp = background.localPosition;
             background.localPosition = new Vector3(lp.x, -h * 0.5f, lp.z);
+            ApplyScroll();
+        }
+
+        private void ApplyScroll()
+        {
+            float range = PanelLayout.ScrollRange(_contentHeight);
+            if (rowsRoot != null)
+            {
+                Vector3 p = rowsRoot.localPosition;
+                rowsRoot.localPosition = new Vector3(p.x, _scrollOffset, p.z);
+
+                float top = UiTokens.PanelPadding + UiTokens.TitleBarHeight
+                    + (_hasTabs ? PanelLayout.TabStripHeight : 0f)
+                    + Mathf.Max(0, _boundSelRows) * UiTokens.RowStep;
+                float bottom = _visibleHeight - UiTokens.PanelPadding;
+                foreach (Transform child in rowsRoot)
+                {
+                    float down = -(child.localPosition.y + _scrollOffset);
+                    child.gameObject.SetActive(range <= 0f
+                        || down >= top - UiTokens.RowStep
+                        && down <= bottom + UiTokens.RowStep);
+                }
+                UpdateScrollIndicator(top, bottom, range);
+            }
+        }
+
+        private void UpdateScrollIndicator(float top, float bottom, float range)
+        {
+            if (range <= 0f || bottom <= top)
+            {
+                if (_scrollTrack != null) _scrollTrack.SetActive(false);
+                if (_scrollThumb != null) _scrollThumb.SetActive(false);
+                return;
+            }
+
+            float viewport = bottom - top;
+            if (_scrollTrack == null || !Mathf.Approximately(viewport, _indicatorViewport)
+                || !Mathf.Approximately(_contentHeight, _indicatorContent))
+            {
+                DestroyIndicator(_scrollTrack);
+                DestroyIndicator(_scrollThumb);
+                _indicatorViewport = viewport;
+                _indicatorContent = _contentHeight;
+                float x = PanelLayout.Width * 0.5f - 0.005f;
+                _scrollTrack = MakePlate(panelRoot.transform, "ScrollTrack",
+                    new Vector3(x, -(top + bottom) * 0.5f, -0.007f),
+                    0.002f, viewport, 0.001f, insetMaterial);
+                float thumbHeight = Mathf.Max(0.024f,
+                    viewport * Mathf.Clamp01(_visibleHeight / _contentHeight));
+                _indicatorThumbHeight = thumbHeight;
+                _scrollThumb = MakePlate(panelRoot.transform, "ScrollThumb",
+                    new Vector3(x, -top - thumbHeight * 0.5f, -0.009f),
+                    0.004f, thumbHeight, 0.002f, buttonMaterial);
+                Tint(_scrollThumb.GetComponent<Renderer>(), UiTokens.LabelDim);
+            }
+
+            _scrollTrack.SetActive(true);
+            _scrollThumb.SetActive(true);
+            float thumbH = _indicatorThumbHeight;
+            float travel = Mathf.Max(0f, viewport - thumbH);
+            float t = range > 0f ? _scrollOffset / range : 0f;
+            Vector3 p = _scrollThumb.transform.localPosition;
+            _scrollThumb.transform.localPosition = new Vector3(p.x,
+                -top - thumbH * 0.5f - travel * t, p.z);
+        }
+
+        private static void DestroyIndicator(GameObject go)
+        {
+            if (go == null) return;
+            if (Application.isPlaying) Destroy(go);
+            else DestroyImmediate(go);
         }
 
         private bool _toolJustChanged;
@@ -805,6 +1001,11 @@ namespace RoomPlanner.Tools
         private void LateUpdate()
         {
             if (panelRoot == null || !panelRoot.activeSelf) return;
+            if (Time.unscaledTime >= _nextLiveRefreshAt)
+            {
+                _nextLiveRefreshAt = Time.unscaledTime + UiTokens.LiveRefreshSeconds;
+                RefreshValues();
+            }
             EnsureCam();
             if (_cam == null) return;
             // yaw-only billboard: full LookRotation pitches a low-parked panel
