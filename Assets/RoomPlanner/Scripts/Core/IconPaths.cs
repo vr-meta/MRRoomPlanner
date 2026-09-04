@@ -256,6 +256,11 @@ namespace RoomPlanner.Core
             "M4.5 13.5 H6.5 V15.5 H4.5 Z M17.5 13.5 H19.5 V15.5 H17.5 Z " +
             "M8.5 13.5 H15.5 V15.5 H8.5 Z";
 
+        /// <summary>Delete-left: arrow plus X, used instead of a font-dependent Unicode glyph.</summary>
+        public const string Backspace =
+            "M2 12 L9 5 V9 H13 V11 H9 V15 Z " +
+            "M14 7 H16 L18 10 L20 7 H22 L19 12 L22 17 H20 L18 14 L16 17 H14 L17 12 Z";
+
         /// <summary>
         /// Registry: kebab-case id → path data. Ids are what tools reference
         /// (<c>ITool.IconId</c>) and what the icon tests enumerate.
@@ -308,6 +313,7 @@ namespace RoomPlanner.Core
             { "dropper", Dropper },
             { "hand-grab", HandGrab },
             { "numpad", Numpad },
+            { "backspace", Backspace },
             { "folder", Folder },
             { "calibrate", Calibrate },
             { "storey", Storey },

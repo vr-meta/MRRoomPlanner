@@ -92,7 +92,7 @@ namespace RoomPlanner.Tests.Play
             foreach (var f in schema.Fields) ids.Add(f.Id);
 
             // no "wjoin": the Corner row was UI with no effect — WallMesh always miters (B8)
-            CollectionAssert.AreEquivalent(new[] { "wthk", "wh", "woff", "wside" }, ids);
+            CollectionAssert.AreEquivalent(new[] { "wlen", "wthk", "wh", "woff", "wside" }, ids);
             Assert.AreEqual("20 cm", Row(r, s, "wthk").Value(), "the row shows THIS wall's value");
         }
 
@@ -140,6 +140,71 @@ namespace RoomPlanner.Tests.Play
 
             model.History.Redo();
             Assert.AreEqual(0.22f, s.Thickness, 1e-4f);
+        }
+
+        [UnityTest]
+        public IEnumerator ExactLength_MovesTheFreeEnd_PreservesOpening_AndIsUndoable()
+        {
+            var (r, model) = MakeRig();
+            var s = Draw(r, P(0, 0), P(4, 0));
+            var opening = new WallOpening { AlongFraction = 0.5f, Width = 0.9f };
+            s.Openings.Add(opening);
+            yield return null;
+
+            var length = Row(r, s, "wlen");
+            length.CommitNumber(4f, 6f);
+
+            Assert.AreEqual(6f, s.Length, 1e-4f);
+            Assert.AreSame(opening, s.Openings[0]);
+            Assert.AreEqual(0.5f, opening.AlongFraction, 1e-5f);
+            Assert.AreEqual(1, s.A.Degree);
+            Assert.AreEqual(1, s.B.Degree);
+
+            model.History.Undo();
+            Assert.AreEqual(4f, s.Length, 1e-4f);
+            Assert.AreSame(opening, s.Openings[0]);
+            model.History.Redo();
+            Assert.AreEqual(6f, s.Length, 1e-4f);
+        }
+
+        [UnityTest]
+        public IEnumerator ExactOffset_DuplicatesParametricWall_DeepCopiesOpenings_AndUndoRestores()
+        {
+            var (r, model) = MakeRig();
+            var source = Draw(r, P(0, 0), P(4, 0));
+            source.Thickness = 0.32f;
+            source.Height = 3.1f;
+            source.Openings.Add(new WallOpening
+            {
+                Id = 7, AlongFraction = 0.4f, Width = 1.2f, Height = 1.4f,
+                SillHeight = 0.8f, Kind = OpeningKind.Window,
+            });
+            r.RebuildSegment(source);
+            yield return null;
+
+            Vector3 delta = WallDuplicateCommand.OffsetDelta(source, 0.35f);
+            var command = new WallDuplicateCommand(r, r.ViewOf(source), delta);
+            model.History.Execute(command);
+
+            Assert.IsNotNull(command.Result);
+            Assert.AreEqual(2, r.Graph.Segments.Count);
+            var copy = command.ResultSegment;
+            Assert.AreEqual(source.A.Position + delta, copy.A.Position);
+            Assert.AreEqual(source.B.Position + delta, copy.B.Position);
+            Assert.AreEqual(0.32f, copy.Thickness, 1e-4f);
+            Assert.AreEqual(3.1f, copy.Height, 1e-4f);
+            Assert.AreEqual(1, copy.Openings.Count);
+            Assert.AreNotSame(source.Openings[0], copy.Openings[0],
+                "editing a copied opening must not mutate the source wall");
+            Assert.AreEqual(source.Openings[0].AlongFraction, copy.Openings[0].AlongFraction, 1e-5f);
+            Assert.AreEqual("L 4.00 m", command.Result.CompactDimensions());
+
+            model.History.Undo();
+            Assert.IsTrue(command.Result.IsHidden);
+            Assert.IsTrue(copy.Suppressed, "hidden copy must leave wall-joint calculations");
+            model.History.Redo();
+            Assert.IsFalse(command.Result.IsHidden);
+            Assert.IsFalse(copy.Suppressed);
         }
 
         [UnityTest]

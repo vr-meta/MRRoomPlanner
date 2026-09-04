@@ -21,6 +21,9 @@ namespace RoomPlanner.Tools
         [SerializeField] private MenuButton snapGridBtn;
         [SerializeField] private MenuButton snapAngleBtn;
         [SerializeField] private MenuButton scanBtn;
+        [SerializeField] private MenuButton gearBtn;
+        [SerializeField] private MenuButton undoBtn;
+        [SerializeField] private MenuButton redoBtn;
         [SerializeField] private TMPro.TMP_Text tooltipLabel;      // full-word hint under the strip
 
         // Tabs (#85): snapping matters while drawing walls and almost never otherwise, so
@@ -61,13 +64,28 @@ namespace RoomPlanner.Tools
         private Vector3 _followOffset;   // world offset from the head — "left of me" stays left
         private Vector3 _lastSelfPos;    // to tell our own motion from a grip-drag
         private MaterialPropertyBlock _stripeMpb;
+        private float _tooltipAt = -1f;
+        private float _clearHoverAt = -1f;
+        private bool _layoutReady;
 
         // big dead zone: head bobbing and leaning never move the strip, walking does
         private const float FollowDeadZone = 0.35f;
         private const float FollowTau = 0.25f;
+        private const float ButtonStep = 0.0505f; // 8.5 mm / 20% gap between 42 mm targets
+
+        public static float SnapButtonX(int index) => (index - 2.5f) * ButtonStep;
+
+        private void Awake() => EnsureRuntimeLayout();
 
         public void Highlight(MenuButton b)
         {
+            EnsureRuntimeLayout();
+            if (b == null && _hi != null)
+            {
+                if (_clearHoverAt < 0f) _clearHoverAt = Time.time + UiTokens.HoverOutSeconds;
+                return;
+            }
+            _clearHoverAt = -1f;
             if (_hi == b) return;
             if (_hi != null) _hi.SetHighlight(false);
             _hi = b;
@@ -75,15 +93,17 @@ namespace RoomPlanner.Tools
             if (tooltipLabel != null)
             {
                 // no hover → the radial discoverability hint
-                string tip = _hi != null ? _hi.Tooltip : null;
-                if (string.IsNullOrEmpty(tip)) tip = "Tools: press A";
                 tooltipLabel.gameObject.SetActive(true);
-                tooltipLabel.text = tip;
+                tooltipLabel.text = "Tools: press A";
+                _tooltipAt = _hi != null ? Time.time + UiTokens.TooltipDelaySeconds : -1f;
             }
         }
 
-        public void Refresh(int activeTool, bool snapCorner, bool snapEdge, bool snapGrid, bool snapAngle, bool scanOn)
+        public void Refresh(int activeTool, bool snapCorner, bool snapEdge, bool snapGrid,
+            bool snapAngle, bool scanOn, bool renderingOpen = false,
+            bool canUndo = false, bool canRedo = false, float gridSize = 0.05f)
         {
+            EnsureRuntimeLayout();
             if (toolShortcuts != null)
                 foreach (var b in toolShortcuts)
                     if (b != null) b.SetActiveTool(b.ToolIndex == activeTool);
@@ -92,6 +112,10 @@ namespace RoomPlanner.Tools
             if (snapGridBtn != null) snapGridBtn.SetActiveTool(snapGrid);
             if (snapAngleBtn != null) snapAngleBtn.SetActiveTool(snapAngle);
             if (scanBtn != null) scanBtn.SetActiveTool(scanOn);
+            if (gearBtn != null) gearBtn.SetActiveTool(renderingOpen);
+            if (undoBtn != null) undoBtn.SetEnabled(canUndo);
+            if (redoBtn != null) redoBtn.SetEnabled(canRedo);
+            if (snapGridBtn != null) snapGridBtn.Tooltip = $"Snap to {gridSize * 100f:0} cm grid";
         }
 
         /// <summary>The passive current-tool chip — answers "what tool am I holding".</summary>
@@ -111,6 +135,21 @@ namespace RoomPlanner.Tools
 
         private void LateUpdate()
         {
+            if (_clearHoverAt >= 0f && Time.time >= _clearHoverAt)
+            {
+                _clearHoverAt = -1f;
+                if (_hi != null) _hi.SetHighlight(false);
+                _hi = null;
+                _tooltipAt = -1f;
+                if (tooltipLabel != null) tooltipLabel.text = "Tools: press A";
+            }
+            if (_tooltipAt >= 0f && Time.time >= _tooltipAt)
+            {
+                _tooltipAt = -1f;
+                string tip = _hi != null ? _hi.Tooltip : null;
+                if (!string.IsNullOrEmpty(tip) && tooltipLabel != null) tooltipLabel.text = tip;
+            }
+
             if (_cam == null)
             {
                 if (Camera.main == null) return;
@@ -141,6 +180,100 @@ namespace RoomPlanner.Tools
             dir.y = 0f;
             if (dir.sqrMagnitude > 0.0001f)
                 transform.rotation = Quaternion.LookRotation(dir);
+        }
+
+        /// <summary>
+        /// Migrates the checked-in scene as well as freshly generated rigs. Spacing and
+        /// state fixes therefore do not depend on rerunning the editor setup command.
+        /// </summary>
+        private void EnsureRuntimeLayout()
+        {
+            if (_layoutReady) return;
+            snapCornerBtn ??= FindButton("BtnSnapCorner");
+            snapEdgeBtn ??= FindButton("BtnSnapEdge");
+            snapGridBtn ??= FindButton("BtnSnapGrid");
+            snapAngleBtn ??= FindButton("BtnSnapAngle");
+            scanBtn ??= FindButton("BtnScan");
+            gearBtn ??= FindButton("BtnRender");
+            undoBtn ??= FindButton("BtnUndo");
+            redoBtn ??= FindButton("BtnRedo");
+            undoBtn = EnsureHistoryButton(undoBtn, "BtnUndo", "undo", "Undo (X)", MenuAction.Undo);
+            redoBtn = EnsureHistoryButton(redoBtn, "BtnRedo", "redo", "Redo (Y)", MenuAction.Redo);
+
+            var buttons = new[] { snapCornerBtn, snapEdgeBtn, snapGridBtn, snapAngleBtn, scanBtn, gearBtn };
+            for (int i = 0; i < buttons.Length; i++)
+                if (buttons[i] != null)
+                {
+                    Vector3 p = buttons[i].transform.localPosition;
+                    p.x = SnapButtonX(i);
+                    p.y = 0.048f;
+                    buttons[i].transform.localPosition = p;
+                }
+            // The old scene serialized the gear as momentary. It is a page switch now,
+            // so an open Rendering page stays visibly selected.
+            if (gearBtn != null) gearBtn.ConfigureKind(MenuButtonKind.Radio);
+            Position(undoBtn, 0.045f, -0.003f);
+            Position(redoBtn, 0.100f, -0.003f);
+
+            Transform chip = transform.Find("ToolChip");
+            if (chip != null)
+            {
+                Vector3 p = chip.localPosition;
+                chip.localPosition = new Vector3(-0.078f, -0.003f, p.z);
+            }
+            if (tooltipLabel != null)
+            {
+                Vector3 p = tooltipLabel.rectTransform.localPosition;
+                tooltipLabel.rectTransform.localPosition = new Vector3(0f, -0.054f, p.z);
+                tooltipLabel.rectTransform.sizeDelta = new Vector2(0.27f, 0.016f);
+            }
+            ResizePanel();
+            _layoutReady = true;
+        }
+
+        private MenuButton FindButton(string objectName)
+        {
+            foreach (var button in GetComponentsInChildren<MenuButton>(true))
+                if (button != null && button.name == objectName) return button;
+            return null;
+        }
+
+        private MenuButton EnsureHistoryButton(MenuButton current, string objectName,
+            string iconId, string tooltip, MenuAction action)
+        {
+            if (current == null && gearBtn != null)
+            {
+                var clone = Instantiate(gearBtn.gameObject, transform, false);
+                clone.name = objectName;
+                current = clone.GetComponent<MenuButton>();
+            }
+            if (current == null) return null;
+            current.ConfigureGlobal(action, MenuButtonKind.Momentary);
+            current.Tooltip = tooltip;
+            var icon = current.GetComponentInChildren<IconRenderer>(true);
+            if (icon != null) icon.SetIcon(iconId);
+            return current;
+        }
+
+        private static void Position(MenuButton button, float x, float y)
+        {
+            if (button == null) return;
+            Vector3 p = button.transform.localPosition;
+            button.transform.localPosition = new Vector3(x, y, p.z);
+        }
+
+        private void ResizePanel()
+        {
+            const float height = 0.155f;
+            Transform panel = transform.Find("Panel");
+            if (panel == null) return;
+            var plate = panel.GetComponent<RoundedPlate>();
+            if (plate != null) plate.Resize(0.31f, height);
+            var collider = panel.GetComponent<BoxCollider>();
+            if (collider != null) collider.size = new Vector3(0.31f, height, 0.01f);
+            Transform rim = panel.Find("Rim");
+            var rimPlate = rim != null ? rim.GetComponent<RoundedPlate>() : null;
+            if (rimPlate != null) rimPlate.Resize(0.316f, height + 0.006f);
         }
     }
 }

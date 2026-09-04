@@ -6,6 +6,7 @@ using UnityEngine.TestTools;
 using RoomPlanner.Core;
 using RoomPlanner.Editing;
 using RoomPlanner.Measure;
+using RoomPlanner.Tools;
 using RoomPlanner.Walls;
 
 namespace RoomPlanner.Tests.Play
@@ -66,6 +67,7 @@ namespace RoomPlanner.Tests.Play
             template.AddComponent<MeshFilter>();
             template.AddComponent<MeshRenderer>();
             var prefab = template.AddComponent<Wall>();
+            template.AddComponent<WallParameters>();
             template.AddComponent<Selectable>();
 
             var walls = rig.AddComponent<WallGraphRenderer>();
@@ -140,6 +142,56 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(2, walls.Graph.Segments.Count, "two separate walls");
             Assert.AreEqual(4, walls.Graph.Nodes.Count,
                 "the chains do not share nodes — B really broke the chain");
+        }
+
+        [UnityTest]
+        public IEnumerator ToolSwitch_SuspendsAndThenResumesTheSameChain()
+        {
+            var (tool, input, pointer, walls) = MakeRig();
+            yield return null;
+
+            pointer.Ray = Down(0f, 0f);
+            Click(tool, input);
+            pointer.Ray = Down(3f, 0f);
+            Click(tool, input);
+            tool.OnDeactivate();
+            Assert.IsTrue(tool.HasActiveChain, "switching away keeps the continuation node");
+
+            tool.OnActivate();
+            pointer.Ray = Down(6f, 0f);
+            Click(tool, input);
+
+            Assert.AreEqual(2, walls.Graph.Segments.Count);
+            Assert.AreEqual(3, walls.Graph.Nodes.Count,
+                "the resumed segment shares the interrupted chain endpoint");
+        }
+
+        [UnityTest]
+        public IEnumerator FinishChain_HandsTheLastWallToSelect()
+        {
+            var (tool, input, pointer, walls) = MakeRig();
+            var rig = walls.gameObject;
+            var manager = rig.AddComponent<ToolManager>();
+            var select = rig.AddComponent<SelectController>();
+            SetField(manager, "sceneModel", rig.GetComponent<SceneModel>());
+            SetField(manager, "select", select);
+            SetField(manager, "wall", tool);
+            SetField(select, "manager", manager);
+            SetField(tool, "manager", manager);
+            yield return null;
+            manager.SetActiveTool(2);
+
+            pointer.Ray = Down(0f, 0f);
+            Click(tool, input);
+            pointer.Ray = Down(3f, 0f);
+            Click(tool, input);
+            input.Clear = true;
+            tool.Tick(false);
+            input.Clear = false;
+
+            Assert.IsFalse(tool.HasActiveChain);
+            Assert.IsTrue(select.HasSelection);
+            Assert.That(select.SelectionTitle, Does.StartWith("Wall #"));
         }
     }
 }

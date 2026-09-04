@@ -68,6 +68,7 @@ namespace RoomPlanner.Measure
 
         private int _mode;   // 0 Hands (Layout-style tape at the controller) · 1 Ray (aim far)
         private SettingsSchema _settings;
+        private ReticleSnapKind _lastSnapKind;
 
         public SettingsSchema GetSettings()
         {
@@ -171,6 +172,7 @@ namespace RoomPlanner.Measure
             {
                 reticle.gameObject.SetActive(true);
                 reticle.position = target;
+                DecorateReticle(target, _pendingStart);
             }
 
             // --- Удаление ---
@@ -235,6 +237,7 @@ namespace RoomPlanner.Measure
             {
                 reticle.gameObject.SetActive(true);
                 reticle.position = target;
+                DecorateReticle(target, _pendingStart);
             }
 
             if (input.ClearPressed())
@@ -277,7 +280,12 @@ namespace RoomPlanner.Measure
                 Vector3 t = ResolveTarget(tip, allowSurface: true,
                     exclude: _dragging.Owner, axisAnchor: OtherEnd(_dragging));
                 ApplyDrag(_dragging, t);
-                if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
+                if (reticle != null)
+                {
+                    reticle.gameObject.SetActive(true);
+                    reticle.position = t;
+                    DecorateReticle(t, OtherEnd(_dragging));
+                }
             }
             else
             {
@@ -330,7 +338,12 @@ namespace RoomPlanner.Measure
                 Vector3 t = ResolveTarget(_cursorPoint, allowSurface: false,
                     exclude: _dragging.Owner, axisAnchor: OtherEnd(_dragging));
                 ApplyDrag(_dragging, t);
-                if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = t; }
+                if (reticle != null)
+                {
+                    reticle.gameObject.SetActive(true);
+                    reticle.position = t;
+                    DecorateReticle(t, OtherEnd(_dragging));
+                }
             }
             else
             {
@@ -361,9 +374,22 @@ namespace RoomPlanner.Measure
             Vector3? surface = null;
             if (!endpoint.HasValue && allowSurface && TrySnapToNearbySurface(raw, out var sfc))
                 surface = sfc;
+            _lastSnapKind = endpoint.HasValue ? ReticleSnapKind.Corner
+                : surface.HasValue ? ReticleSnapKind.Edge
+                : input.SnapHeld() && axisAnchor.HasValue ? ReticleSnapKind.Angle
+                : manager != null && manager.SnapGrid ? ReticleSnapKind.Grid
+                : ReticleSnapKind.None;
             return MeasureMath.ApplySnapPolicy(raw, endpoint, surface,
                 axisAnchor, input.SnapHeld(),
                 manager != null && manager.SnapGrid, manager != null ? manager.GridSize : 0f);
+        }
+
+        private void DecorateReticle(Vector3 target, Vector3? anchor)
+        {
+            var visual = ReticleVisual.For(reticle);
+            visual?.SetSnap(_lastSnapKind);
+            visual?.SetDimension(anchor.HasValue
+                ? MeasureMath.FormatDistanceCm(Vector3.Distance(anchor.Value, target)) : null);
         }
 
         /// <summary>Record the finished drag as one undo entry; a sub-mm wiggle is not an edit.</summary>
@@ -469,6 +495,74 @@ namespace RoomPlanner.Measure
                 done.SetInteractable(true);
                 TrimMeasurements();
             }
+        }
+
+        /// <summary>
+        /// Create a persistent, undoable measurement for the meaningful span of a selected
+        /// object. Used by the one-level selection context menu; it does not switch tools or
+        /// disturb the current selection.
+        /// </summary>
+        public ISelectable QuickMeasure(ISelectable target)
+        {
+            if (target == null || !target.IsAlive || target.IsHidden) return null;
+            Vector3 a, b;
+            if (target is Selectable selectable)
+            {
+                if (!selectable.TryGetMeasurementSpan(out a, out b)) return null;
+            }
+            else
+            {
+                Bounds bounds = target.WorldBounds;
+                Vector3 size = bounds.size;
+                Vector3 half = size.x >= size.y && size.x >= size.z
+                    ? Vector3.right * size.x * 0.5f
+                    : size.y >= size.z ? Vector3.up * size.y * 0.5f
+                    : Vector3.forward * size.z * 0.5f;
+                a = bounds.center - half;
+                b = bounds.center + half;
+            }
+            return CreatePersistentMeasurement(a, b);
+        }
+
+        /// <summary>Undoable measurement duplicate with a small plan nudge.</summary>
+        public ISelectable DuplicateMeasurement(ISelectable target, Vector3 delta)
+        {
+            if (target is not Selectable selectable
+                || !selectable.TryGetMeasurementSpan(out Vector3 a, out Vector3 b))
+                return null;
+            return CreatePersistentMeasurement(a + delta, b + delta);
+        }
+
+        private ISelectable CreatePersistentMeasurement(Vector3 a, Vector3 b)
+        {
+            if ((b - a).sqrMagnitude < 1e-8f) return null;
+            Measurement measurement;
+            if (measurementPrefab != null)
+            {
+                measurement = Instantiate(measurementPrefab, transform);
+                if (!measurement.gameObject.activeSelf) measurement.gameObject.SetActive(true);
+            }
+            else
+            {
+                var go = new GameObject("Measurement (quick)");
+                go.transform.SetParent(transform, false);
+                measurement = go.AddComponent<Measurement>();
+            }
+
+            var selected = measurement.GetComponent<Selectable>();
+            if (selected == null) selected = measurement.gameObject.AddComponent<Selectable>();
+            measurement.Set(a, b);
+            measurement.SetInteractable(true);
+            _measurements.Add(measurement);
+
+            var model = sceneModel != null ? sceneModel : SceneModel.Instance;
+            if (model != null)
+            {
+                model.Register(selected);
+                model.History.Record(new CreateCommand(selected));
+            }
+            TrimMeasurements();
+            return selected;
         }
 
         /// <summary>

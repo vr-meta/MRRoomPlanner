@@ -33,12 +33,17 @@ namespace RoomPlanner.EditorTools
                 var ctx = new RigContext();
                 LoadMaterials(ctx);
                 System.IO.Directory.CreateDirectory("Build/ui-shots");
+                foreach (var old in System.IO.Directory.GetFiles("Build/ui-shots", "*.png"))
+                    System.IO.File.Delete(old);
 
                 ShotRadial(cam, ctx);
                 ShotStrip(cam, ctx);
                 ShotInspectorShowcase(cam, ctx);
                 ShotNumpad(cam, ctx);
+                ShotSelectPopup(cam, ctx);
+                ShotSwatchPopup(cam, ctx);
                 ShotEveryTool(cam, ctx);
+                WriteIndex();
 
                 Debug.Log("[CI] ui-shots saved to Build/ui-shots");
             }
@@ -59,8 +64,8 @@ namespace RoomPlanner.EditorTools
 
             var radial = SetupRadial.Build(ctx);
             radial.gameObject.SetActive(true);
-            radial.Configure(SlotDefs());
-            radial.Open(head, 8);   // Electric is the active tool
+            radial.Configure(ToolManager.CreateRadialDefinitions(ToolManager.DefaultToolIndex));
+            radial.Open(head, ToolManager.DefaultToolIndex("electric"));
             // stick deflection toward slot 2 (Wall, 60°) highlights it — the state the
             // preview shows; ray misses, no confirm
             radial.Tick(new Vector2(Mathf.Sin(60f * Mathf.Deg2Rad), Mathf.Cos(60f * Mathf.Deg2Rad)) * 0.9f,
@@ -96,33 +101,51 @@ namespace RoomPlanner.EditorTools
             {
                 var manager = host.AddComponent<ToolManager>();
 
+                var measure = host.AddComponent<RoomPlanner.Measure.MeasureController>();
+                RenderInspector(cam, ctx, measure.GetSettings(), "tool-measure", "Measure");
+
                 var wall = host.AddComponent<RoomPlanner.Walls.WallController>();
                 Wire(wall, "manager", manager);
-                RenderInspector(cam, ctx, wall.GetSettings(), "tool-wall");
+                RenderInspector(cam, ctx, wall.GetSettings(), "tool-wall", "Wall");
 
                 var floor = host.AddComponent<RoomPlanner.Floors.FloorController>();
                 Wire(floor, "manager", manager);
-                RenderInspector(cam, ctx, floor.GetSettings(), "tool-floor");
+                RenderInspector(cam, ctx, floor.GetSettings(), "tool-floor", "Floor");
 
                 var blueprint = host.AddComponent<RoomPlanner.Floors.BlueprintController>();
-                RenderInspector(cam, ctx, blueprint.GetSettings(), "tool-blueprint");
+                RenderInspector(cam, ctx, blueprint.GetSettings(), "tool-blueprint", "Blueprint");
 
                 var import = host.AddComponent<RoomPlanner.Import.ImportController>();
-                RenderInspector(cam, ctx, import.GetSettings(), "tool-import");
+                RenderInspector(cam, ctx, import.GetSettings(), "tool-import", "Import");
+
+                var openings = host.AddComponent<RoomPlanner.Walls.OpeningsController>();
+                var openingSchema = openings.GetSettings();
+                for (int tab = 0; tab < openingSchema.Tabs.Length; tab++)
+                {
+                    openingSchema.SelectTab(tab);
+                    RenderInspector(cam, ctx, openingSchema,
+                        $"tool-openings-{openingSchema.Tabs[tab].ToLowerInvariant()}", "Openings");
+                }
+
+                var projects = host.AddComponent<RoomPlanner.Import.ProjectsController>();
+                RenderInspector(cam, ctx, projects.GetSettings(), "tool-projects", "Projects");
+
+                RenderInspector(cam, ctx, manager.GetRenderingSettings(),
+                    "tool-rendering", "Rendering");
 
                 var paint = host.AddComponent<PaintController>();
                 ctx.Finishes = SetupPaintTool.BuildFinishLibrary(host);
                 Wire(paint, "library", ctx.Finishes);
-                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint");
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint", "Paint");
                 // second shot: the Walls texture tab
                 paint.GetSettings().SelectTab(1);
-                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-walls");
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-walls", "Paint");
                 paint.GetSettings().SelectTab(2);
-                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-floors");
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-floors", "Paint");
                 paint.GetSettings().SelectTab(3);
-                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-tiles");
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-tiles", "Paint");
                 paint.GetSettings().SelectTab(4);
-                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-ceiling");
+                RenderInspector(cam, ctx, paint.GetSettings(), "tool-paint-ceiling", "Paint");
                 paint.GetSettings().SelectTab(0);
 
                 var electric = host.AddComponent<RoomPlanner.Electrical.ElectricController>();
@@ -131,17 +154,16 @@ namespace RoomPlanner.EditorTools
                 {
                     schema.SelectTab(tab);
                     RenderInspector(cam, ctx, schema,
-                        $"tool-electric-{schema.Tabs[tab].ToLowerInvariant()}");
+                        $"tool-electric-{schema.Tabs[tab].ToLowerInvariant()}", "Electric");
                 }
 
                 // Select: the selection group with a sample pick
                 cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
                 var inspector = SetupInspector.Build(ctx);
                 inspector.SetSelection("Wall #3", "Length 3.2 m · Height 2.7 m · 20 cm");
-                inspector.ShowFor(null, showSelection: true);
+                inspector.ShowFor(null, showSelection: true, title: "Wall #3");
                 RebuildVisuals(inspector.gameObject);
-                Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.13f,
-                    "tool-select", 1200, 1500);
+                ShootInspector(cam, inspector, "tool-select");
                 UnityEngine.Object.DestroyImmediate(inspector.gameObject);
             }
             finally
@@ -186,7 +208,7 @@ namespace RoomPlanner.EditorTools
                 .Action("fin", "Finish route", "check", () => { })
                 .Action("clr", "Clear circuit", "trash", () => { }, destructive: true);
 
-            RenderInspector(cam, ctx, schema, "inspector-widgets");
+            RenderInspector(cam, ctx, schema, "inspector-widgets", "Widget gallery");
         }
 
         private static void ShotNumpad(Camera cam, RigContext ctx)
@@ -199,28 +221,84 @@ namespace RoomPlanner.EditorTools
             var inspector = SetupInspector.Build(ctx);
             var schema = new SettingsSchema()
                 .Numeric("h", "Height", 0.1f, 5f, () => 2.8f, (_, __) => { }, () => "280 cm", 100f);
-            inspector.ShowFor(schema, false);
+            inspector.ShowFor(schema, false, "Floor");
             inspector.Popups.OpenNumpad(field, null);
             RebuildVisuals(inspector.gameObject);
 
-            Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.10f,
-                "numpad", 1200, 1500);
+            ShootInspector(cam, inspector, "numpad");
+            UnityEngine.Object.DestroyImmediate(inspector.gameObject);
+        }
+
+        private static void ShotSelectPopup(Camera cam, RigContext ctx)
+        {
+            int selected = 1;
+            string[] options = { "Ground floor", "First floor", "Roof" };
+            var schema = new SettingsSchema()
+                .Select("storey", "Storey", () => options, () => selected, i => selected = i);
+            cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            var inspector = SetupInspector.Build(ctx);
+            inspector.ShowFor(schema, false, "Import");
+            inspector.Popups.OpenSelect(schema.Fields[0], null);
+            RebuildVisuals(inspector.gameObject);
+            ShootInspector(cam, inspector, "popup-select");
+            UnityEngine.Object.DestroyImmediate(inspector.gameObject);
+        }
+
+        private static void ShotSwatchPopup(Camera cam, RigContext ctx)
+        {
+            int selected = 2;
+            var palette = new[]
+            {
+                new Color(0.95f, 0.94f, 0.91f), new Color(0.89f, 0.84f, 0.72f),
+                new Color(0.77f, 0.39f, 0.23f), new Color(0.61f, 0.69f, 0.53f),
+                new Color(0.50f, 0.66f, 0.79f), new Color(0.29f, 0.31f, 0.33f),
+                new Color(0.62f, 0.29f, 0.24f), new Color(0.66f, 0.81f, 0.75f),
+            };
+            var schema = new SettingsSchema()
+                .Swatch("color", "Color", palette, () => selected, i => selected = i);
+            cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            var inspector = SetupInspector.Build(ctx);
+            inspector.ShowFor(schema, false, "Paint");
+            inspector.Popups.OpenSwatch(schema.Fields[0], null);
+            RebuildVisuals(inspector.gameObject);
+            ShootInspector(cam, inspector, "popup-swatch");
             UnityEngine.Object.DestroyImmediate(inspector.gameObject);
         }
 
         private static void RenderInspector(Camera cam, RigContext ctx, SettingsSchema schema,
-            string shotName)
+            string shotName, string title)
         {
             // PlaceInFront reads the camera's CURRENT forward — reset it, or every next
             // panel spirals away from the previous shot's aim and shows its back side
             cam.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             var inspector = SetupInspector.Build(ctx);
-            inspector.ShowFor(schema, false);
+            inspector.ShowFor(schema, false, title);
             RebuildVisuals(inspector.gameObject);
-            // panel origin is TOP-center — aim at the content middle so nothing crops
-            Shoot(cam, new Vector3(0f, 0f, -0.22f), inspector.Panel.position + Vector3.down * 0.13f,
-                shotName, 1200, 1500);
+            ShootInspector(cam, inspector, shotName);
             UnityEngine.Object.DestroyImmediate(inspector.gameObject);
+        }
+
+        private static void ShootInspector(Camera cam, InspectorPanel inspector, string shotName)
+        {
+            const int width = 1200, height = 1500;
+            var renderers = inspector.gameObject.GetComponentsInChildren<Renderer>(true);
+            bool hasBounds = false;
+            Bounds bounds = default;
+            foreach (var renderer in renderers)
+            {
+                if (renderer == null || !renderer.gameObject.activeInHierarchy) continue;
+                if (!hasBounds) { bounds = renderer.bounds; hasBounds = true; }
+                else bounds.Encapsulate(renderer.bounds);
+            }
+            if (!hasBounds) bounds = new Bounds(inspector.Panel.position, Vector3.one * 0.1f);
+
+            float tanHalfVertical = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float aspect = (float)width / height;
+            float distance = Mathf.Max(bounds.extents.y / tanHalfVertical,
+                bounds.extents.x / (tanHalfVertical * aspect));
+            distance = Mathf.Max(0.45f, distance * 1.12f);
+            Shoot(cam, bounds.center + Vector3.back * distance, bounds.center,
+                shotName, width, height);
         }
 
         // ---- plumbing ----
@@ -236,31 +314,29 @@ namespace RoomPlanner.EditorTools
                 tmp.ForceMeshUpdate();
         }
 
-        private static RadialSlotDef[] SlotDefs()
+        private static void WriteIndex()
         {
-            (string icon, string label, Color tint, int tool)[] slots =
+            string root = "Build/ui-shots";
+            string[] files = System.IO.Directory.GetFiles(root, "*.png");
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+            var html = new System.Text.StringBuilder();
+            html.AppendLine("<!doctype html>");
+            html.AppendLine("<html lang=\"en\"><head><meta charset=\"utf-8\">");
+            html.AppendLine("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
+            html.AppendLine("<title>MR Room Planner UI gallery</title>");
+            html.AppendLine("<style>body{margin:0;background:#0b0e14;color:#e8edf7;font:16px system-ui,sans-serif}header{padding:24px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;padding:0 24px 32px}figure{margin:0;background:#151a24;border:1px solid #283044;border-radius:14px;overflow:hidden}img{display:block;width:100%;height:420px;object-fit:contain;background:#0b0e14}figcaption{padding:12px 14px}</style></head><body>");
+            html.AppendLine("<header><h1>MR Room Planner UI gallery</h1><p>Generated from the live Unity UI components.</p></header><main>");
+            foreach (string file in files)
             {
-                ("select-cursor", "Select", new Color(0.91f, 0.93f, 0.96f), 0),
-                ("tape-measure", "Measure", new Color(0.61f, 0.48f, 1f), 1),
-                ("wall", "Wall", new Color(0.60f, 0.65f, 0.75f), 2),
-                ("floor-slab", "Floor", new Color(0.60f, 0.65f, 0.75f), 3),
-                ("door-window", "Openings", Color.gray, -1),
-                ("furniture", "Furniture", Color.gray, -1),
-                ("blueprint", "Blueprint", new Color(0.54f, 0.82f, 0.78f), 6),
-                ("import-file", "Import", new Color(0.91f, 0.93f, 0.96f), 7),
-                ("electric-plug", "Electric", new Color(1f, 0.79f, 0.30f), 8),
-                ("radiator", "Heating", Color.gray, -1),
-                ("pipe", "Plumbing", Color.gray, -1),
-                ("paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f), 11),
-            };
-            var defs = new RadialSlotDef[slots.Length];
-            for (int i = 0; i < slots.Length; i++)
-                defs[i] = new RadialSlotDef
-                {
-                    IconId = slots[i].icon, Label = slots[i].label,
-                    Tint = slots[i].tint, ToolIndex = slots[i].tool,
-                };
-            return defs;
+                string name = System.IO.Path.GetFileName(file);
+                string title = System.IO.Path.GetFileNameWithoutExtension(file).Replace('-', ' ');
+                html.Append("<figure><a href=\"").Append(name).Append("\"><img loading=\"lazy\" src=\"")
+                    .Append(name).Append("\" alt=\"").Append(title).Append("\"></a><figcaption>")
+                    .Append(title).AppendLine("</figcaption></figure>");
+            }
+            html.AppendLine("</main></body></html>");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(root, "index.html"), html.ToString());
         }
 
         private static void LoadMaterials(RigContext ctx)

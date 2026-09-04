@@ -71,7 +71,7 @@ namespace RoomPlanner.Tests.Play
             AssertColor(Terracotta, BlockColor(renderer), "painted");
 
             sel.SetHighlight(HighlightState.Hover);
-            AssertColor(Color.Lerp(Terracotta, UiColors.Hover, 0.30f), BlockColor(renderer),
+            AssertColor(Color.Lerp(Terracotta, UiTokens.Hover, 0.30f), BlockColor(renderer),
                 "hover tint lerps from the PAINT, not the material");
 
             sel.SetHighlight(HighlightState.None);

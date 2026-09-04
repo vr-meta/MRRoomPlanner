@@ -49,6 +49,8 @@ namespace RoomPlanner.Editing
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
         private MaterialPropertyBlock _mpb;
         private HighlightState _state = HighlightState.None;
+        private int _bomVersion = int.MinValue;
+        private string _bomDescription;
 
         public string Id { get; set; }
         public Transform Transform => transform;
@@ -246,8 +248,8 @@ namespace RoomPlanner.Editing
         {
             if (_renderers == null) return;
             bool tint = _state != HighlightState.None;
-            Color stateColor = _state == HighlightState.Selected ? RoomPlanner.Tools.UiColors.Selected
-                                                                 : RoomPlanner.Tools.UiColors.Hover;
+            Color stateColor = _state == HighlightState.Selected ? UiTokens.Selected
+                                                                 : UiTokens.Hover;
             float t = _state == HighlightState.Selected ? SelectTint : HoverTint;
             bool hasFinish = !_finish.IsNone;
 
@@ -398,6 +400,55 @@ namespace RoomPlanner.Editing
             return _settingsProvider?.GetSettings();
         }
 
+        /// <summary>
+        /// Endpoints for the selection-context Quick Measure action. Parametric lines expose
+        /// their real endpoints; volume-like objects fall back to their longest bounds axis.
+        /// </summary>
+        public bool TryGetMeasurementSpan(out Vector3 a, out Vector3 b)
+        {
+            Resolve();
+            if (_wall != null && _wall.Points.Count >= 2)
+            {
+                a = _wall.Points[0];
+                b = _wall.Points[_wall.Points.Count - 1];
+                return (b - a).sqrMagnitude > 1e-8f;
+            }
+            if (_measurement != null)
+            {
+                a = _measurement.PointA;
+                b = _measurement.PointB;
+                return (b - a).sqrMagnitude > 1e-8f;
+            }
+
+            Bounds bounds = WorldBounds;
+            Vector3 size = bounds.size;
+            int axis = size.x >= size.y && size.x >= size.z ? 0 : size.y >= size.z ? 1 : 2;
+            Vector3 half = axis == 0 ? Vector3.right * size.x * 0.5f
+                : axis == 1 ? Vector3.up * size.y * 0.5f
+                : Vector3.forward * size.z * 0.5f;
+            a = bounds.center - half;
+            b = bounds.center + half;
+            return half.sqrMagnitude > 1e-8f;
+        }
+
+        /// <summary>Short hover badge; deliberately smaller than the inspector description.</summary>
+        public string CompactDimensions()
+        {
+            Resolve();
+            if (_wall != null) return $"L {WallLength():0.00} m";
+            if (_measurement != null) return $"{_measurement.Distance:0.00} m";
+            if (_leafView != null && _leafView.Opening != null)
+                return $"{_leafView.Opening.Width * 100f:0}×{_leafView.Opening.Height * 100f:0} cm";
+            if (_floor != null) return $"{_floor.Area:0.0} m²";
+            if (_route != null) return $"L {_route.Length:0.00} m";
+
+            Bounds bounds = WorldBounds;
+            float horizontalMax = Mathf.Max(bounds.size.x, bounds.size.z);
+            if (bounds.size.y > horizontalMax * 1.25f)
+                return $"H {bounds.size.y:0.00} m";
+            return $"{bounds.size.x:0.00}×{bounds.size.z:0.00} m";
+        }
+
         public string Describe()
         {
             Resolve();
@@ -470,6 +521,9 @@ namespace RoomPlanner.Editing
                 default:
                 {
                     var model = SceneModel.Instance;
+                    int version = model != null ? model.Version : -1;
+                    if (_bomVersion == version && _bomDescription != null)
+                        return _bomDescription;
                     var entries = new System.Collections.Generic.List<RoomPlanner.Electrical.RouteBomEntry>();
                     int routed = 0, total = 0;
                     if (model != null)
@@ -501,8 +555,10 @@ namespace RoomPlanner.Editing
                             if (!string.IsNullOrEmpty(Id) && (r.StartFixtureId == Id || r.EndFixtureId == Id)) routed++;
                         }
                     }
-                    return RoomPlanner.Electrical.ElectricalBom.Describe(
+                    _bomDescription = RoomPlanner.Electrical.ElectricalBom.Describe(
                         entries, _fixture.ReservePercent, unrouted: total - routed);
+                    _bomVersion = version;
+                    return _bomDescription;
                 }
             }
         }

@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Tools
 {
@@ -21,7 +22,9 @@ namespace RoomPlanner.Tools
         /// A serialized action, not an OnClick delegate: Setup runs in the Editor, so a
         /// lambda assigned there is simply gone at runtime — which is exactly why the tabs
         /// did nothing in the first build (headset feedback 2026-08-15).</summary>
-        SelectStripTab
+        SelectStripTab,
+        Undo,
+        Redo
     }
 
     /// <summary>Button semantics (design/16 P1.3): one-of selection (tool), on/off toggle
@@ -72,7 +75,6 @@ namespace RoomPlanner.Tools
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
-        private const float PressFlash = 0.08f;
 
         private Vector3 _baseScale;
         private bool _hovered;
@@ -100,7 +102,9 @@ namespace RoomPlanner.Tools
         private void Update()
         {
             // let the press flash decay back to the resting state
-            if (_pressedAt > 0f && Time.time - _pressedAt <= PressFlash + 0.02f) Apply();
+            if (_pressedAt > 0f
+                && Time.time - _pressedAt <= RoomPlanner.Core.UiTokens.PressFlashSeconds + 0.02f)
+                Apply();
         }
 
         /// <summary>Wire the visual refs for buttons created at runtime (inspector rows).</summary>
@@ -109,6 +113,26 @@ namespace RoomPlanner.Tools
             kind = buttonKind;
             bgRenderer = background;
             label = buttonLabel;
+            Apply();
+        }
+
+        /// <summary>Runtime migration hook for scene-authored controls whose semantics evolved.</summary>
+        public void ConfigureKind(MenuButtonKind buttonKind)
+        {
+            kind = buttonKind;
+            Apply();
+        }
+
+        /// <summary>Runtime wiring for global buttons added while upgrading an older scene.</summary>
+        public void ConfigureGlobal(MenuAction globalAction, MenuButtonKind buttonKind)
+        {
+            action = globalAction;
+            toolIndex = -1;
+            kind = buttonKind;
+            OnClick = null;
+            Repeatable = false;
+            Destructive = false;
+            _on = false;
             Apply();
         }
 
@@ -154,7 +178,8 @@ namespace RoomPlanner.Tools
         private void Apply()
         {
             EnsureInit();
-            bool flashing = _pressedAt > 0f && Time.time - _pressedAt < PressFlash;
+            bool flashing = _pressedAt > 0f
+                && Time.time - _pressedAt < RoomPlanner.Core.UiTokens.PressFlashSeconds;
             // pressed dips; hover lifts slightly (1.06 — the old 1.12 overlapped neighbours)
             float s = flashing ? 0.97f : _hovered ? 1.06f : 1f;
             transform.localScale = _baseScale * s;
@@ -162,10 +187,10 @@ namespace RoomPlanner.Tools
             // Radio active = inverted button (light bg, dark text) — reads at a glance and
             // stays distinct from a snap toggle's strip+LED.
             bool inverted = _on && kind == MenuButtonKind.Radio;
-            Color bg = !_enabled ? UiColors.ButtonDisabledBg
-                : inverted ? UiColors.LabelLight
-                : _hovered ? UiColors.ButtonHoverBg
-                : UiColors.ButtonBg;
+            Color bg = !_enabled ? UiTokens.ButtonDisabledBg
+                : inverted ? UiTokens.LabelLight
+                : _hovered ? UiTokens.ButtonHoverBg
+                : UiTokens.ButtonBg;
             if (flashing) bg = Color.Lerp(bg, Color.white, 0.35f);
             if (Destructive && _dangerFill > 0f)
                 bg = Color.Lerp(bg, RoomPlanner.Core.UiTokens.Danger, _dangerFill);
@@ -179,11 +204,11 @@ namespace RoomPlanner.Tools
             }
             if (label != null)
             {
-                Color lc = inverted ? UiColors.LabelDark
+                Color lc = inverted ? UiTokens.LabelDark
                     : Destructive ? (_dangerFill > 0.6f
-                        ? UiColors.LabelDark : RoomPlanner.Core.UiTokens.Danger)
-                    : UiColors.LabelLight;
-                if (!_enabled) lc.a = UiColors.DisabledLabelAlpha;
+                        ? UiTokens.LabelDark : UiTokens.Danger)
+                    : UiTokens.LabelLight;
+                if (!_enabled) lc.a = UiTokens.DisabledAlpha;
                 label.color = lc;
             }
         }

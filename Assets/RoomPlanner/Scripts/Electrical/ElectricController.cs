@@ -425,7 +425,16 @@ namespace RoomPlanner.Electrical
             if (reticle != null)
             {
                 reticle.gameObject.SetActive(valid);
-                if (valid) reticle.position = cursor;
+                if (valid)
+                {
+                    reticle.position = cursor;
+                    var visual = ReticleVisual.For(reticle);
+                    visual?.SetSnap(terminal != null || pickup != null
+                        ? ReticleSnapKind.Corner : ReticleSnapKind.Edge);
+                    visual?.SetDimension(_pts.Count > 0
+                        ? MeasureMath.FormatDistanceCm(Vector3.Distance(_pts[_pts.Count - 1], cursor))
+                        : null);
+                }
             }
             DrawWirePreview(cursor, valid);
 
@@ -662,7 +671,9 @@ namespace RoomPlanner.Electrical
         private SettingsSchema BuildSchema()
         {
             var outlet = new SettingsSchema()
-                .Stepper("posts", "Posts", () => $"{_posts}",
+                .NumericStepper("posts", "Posts", 1f, ElectricalDefaults.MaxPosts,
+                    () => _posts, (_, v) => _posts = Mathf.Clamp(Mathf.RoundToInt(v), 1, ElectricalDefaults.MaxPosts),
+                    () => $"{_posts}",
                     () => _posts = Mathf.Max(1, _posts - 1),
                     () => _posts = Mathf.Min(ElectricalDefaults.MaxPosts, _posts + 1))
                 .Slider("oh", "Height", ElectricalDefaults.MinOutletHeight,
@@ -672,7 +683,9 @@ namespace RoomPlanner.Electrical
                     (_, v) => _outletHeight = ClampHeight(v, ElectricalDefaults.MinOutletHeight),
                     () => $"{_outletHeight * 100f:0} cm", displayScale: 100f);
             var sw = new SettingsSchema()
-                .Stepper("keys", "Keys", () => $"{_keys}",
+                .NumericStepper("keys", "Keys", 1f, ElectricalDefaults.MaxKeys,
+                    () => _keys, (_, v) => _keys = Mathf.Clamp(Mathf.RoundToInt(v), 1, ElectricalDefaults.MaxKeys),
+                    () => $"{_keys}",
                     () => _keys = Mathf.Max(1, _keys - 1),
                     () => _keys = Mathf.Min(ElectricalDefaults.MaxKeys, _keys + 1))
                 .Slider("sh", "Height", ElectricalDefaults.MinSwitchHeight,

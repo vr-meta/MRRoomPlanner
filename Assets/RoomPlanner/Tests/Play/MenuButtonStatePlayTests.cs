@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using TMPro;
 using UnityEngine;
+using RoomPlanner.Core;
 using RoomPlanner.Editing;
 using RoomPlanner.Tools;
 using HighlightState = RoomPlanner.Editing.HighlightState;   // TMPro declares one too
@@ -57,13 +58,13 @@ namespace RoomPlanner.Tests.Play
             var mb = MakeButton(MenuButtonKind.Radio, out var bg, out var label);
 
             mb.SetActiveTool(true);
-            AssertColor(UiColors.LabelDark, label.color, "active radio = dark text on light bg");
+            AssertColor(UiTokens.LabelDark, label.color, "active radio = dark text on light bg");
             var mpb = new MaterialPropertyBlock();
             bg.GetPropertyBlock(mpb);
-            AssertColor(UiColors.LabelLight, mpb.GetColor("_BaseColor"), "active radio bg is inverted");
+            AssertColor(UiTokens.LabelLight, mpb.GetColor("_BaseColor"), "active radio bg is inverted");
 
             mb.SetActiveTool(false);
-            AssertColor(UiColors.LabelLight, label.color, "inactive radio back to light text");
+            AssertColor(UiTokens.LabelLight, label.color, "inactive radio back to light text");
         }
 
         [Test]
@@ -71,11 +72,11 @@ namespace RoomPlanner.Tests.Play
         {
             var mb = MakeButton(MenuButtonKind.Toggle, out var bg, out var label);
             mb.SetActiveTool(true);
-            AssertColor(UiColors.LabelLight, label.color,
+            AssertColor(UiTokens.LabelLight, label.color,
                 "a toggle must NOT look like an active tool (radio inversion)");
             var mpb = new MaterialPropertyBlock();
             bg.GetPropertyBlock(mpb);
-            AssertColor(UiColors.ButtonBg, mpb.GetColor("_BaseColor"), "toggle bg stays normal");
+            AssertColor(UiTokens.ButtonBg, mpb.GetColor("_BaseColor"), "toggle bg stays normal");
         }
 
         [Test]
@@ -86,7 +87,7 @@ namespace RoomPlanner.Tests.Play
 
             mb.SetEnabled(false);
             Assert.IsFalse(mb.Interactable);
-            Assert.AreEqual(UiColors.DisabledLabelAlpha, label.color.a, 1e-3f, "disabled label fades");
+            Assert.AreEqual(UiTokens.DisabledAlpha, label.color.a, 1e-3f, "disabled label fades");
 
             mb.SetHighlight(true);
             Assert.AreEqual(baseScale, mb.transform.localScale, "disabled button must not react to hover");
@@ -109,6 +110,27 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(baseScale.x * 0.97f, mb.transform.localScale.x, 1e-4f, "press dips below base");
         }
 
+        [Test]
+        public void ReticleVisual_ExposesToolSnapDimensionAndGestureState()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            _spawned.Add(go);
+            go.transform.localScale = Vector3.one * 0.04f;
+            var visual = go.AddComponent<ReticleVisual>();
+
+            visual.ConfigureTool("wall", "wall", UiTokens.LayerStructure,
+                "Trigger: point · B: finish", showGesture: true);
+            visual.SetSnap(ReticleSnapKind.Grid);
+            visual.SetDimension("2.40 m");
+
+            Assert.AreEqual(ReticleSnapKind.Grid, visual.SnapKind);
+            Assert.IsNotNull(go.transform.Find("ToolGlyph"));
+            Assert.IsTrue(go.transform.Find("Dimension").gameObject.activeSelf);
+            Assert.IsTrue(go.transform.Find("DimensionBadge").gameObject.activeSelf);
+            Assert.IsTrue(go.transform.Find("GestureHint").gameObject.activeSelf);
+            Assert.IsFalse(go.GetComponent<Renderer>().enabled, "legacy sphere is replaced by the snap outline");
+        }
+
         // ---- object highlight keeps identity (P1.4) ----
 
         [Test]
@@ -125,8 +147,8 @@ namespace RoomPlanner.Tests.Play
             go.GetComponent<Renderer>().GetPropertyBlock(mpb);
             Color tinted = mpb.GetColor("_Color");
 
-            Assert.AreNotEqual(UiColors.Hover, tinted, "not a full repaint — identity must survive");
-            Assert.Greater(tinted.r, UiColors.Hover.r, "red base still shows through the tint");
+            Assert.AreNotEqual(UiTokens.Hover, tinted, "not a full repaint — identity must survive");
+            Assert.Greater(tinted.r, UiTokens.Hover.r, "red base still shows through the tint");
             Assert.Greater(tinted.b, Color.red.b, "state color is mixed in");
 
             sel.SetHighlight(HighlightState.None);
