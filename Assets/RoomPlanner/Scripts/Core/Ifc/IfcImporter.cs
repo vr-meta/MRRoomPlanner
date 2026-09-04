@@ -19,6 +19,7 @@ namespace RoomPlanner.Core.Ifc
             MapElementsToStoreys(ctx, b);
             MapLayerThickness(ctx);
             MapVoidsAndFills(ctx);
+            MapParametricOpeningParts(ctx);
             MapStyles(ctx);
             MapMaterials(ctx);
             ImportWalls(ctx, b);
@@ -62,7 +63,14 @@ namespace RoomPlanner.Core.Ifc
         {
             foreach (var (type, category) in BakedTypes)
             foreach (int id in c.F.OfType(type))
+            {
+                // A filled opening is rebuilt as one native frame/leaf or frame/glass
+                // assembly by Wall. Some exporters also expose its mullions and plates as
+                // independent products; baking those again creates the elaborate duplicate
+                // frames seen around imported bathroom windows (issue #120).
+                if (c.ParametricOpeningParts.Contains(id)) continue;
                 if (!BakeProduct(c, b, id, category)) b.SkippedMep++;
+            }
         }
 
         /// <summary>Bake one product's Body geometry as a mesh element. Also the visual
@@ -618,6 +626,7 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, float> LayerThickness = new();  // element id → summed layers (file units)
             public readonly Dictionary<int, List<int>> VoidsOfElement = new(); // element id → opening ids
             public readonly Dictionary<int, int> FillerOfOpening = new();   // opening id → door/window id
+            public readonly HashSet<int> ParametricOpeningParts = new(); // descendants replaced by native joinery
             public readonly Dictionary<int, int> TypeOfElement = new();     // element id → style/type record
             public readonly Dictionary<int, StyleRec> StyleOfItem = new();  // geometry item id → style
             public readonly Dictionary<int, StyleRec> StyleOfMaterial = new(); // IfcMaterial id → style
@@ -850,6 +859,51 @@ namespace RoomPlanner.Core.Ifc
                 foreach (var el in a[4].Items)
                     if (el.Kind == StepKind.Ref)
                         c.TypeOfElement[el.Ref] = a[5].Ref;
+            }
+        }
+
+        /// <summary>
+        /// Marks decomposed products below a door/window that fills an opening. IFC
+        /// exporters may publish mullions, crossbars and plates as separate IfcMember /
+        /// IfcPlate products under that filler. The wall renderer already replaces the
+        /// entire filler with a deliberately simple native assembly, so importing those
+        /// descendants as baked meshes would render the frame twice.
+        /// </summary>
+        private static void MapParametricOpeningParts(Ctx c)
+        {
+            var children = new Dictionary<int, List<int>>();
+
+            void AddRelations(string relationType)
+            {
+                foreach (int id in c.F.OfType(relationType))
+                {
+                    var a = c.F.Args(id);
+                    if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref
+                        || a[5].Kind != StepKind.List) continue;
+                    if (!children.TryGetValue(a[4].Ref, out var list))
+                        children[a[4].Ref] = list = new List<int>();
+                    foreach (var child in a[5].Items)
+                        if (child.Kind == StepKind.Ref)
+                            list.Add(child.Ref);
+                }
+            }
+
+            AddRelations("IFCRELAGGREGATES");
+            AddRelations("IFCRELNESTS");
+
+            void MarkDescendants(int parent)
+            {
+                if (!children.TryGetValue(parent, out var list)) return;
+                foreach (int child in list)
+                    if (c.ParametricOpeningParts.Add(child))
+                        MarkDescendants(child);
+            }
+
+            foreach (int filler in c.FillerOfOpening.Values)
+            {
+                string type = c.F.TypeOf(filler);
+                if (type == "IFCWINDOW" || type == "IFCDOOR")
+                    MarkDescendants(filler);
             }
         }
 
