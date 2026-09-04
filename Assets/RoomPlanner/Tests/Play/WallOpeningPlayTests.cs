@@ -187,7 +187,8 @@ namespace RoomPlanner.Tests.Play
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
             Assert.AreEqual(5, mesh.subMeshCount, "inner/glass/joinery/outer/rims (#34)");
             Assert.Greater(mesh.GetTriangles(1).Length, 0, "window pane lives in the glass submesh");
-            Assert.Greater(mesh.GetTriangles(2).Length, 0, "window frame lives in the joinery submesh");
+            Assert.AreEqual(4 * 6 * 6, mesh.GetTriangles(2).Length,
+                "a window is exactly four six-faced frame bars, with no mullions or crossbars");
 
             // under-sill band is solid, and its top face sits at sill height;
             // z = 0.08 keeps the probe clear of the 100 mm deep frame bars around the mid-plane

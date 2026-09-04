@@ -27,6 +27,12 @@ class WallOpening {
 торцы; стекло окон — submesh 1, столярка (рамы/полотно/подоконник) — submesh 2.
 Импортные двери стоят открытыми на 75°.
 
+Imported windows are deliberately normalized to one glass pane and a plain four-bar
+frame. `IfcMember`/`IfcPlate` descendants attached below an opening's `IfcWindow` or
+`IfcDoor` through `IfcRelAggregates`/`IfcRelNests` are not baked a second time; this
+removes exporter-specific mullions and crossbars while preserving standalone members,
+plates and curtain walls.
+
 **Гаражные ворота (Kind = Garage):** проём от низа стены во всю ширину, перемычка
 сверху как у двери; полотно — секционные ворота: 4 горизонтальные панели с
 фасками-рустами в срединной плоскости (submesh столярки, без стекла); распахивания
