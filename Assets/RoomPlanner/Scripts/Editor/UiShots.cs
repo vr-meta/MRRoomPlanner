@@ -273,6 +273,7 @@ namespace RoomPlanner.EditorTools
         {
             var body = AssetDatabase.LoadAssetAtPath<Material>($"{SetupAssets.MatDir}/Electric_Fixture.mat");
             var accent = AssetDatabase.LoadAssetAtPath<Material>($"{SetupAssets.MatDir}/Electric_Accent.mat");
+            var metal = AssetDatabase.LoadAssetAtPath<Material>($"{SetupAssets.MatDir}/Electric_Metal.mat");
             if (body == null) return;
 
             var host = new GameObject("Fixtures");
@@ -304,8 +305,11 @@ namespace RoomPlanner.EditorTools
                     go.transform.position = new Vector3(x, 0f, 0f);
                     go.AddComponent<MeshFilter>();
                     go.AddComponent<MeshRenderer>().sharedMaterials =
-                        new[] { body, accent != null ? accent : body };
-                    go.AddComponent<RoomPlanner.Electrical.ElectricFixture>().Build(kind, posts, keys);
+                        new[] { body, accent != null ? accent : body,
+                            metal != null ? metal : body };
+                    go.AddComponent<RoomPlanner.Electrical.ElectricFixture>()
+                        .Build(kind, posts, keys, kind == RoomPlanner.Electrical.FixtureKind.Outlet,
+                            false);
                     x += 0.17f;
                 }
                 var panelGo = new GameObject("Panel");
@@ -313,9 +317,10 @@ namespace RoomPlanner.EditorTools
                 panelGo.transform.position = new Vector3(0.22f, 0f, 0f);
                 panelGo.AddComponent<MeshFilter>();
                 panelGo.AddComponent<MeshRenderer>().sharedMaterials =
-                    new[] { body, accent != null ? accent : body };
+                    new[] { body, accent != null ? accent : body,
+                        metal != null ? metal : body };
                 panelGo.AddComponent<RoomPlanner.Electrical.ElectricFixture>()
-                    .Build(RoomPlanner.Electrical.FixtureKind.Panel, 1, 1);
+                    .Build(RoomPlanner.Electrical.FixtureKind.Panel, 1, 1, false, true);
 
                 // the fixtures face +Z (the room), so the camera stands in front of them
                 Shoot(cam, new Vector3(-0.07f, 0.10f, 0.95f), new Vector3(-0.07f, 0f, 0f),

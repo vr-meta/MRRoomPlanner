@@ -14,9 +14,27 @@ namespace RoomPlanner.Electrical
     [RequireComponent(typeof(MeshRenderer))]
     public class ElectricFixture : MonoBehaviour
     {
+        public const int PlasticSubmesh = 0;
+        public const int AccentSubmesh = 1;
+        public const int MetalSubmesh = 2;
+        public const int SubmeshCount = 3;
+
+        public static readonly Color WhitePlastic = new(0.92f, 0.92f, 0.91f, 1f);
+        public static readonly Color BlackPlastic = new(0.055f, 0.06f, 0.065f, 1f);
+        public static readonly Color DarkAccent = new(0.20f, 0.21f, 0.22f, 1f);
+        public static readonly Color BrushedMetal = new(0.48f, 0.50f, 0.52f, 1f);
+        public static readonly Color BlackMetal = new(0.075f, 0.08f, 0.085f, 1f);
+
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
+
         private MeshFilter _mf;
+        private MeshRenderer _renderer;
         private Mesh _mesh;
         private MeshCollider _collider;
+        private MaterialPropertyBlock _variantBlock;
 
         private readonly List<Vector3> _verts = new();
         /// <summary>Submesh 0 — the plastic body (plate, rocker, breakers): this is what
@@ -25,11 +43,17 @@ namespace RoomPlanner.Electrical
         /// <summary>Submesh 1 — accents: socket pins, screws, DIN rail, panel handle.
         /// Dark metal, never painted (issue #134).</summary>
         private readonly List<int> _trisAccent = new();
+        /// <summary>Submesh 2 — panel enclosure and door, brushed metal.</summary>
+        private readonly List<int> _trisMetal = new();
         private readonly List<Vector2> _uvs = new();
 
         public FixtureKind Kind { get; private set; }
         public int Posts { get; private set; } = 1;
         public int Keys { get; private set; } = 1;
+        public bool BlackVariant { get; private set; }
+        public bool PanelOpen { get; private set; }
+        public Color PlasticColor => BlackVariant ? BlackPlastic : WhitePlastic;
+        public Color PanelMetalColor => BlackVariant ? BlackMetal : BrushedMetal;
 
         /// <summary>Storey level (Y) this fixture was mounted against. Mounting heights are
         /// relative to it — display and clamps must survive non-zero storeys.</summary>
@@ -78,6 +102,7 @@ namespace RoomPlanner.Electrical
         private void Ensure()
         {
             if (_mf == null) _mf = GetComponent<MeshFilter>();
+            if (_renderer == null) _renderer = GetComponent<MeshRenderer>();
             if (_mesh == null)
             {
                 _mesh = new Mesh { name = "FixtureMesh" };
@@ -88,20 +113,51 @@ namespace RoomPlanner.Electrical
                 _collider = GetComponent<MeshCollider>();
                 if (_collider == null) _collider = gameObject.AddComponent<MeshCollider>();
             }
+            _variantBlock ??= new MaterialPropertyBlock();
+            if (_renderer != null && _renderer.sharedMaterials.Length < SubmeshCount)
+            {
+                var mats = _renderer.sharedMaterials;
+                var plastic = mats.Length > 0 ? mats[0] : null;
+                var accent = mats.Length > 1 ? mats[1] : plastic;
+                _renderer.sharedMaterials = new[] { plastic, accent, plastic };
+            }
         }
 
-        public void Rebuild() => Build(Kind, Posts, Keys);
+        public void Rebuild() => Build(Kind, Posts, Keys, BlackVariant, PanelOpen);
 
         /// <summary>Placement is the transform, so a move never re-cooks the mesh.</summary>
         public void MoveBy(Vector3 delta) => transform.position += delta;
 
-        public void Build(FixtureKind kind, int posts, int keys)
+        public void SetBlackVariant(bool black)
+        {
+            Ensure();
+            if (BlackVariant == black) return;
+            BlackVariant = black;
+            ApplyVariant();
+        }
+
+        public void SetPanelOpen(bool open)
+        {
+            bool next = Kind == FixtureKind.Panel && open;
+            if (PanelOpen == next) return;
+            PanelOpen = next;
+            if (Kind == FixtureKind.Panel)
+                Build(Kind, Posts, Keys, BlackVariant, PanelOpen);
+        }
+
+        public void Build(FixtureKind kind, int posts, int keys) =>
+            Build(kind, posts, keys, BlackVariant, PanelOpen);
+
+        public void Build(FixtureKind kind, int posts, int keys, bool blackVariant,
+            bool panelOpen)
         {
             Ensure();
             Kind = kind;
             Posts = Mathf.Clamp(posts, 1, ElectricalDefaults.MaxPosts);
             Keys = Mathf.Clamp(keys, 1, ElectricalDefaults.MaxKeys);
-            _verts.Clear(); _tris.Clear(); _trisAccent.Clear(); _uvs.Clear();
+            BlackVariant = blackVariant;
+            PanelOpen = kind == FixtureKind.Panel && panelOpen;
+            _verts.Clear(); _tris.Clear(); _trisAccent.Clear(); _trisMetal.Clear(); _uvs.Clear();
 
             switch (Kind)
             {
@@ -174,40 +230,78 @@ namespace RoomPlanner.Electrical
                 }
                 default: // Panel
                 {
-                    // A real consumer unit: enclosure, chamfered door proud of it, a
-                    // window with the breaker row behind it, hinges and a handle.
+                    // Open-front metal consumer unit. A closed door still has a narrow
+                    // inspection window; opening it reveals both DIN rows and breakers.
                     float w = ElectricalDefaults.PanelBoxWidth;
                     float h = ElectricalDefaults.PanelBoxHeight;
                     float d = ElectricalDefaults.PanelBoxDepth;
-                    AddBox(new Vector3(0f, 0f, d * 0.5f), new Vector3(w, h, d), _tris);
+                    const float frame = 0.018f;
+                    AddBox(new Vector3(0f, 0f, d * 0.12f),
+                        new Vector3(w, h, d * 0.24f), _trisMetal);
+                    AddBox(new Vector3(-w * 0.5f + frame * 0.5f, 0f, d * 0.5f),
+                        new Vector3(frame, h, d), _trisMetal);
+                    AddBox(new Vector3(w * 0.5f - frame * 0.5f, 0f, d * 0.5f),
+                        new Vector3(frame, h, d), _trisMetal);
+                    AddBox(new Vector3(0f, h * 0.5f - frame * 0.5f, d * 0.5f),
+                        new Vector3(w - frame * 2f, frame, d), _trisMetal);
+                    AddBox(new Vector3(0f, -h * 0.5f + frame * 0.5f, d * 0.5f),
+                        new Vector3(w - frame * 2f, frame, d), _trisMetal);
+                    AddBox(new Vector3(0f, 0f, d * 0.26f),
+                        new Vector3(w - frame * 2f, h - frame * 2f, 0.003f), _trisAccent);
 
-                    float doorW = w - 0.02f, doorH = h - 0.02f, doorZ = d + 0.005f;
-                    float winW = doorW - 0.05f, winH = 0.055f;
-                    float winY = h * 0.12f;
-                    var doorFace = AddChamferedBox(new Vector3(0f, 0f, doorZ),
-                        new Vector3(doorW, doorH, 0.01f), Chamfer, emitFront: false);
-                    float faceZ = FrontZ;
-                    // the door face is cut around the window, so the breakers are really
-                    // seen through it rather than buried behind a solid panel
-                    AddFaceWithRectHole(doorFace, faceZ,
-                        new Vector4(-winW * 0.5f, winY - winH * 0.5f, winW * 0.5f, winY + winH * 0.5f));
-                    AddRectRecess(new Vector3(0f, winY, faceZ), new Vector2(winW, winH),
-                        0.012f, _trisAccent);
-                    float railZ = faceZ - 0.012f;
-                    AddBox(new Vector3(0f, h * 0.12f - winH * 0.5f + 0.006f, railZ + 0.002f),
-                        new Vector3(winW - 0.004f, 0.008f, 0.004f), _trisAccent);
-                    const float breakerW = 0.0175f;
-                    int breakers = Mathf.Max(1, Mathf.FloorToInt((winW - 0.006f) / breakerW));
-                    for (int i = 0; i < breakers; i++)
+                    const int breakers = 7;
+                    float breakerW = (w - 0.075f) / breakers;
+                    for (int row = -1; row <= 1; row += 2)
                     {
-                        float cx = -(breakers - 1) * 0.5f * breakerW + i * breakerW;
-                        AddBox(new Vector3(cx, h * 0.12f + 0.004f, railZ + 0.008f),
-                            new Vector3(breakerW - 0.002f, winH - 0.02f, 0.012f), _tris);
+                        float y = row * h * 0.20f;
+                        AddBox(new Vector3(0f, y, d * 0.48f),
+                            new Vector3(w - 0.055f, 0.016f, 0.012f), _trisAccent);
+                        for (int i = 0; i < breakers; i++)
+                        {
+                            float x = -0.5f * (breakers - 1) * breakerW + i * breakerW;
+                            AddChamferedBox(new Vector3(x, y, d * 0.70f),
+                                new Vector3(breakerW - 0.002f, 0.050f, 0.030f),
+                                Chamfer * 0.7f, _tris);
+                            AddBox(new Vector3(x, y + 0.004f, d * 0.88f),
+                                new Vector3(breakerW * 0.42f, 0.014f, 0.005f), _trisAccent);
+                        }
                     }
 
-                    // handle on the right, two hinge barrels on the left
-                    AddBox(new Vector3(doorW * 0.5f - 0.018f, -h * 0.18f, faceZ + 0.006f),
-                        new Vector3(0.01f, 0.05f, 0.012f), _trisAccent);
+                    float doorW = w - 0.02f, doorH = h - 0.02f, doorZ = d + 0.005f;
+                    const float doorDepth = 0.010f;
+                    if (!PanelOpen)
+                    {
+                        float winW = doorW - 0.05f, winH = 0.055f;
+                        float winY = h * 0.12f;
+                        var doorFace = AddChamferedBox(new Vector3(0f, 0f, doorZ),
+                            new Vector3(doorW, doorH, doorDepth), Chamfer,
+                            emitFront: false, tris: _trisMetal);
+                        float faceZ = FrontZ;
+                        AddFaceWithRectHole(doorFace, faceZ,
+                            new Vector4(-winW * 0.5f, winY - winH * 0.5f,
+                                winW * 0.5f, winY + winH * 0.5f), _trisMetal);
+                        AddRectRecess(new Vector3(0f, winY, faceZ),
+                            new Vector2(winW, winH), 0.012f, _trisAccent);
+                        AddBox(new Vector3(doorW * 0.5f - 0.018f, -h * 0.18f,
+                            faceZ + 0.006f), new Vector3(0.01f, 0.05f, 0.012f), _trisAccent);
+                        AddDoorScrews(Vector3.zero, Quaternion.identity, doorW, doorH,
+                            faceZ + 0.0002f);
+                    }
+                    else
+                    {
+                        var rotation = Quaternion.Euler(0f, -100f, 0f);
+                        var hinge = new Vector3(-doorW * 0.5f, 0f, doorZ);
+                        var center = hinge + rotation * new Vector3(doorW * 0.5f, 0f, 0f);
+                        AddRotatedBox(center, new Vector3(doorW, doorH, doorDepth),
+                            rotation, _trisMetal);
+                        AddRotatedBox(center + rotation * new Vector3(
+                                doorW * 0.5f - 0.018f, -h * 0.18f, doorDepth * 0.8f),
+                            new Vector3(0.01f, 0.05f, 0.012f), rotation, _trisAccent);
+                        AddDoorScrews(center, rotation, doorW, doorH,
+                            doorDepth * 0.5f + 0.0002f);
+                    }
+
+                    // two hinge barrels remain fixed to the enclosure.
                     for (int s = -1; s <= 1; s += 2)
                         AddBox(new Vector3(-doorW * 0.5f - 0.004f, s * doorH * 0.32f, doorZ),
                             new Vector3(0.008f, 0.03f, 0.012f), _trisAccent);
@@ -218,17 +312,10 @@ namespace RoomPlanner.Electrical
             _mesh.Clear();
             _mesh.SetVertices(_verts);
             _mesh.SetUVs(0, _uvs);
-            if (_trisAccent.Count > 0)
-            {
-                _mesh.subMeshCount = 2;
-                _mesh.SetTriangles(_tris, 0);
-                _mesh.SetTriangles(_trisAccent, 1);
-            }
-            else
-            {
-                _mesh.subMeshCount = 1;
-                _mesh.SetTriangles(_tris, 0);
-            }
+            _mesh.subMeshCount = SubmeshCount;
+            _mesh.SetTriangles(_tris, PlasticSubmesh, false);
+            _mesh.SetTriangles(_trisAccent, AccentSubmesh, false);
+            _mesh.SetTriangles(_trisMetal, MetalSubmesh, false);
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
             if (_collider != null)
@@ -236,6 +323,7 @@ namespace RoomPlanner.Electrical
                 _collider.sharedMesh = null;
                 _collider.sharedMesh = _mesh;
             }
+            ApplyVariant();
         }
 
         /// <summary>Edge break on every visible plastic part (issue #134): 1.2 mm reads
@@ -291,12 +379,19 @@ namespace RoomPlanner.Electrical
         /// square — they sit against the wall and nobody sees them.
         /// </summary>
         private void AddChamferedBox(Vector3 center, Vector3 size, float chamfer)
-            => AddChamferedBox(center, size, chamfer, true);
+            => AddChamferedBox(center, size, chamfer, true, _tris);
+
+        private void AddChamferedBox(Vector3 center, Vector3 size, float chamfer,
+            List<int> tris) => AddChamferedBox(center, size, chamfer, true, tris);
 
         /// <summary>Same, but the caller may take over the FRONT face — a recess is only
         /// visible if the face it sinks into actually has a hole (issue #134). Returns the
         /// inset front rect as (min x, min y, max x, max y) at <see cref="FrontZ"/>.</summary>
         private Vector4 AddChamferedBox(Vector3 center, Vector3 size, float chamfer, bool emitFront)
+            => AddChamferedBox(center, size, chamfer, emitFront, _tris);
+
+        private Vector4 AddChamferedBox(Vector3 center, Vector3 size, float chamfer,
+            bool emitFront, List<int> tris)
         {
             chamfer = Mathf.Min(chamfer, Mathf.Min(size.x, size.y) * 0.25f);
             Vector3 n = center - size * 0.5f, x = center + size * 0.5f;
@@ -304,23 +399,23 @@ namespace RoomPlanner.Electrical
             float zRing = x.z - zBand;
 
             // sides up to the chamfer band
-            Quad(new Vector3(x.x, n.y, zRing), new Vector3(x.x, n.y, n.z), new Vector3(x.x, x.y, n.z), new Vector3(x.x, x.y, zRing));
-            Quad(new Vector3(n.x, n.y, n.z), new Vector3(n.x, n.y, zRing), new Vector3(n.x, x.y, zRing), new Vector3(n.x, x.y, n.z));
-            Quad(new Vector3(n.x, x.y, zRing), new Vector3(x.x, x.y, zRing), new Vector3(x.x, x.y, n.z), new Vector3(n.x, x.y, n.z));
-            Quad(new Vector3(n.x, n.y, n.z), new Vector3(x.x, n.y, n.z), new Vector3(x.x, n.y, zRing), new Vector3(n.x, n.y, zRing));
+            Quad(new Vector3(x.x, n.y, zRing), new Vector3(x.x, n.y, n.z), new Vector3(x.x, x.y, n.z), new Vector3(x.x, x.y, zRing), tris);
+            Quad(new Vector3(n.x, n.y, n.z), new Vector3(n.x, n.y, zRing), new Vector3(n.x, x.y, zRing), new Vector3(n.x, x.y, n.z), tris);
+            Quad(new Vector3(n.x, x.y, zRing), new Vector3(x.x, x.y, zRing), new Vector3(x.x, x.y, n.z), new Vector3(n.x, x.y, n.z), tris);
+            Quad(new Vector3(n.x, n.y, n.z), new Vector3(x.x, n.y, n.z), new Vector3(x.x, n.y, zRing), new Vector3(n.x, n.y, zRing), tris);
             // back
-            Quad(new Vector3(x.x, n.y, n.z), new Vector3(n.x, n.y, n.z), new Vector3(n.x, x.y, n.z), new Vector3(x.x, x.y, n.z));
+            Quad(new Vector3(x.x, n.y, n.z), new Vector3(n.x, n.y, n.z), new Vector3(n.x, x.y, n.z), new Vector3(x.x, x.y, n.z), tris);
 
             // chamfer band: outer ring at zRing → inner ring at the front
             float ix0 = n.x + chamfer, ix1 = x.x - chamfer;
             float iy0 = n.y + chamfer, iy1 = x.y - chamfer;
-            Quad(new Vector3(n.x, n.y, zRing), new Vector3(x.x, n.y, zRing), new Vector3(ix1, iy0, x.z), new Vector3(ix0, iy0, x.z));
-            Quad(new Vector3(x.x, x.y, zRing), new Vector3(n.x, x.y, zRing), new Vector3(ix0, iy1, x.z), new Vector3(ix1, iy1, x.z));
-            Quad(new Vector3(x.x, n.y, zRing), new Vector3(x.x, x.y, zRing), new Vector3(ix1, iy1, x.z), new Vector3(ix1, iy0, x.z));
-            Quad(new Vector3(n.x, x.y, zRing), new Vector3(n.x, n.y, zRing), new Vector3(ix0, iy0, x.z), new Vector3(ix0, iy1, x.z));
+            Quad(new Vector3(n.x, n.y, zRing), new Vector3(x.x, n.y, zRing), new Vector3(ix1, iy0, x.z), new Vector3(ix0, iy0, x.z), tris);
+            Quad(new Vector3(x.x, x.y, zRing), new Vector3(n.x, x.y, zRing), new Vector3(ix0, iy1, x.z), new Vector3(ix1, iy1, x.z), tris);
+            Quad(new Vector3(x.x, n.y, zRing), new Vector3(x.x, x.y, zRing), new Vector3(ix1, iy1, x.z), new Vector3(ix1, iy0, x.z), tris);
+            Quad(new Vector3(n.x, x.y, zRing), new Vector3(n.x, n.y, zRing), new Vector3(ix0, iy0, x.z), new Vector3(ix0, iy1, x.z), tris);
             // front face
             if (emitFront)
-                Quad(new Vector3(ix0, iy0, x.z), new Vector3(ix1, iy0, x.z), new Vector3(ix1, iy1, x.z), new Vector3(ix0, iy1, x.z));
+                Quad(new Vector3(ix0, iy0, x.z), new Vector3(ix1, iy0, x.z), new Vector3(ix1, iy1, x.z), new Vector3(ix0, iy1, x.z), tris);
             FrontZ = x.z;
             return new Vector4(ix0, iy0, ix1, iy1);
         }
@@ -369,16 +464,19 @@ namespace RoomPlanner.Electrical
         }
 
         /// <summary>Front face with ONE rectangular hole — the window of the panel door.</summary>
-        private void AddFaceWithRectHole(Vector4 rect, float z, Vector4 hole)
+        private void AddFaceWithRectHole(Vector4 rect, float z, Vector4 hole) =>
+            AddFaceWithRectHole(rect, z, hole, _tris);
+
+        private void AddFaceWithRectHole(Vector4 rect, float z, Vector4 hole, List<int> tris)
         {
             float x0 = rect.x, y0 = rect.y, x1 = rect.z, y1 = rect.w;
             float hx0 = Mathf.Clamp(hole.x, x0, x1), hy0 = Mathf.Clamp(hole.y, y0, y1);
             float hx1 = Mathf.Clamp(hole.z, x0, x1), hy1 = Mathf.Clamp(hole.w, y0, y1);
             // four bands around the hole
-            Quad(new Vector3(x0, y0, z), new Vector3(x1, y0, z), new Vector3(x1, hy0, z), new Vector3(x0, hy0, z));
-            Quad(new Vector3(x0, hy1, z), new Vector3(x1, hy1, z), new Vector3(x1, y1, z), new Vector3(x0, y1, z));
-            Quad(new Vector3(x0, hy0, z), new Vector3(hx0, hy0, z), new Vector3(hx0, hy1, z), new Vector3(x0, hy1, z));
-            Quad(new Vector3(hx1, hy0, z), new Vector3(x1, hy0, z), new Vector3(x1, hy1, z), new Vector3(hx1, hy1, z));
+            Quad(new Vector3(x0, y0, z), new Vector3(x1, y0, z), new Vector3(x1, hy0, z), new Vector3(x0, hy0, z), tris);
+            Quad(new Vector3(x0, hy1, z), new Vector3(x1, hy1, z), new Vector3(x1, y1, z), new Vector3(x0, y1, z), tris);
+            Quad(new Vector3(x0, hy0, z), new Vector3(hx0, hy0, z), new Vector3(hx0, hy1, z), new Vector3(x0, hy1, z), tris);
+            Quad(new Vector3(hx1, hy0, z), new Vector3(x1, hy0, z), new Vector3(x1, hy1, z), new Vector3(hx1, hy1, z), tris);
         }
 
         /// <summary>Round hole sunk into a +Z face at <paramref name="faceZ"/>: a ring of
@@ -440,6 +538,66 @@ namespace RoomPlanner.Electrical
                 new Vector3(x1, y1, baseZ), new Vector3(x0, y1, baseZ));
             Quad(new Vector3(x0, y0, baseZ), new Vector3(x1, y0, baseZ),
                 new Vector3(x1, y0, zBottom), new Vector3(x0, y0, zBottom));
+        }
+
+        private void AddRotatedBox(Vector3 center, Vector3 size, Quaternion rotation,
+            List<int> tris)
+        {
+            Vector3 n = -size * 0.5f, x = size * 0.5f;
+            Vector3 P(float px, float py, float pz) =>
+                center + rotation * new Vector3(px, py, pz);
+            Quad(P(n.x, n.y, x.z), P(x.x, n.y, x.z), P(x.x, x.y, x.z), P(n.x, x.y, x.z), tris);
+            Quad(P(x.x, n.y, n.z), P(n.x, n.y, n.z), P(n.x, x.y, n.z), P(x.x, x.y, n.z), tris);
+            Quad(P(x.x, n.y, x.z), P(x.x, n.y, n.z), P(x.x, x.y, n.z), P(x.x, x.y, x.z), tris);
+            Quad(P(n.x, n.y, n.z), P(n.x, n.y, x.z), P(n.x, x.y, x.z), P(n.x, x.y, n.z), tris);
+            Quad(P(n.x, x.y, x.z), P(x.x, x.y, x.z), P(x.x, x.y, n.z), P(n.x, x.y, n.z), tris);
+            Quad(P(n.x, n.y, n.z), P(x.x, n.y, n.z), P(x.x, n.y, x.z), P(n.x, n.y, x.z), tris);
+        }
+
+        private void AddDoorScrews(Vector3 center, Quaternion rotation, float width,
+            float height, float localZ)
+        {
+            float x = width * 0.5f - 0.012f;
+            float y = height * 0.5f - 0.012f;
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                    AddDisc(center + rotation * new Vector3(sx * x, sy * y, localZ),
+                        0.003f, rotation, _trisAccent, 10);
+        }
+
+        private void AddDisc(Vector3 center, float radius, Quaternion rotation,
+            List<int> tris, int segments)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / segments;
+                float a1 = (i + 1) * Mathf.PI * 2f / segments;
+                Vector3 p0 = center + rotation * new Vector3(
+                    Mathf.Cos(a0) * radius, Mathf.Sin(a0) * radius, 0f);
+                Vector3 p1 = center + rotation * new Vector3(
+                    Mathf.Cos(a1) * radius, Mathf.Sin(a1) * radius, 0f);
+                Tri(center, p0, p1, tris);
+            }
+        }
+
+        private void ApplyVariant()
+        {
+            if (_renderer == null) return;
+            SetMaterialSurface(PlasticSubmesh, PlasticColor, 0.55f, 0f);
+            SetMaterialSurface(AccentSubmesh, DarkAccent, 0.75f, 0.45f);
+            SetMaterialSurface(MetalSubmesh, PanelMetalColor, 0.38f, 0.65f);
+        }
+
+        private void SetMaterialSurface(int index, Color color, float smoothness,
+            float metallic)
+        {
+            _renderer.GetPropertyBlock(_variantBlock, index);
+            _variantBlock.SetColor(BaseColorId, color);
+            _variantBlock.SetColor(ColorId, color);
+            _variantBlock.SetFloat(SmoothnessId, smoothness);
+            _variantBlock.SetFloat(MetallicId, metallic);
+            _renderer.SetPropertyBlock(_variantBlock, index);
+            _variantBlock.Clear();
         }
 
         private void OnDestroy()
