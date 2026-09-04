@@ -49,6 +49,10 @@ namespace RoomPlanner.Tests
             mep.Vertices.Add(new Vector3(0.1f, 0.2f, 0.3f));
             mep.Triangles.AddRange(new[] { 0, 0, 0 });
             data.Plumbing.Add(mep);
+            data.Fixtures.Add(new ProjectFixture
+            {
+                Id = "panel", Kind = 3, Reserve = 15, Black = true, PanelOpen = true,
+            });
 
             var round = ProjectData.FromJson(data.ToJson());
 
@@ -68,6 +72,8 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(13, round.Stairs[0].Risers);
             Assert.AreEqual("Basin", round.Plumbing[0].Name);
             Assert.AreEqual(new Vector3(0.1f, 0.2f, 0.3f), round.Plumbing[0].Vertices[0]);
+            Assert.IsTrue(round.Fixtures[0].Black);
+            Assert.IsTrue(round.Fixtures[0].PanelOpen);
             Assert.AreEqual(7.5f, round.PlanScale, 1e-6);
         }
     }

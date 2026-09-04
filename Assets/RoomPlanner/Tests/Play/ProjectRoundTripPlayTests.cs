@@ -140,6 +140,7 @@ namespace RoomPlanner.Tests.Play
             fxGo.AddComponent<MeshRenderer>();
             var fx = fxGo.AddComponent<ElectricFixture>();
             fx.Build(FixtureKind.Outlet, posts: 2, keys: 1);
+            fx.SetBlackVariant(true);
             fx.transform.position = new Vector3(1f, 0.3f, 0f);
             var fxSel = fxGo.AddComponent<Selectable>();
             model.Register(fxSel);
@@ -156,6 +157,7 @@ namespace RoomPlanner.Tests.Play
 
             var data = ProjectStore.Capture(walls, null);
             Assert.AreEqual(1, data.Fixtures.Count, "the outlet is captured");
+            Assert.IsTrue(data.Fixtures[0].Black, "the matte-black variant is captured");
             Assert.AreEqual(1, data.Wires.Count, "the run is captured");
             Assert.AreEqual(savedId, data.Wires[0].StartId);
 
@@ -173,6 +175,7 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(1, rFx.Length);
             Assert.AreEqual(FixtureKind.Outlet, rFx[0].Kind);
             Assert.AreEqual(2, rFx[0].Posts);
+            Assert.IsTrue(rFx[0].BlackVariant, "the fixture finish survives restore");
             Assert.AreEqual(new Vector3(1f, 0.3f, 0f), rFx[0].transform.position);
             var rSel = rFx[0].GetComponent<Selectable>();
             Assert.AreEqual(savedId, rSel.Id, "the saved id is kept verbatim");

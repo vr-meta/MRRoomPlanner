@@ -12,7 +12,8 @@ namespace RoomPlanner.EditorTools
     {
         public static void Build(RigContext ctx)
         {
-            ElectricFixture fixturePrefab = CreateFixturePrefab(ctx.FixtureMat, ctx.FixtureAccentMat);
+            ElectricFixture fixturePrefab = CreateFixturePrefab(ctx.FixtureMat,
+                ctx.FixtureAccentMat, ctx.FixtureMetalMat);
             WireRoute wirePrefab = CreateWirePrefab(ctx.WireMat);
             ctx.Electric = ctx.Rig.AddComponent<ElectricController>();
 
@@ -39,13 +40,15 @@ namespace RoomPlanner.EditorTools
             so.ApplyModifiedProperties();
         }
 
-        private static ElectricFixture CreateFixturePrefab(Material mat, Material accentMat)
+        private static ElectricFixture CreateFixturePrefab(Material mat, Material accentMat,
+            Material metalMat)
         {
             var root = new GameObject("ElectricFixture");
             root.AddComponent<MeshFilter>();
-            // two slots (issue #134): 0 = plastic body (paint lands here), 1 = accents
+            // Three slots: paintable plastic, dark hardware, brushed panel metal.
             root.AddComponent<MeshRenderer>().sharedMaterials =
-                new[] { mat, accentMat != null ? accentMat : mat };
+                new[] { mat, accentMat != null ? accentMat : mat,
+                    metalMat != null ? metalMat : mat };
             var fx = root.AddComponent<ElectricFixture>();
             root.AddComponent<ElectricFixtureParameters>();   // per-instance posts/keys/height/reserve
             root.AddComponent<Selectable>();

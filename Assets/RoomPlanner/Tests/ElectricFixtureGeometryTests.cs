@@ -67,8 +67,8 @@ namespace RoomPlanner.Tests
                 "multi-key switch keeps the single-module frame");
         }
 
-        /// <summary>Issue #134: the plastic body and the metal accents are separate
-        /// submeshes, so paint on the plate never turns the pins white.</summary>
+        /// <summary>Issue #134: plastic, dark hardware and panel metal have independent
+        /// surfaces, so paint on a plate never turns pins or the cabinet white.</summary>
         [Test]
         public void PlasticAndAccentsAreSeparateSubmeshes()
         {
@@ -78,10 +78,14 @@ namespace RoomPlanner.Tests
             })
             {
                 _fixture.Build(kind, 2, 2);
-                Assert.AreEqual(2, Mesh.subMeshCount, $"{kind}: body + accents");
+                Assert.AreEqual(ElectricFixture.SubmeshCount, Mesh.subMeshCount,
+                    $"{kind}: plastic + accents + panel metal");
                 Assert.Greater(Mesh.GetTriangles(0).Length, 0, $"{kind}: body");
                 Assert.Greater(Mesh.GetTriangles(1).Length, 0, $"{kind}: accents");
             }
+            _fixture.Build(FixtureKind.Panel, 1, 1);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.MetalSubmesh).Length, 0,
+                "panel enclosure and door use brushed metal");
         }
 
         /// <summary>The socket cup is a real recess: its floor sits BEHIND the plate
@@ -110,6 +114,51 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(ElectricalDefaults.PanelBoxWidth, b.size.x, 1e-4);
             Assert.AreEqual(ElectricalDefaults.PanelBoxHeight, b.size.y, 1e-4);
             Assert.Greater(b.size.z, ElectricalDefaults.PanelBoxDepth - 1e-4, "door sits proud of the box");
+        }
+
+        [Test]
+        public void PanelOpen_RevealsInteriorAndDoorSwingsIntoRoom()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1, false, false);
+            int closedVertices = Mesh.vertexCount;
+            float closedDepth = Mesh.bounds.size.z;
+
+            _fixture.SetPanelOpen(true);
+
+            Assert.IsTrue(_fixture.PanelOpen);
+            Assert.AreNotEqual(closedVertices, Mesh.vertexCount,
+                "the closed windowed door is replaced by the swung-open door");
+            Assert.Greater(Mesh.bounds.size.z, closedDepth,
+                "the hinged door swings forward instead of disappearing");
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.PlasticSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.AccentSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.MetalSubmesh).Length, 0);
+        }
+
+        [Test]
+        public void BlackVariant_UsesPropertyBlocksWithoutRebuilding()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            var before = Mesh;
+
+            _fixture.SetBlackVariant(true);
+
+            Assert.IsTrue(_fixture.BlackVariant);
+            Assert.AreSame(before, Mesh, "a colour choice must not recook geometry");
+            var block = new MaterialPropertyBlock();
+            _go.GetComponent<MeshRenderer>().GetPropertyBlock(block,
+                ElectricFixture.PlasticSubmesh);
+            Assert.AreEqual(ElectricFixture.BlackPlastic, block.GetColor("_BaseColor"));
+        }
+
+        [Test]
+        public void FixtureUvs_AreMetric_NotNormalizedPerObject()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1);
+            float max = 0f;
+            foreach (var uv in Mesh.uv) max = Mathf.Max(max, uv.x, uv.y);
+            Assert.Greater(max, 0.20f, "a 45 cm panel spans a comparable UV distance");
+            Assert.Less(max, 1f, "fixture UVs are metres, not one full tile per face");
         }
 
         [Test]

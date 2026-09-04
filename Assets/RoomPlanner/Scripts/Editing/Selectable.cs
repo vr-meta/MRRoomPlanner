@@ -25,6 +25,7 @@ namespace RoomPlanner.Editing
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
         private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
         private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
         private static readonly int UvRotId = Shader.PropertyToID("_UvRot");
@@ -183,7 +184,9 @@ namespace RoomPlanner.Editing
             get
             {
                 Resolve();
-                return _finish.Kind == FinishKind.Color ? _finish.Color : _ownColors[0];
+                return _finish.Kind == FinishKind.Color ? _finish.Color
+                    : _fixture != null ? _fixture.PlasticColor
+                    : _ownColors[0];
             }
         }
 
@@ -247,6 +250,14 @@ namespace RoomPlanner.Editing
             ApplyVisual();
         }
 
+        /// <summary>Re-apply finish and highlight after an owner changes its native
+        /// material state, for example an electrical fixture colour variant.</summary>
+        public void RefreshVisual()
+        {
+            Resolve();
+            ApplyVisual();
+        }
+
         /// <summary>
         /// One writer for the renderer property blocks: base color = paint (if any),
         /// lerped toward the state color while highlighted. The first renderer is the
@@ -281,6 +292,25 @@ namespace RoomPlanner.Editing
                     continue;
                 }
 
+                // A closed panel has no plastic triangles, so highlighting only slot 0
+                // makes selection invisible. Tint all three fixture surfaces while
+                // preserving their deliberately different plastic/metal responses.
+                if (i == 0 && _fixture != null
+                    && r.sharedMaterials.Length >= RoomPlanner.Electrical.ElectricFixture.SubmeshCount)
+                {
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.PlasticSubmesh,
+                        _finish, _finishTexture, _finishNormal, _fixture.PlasticColor,
+                        0.55f, 0f, tint, stateColor, t);
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.AccentSubmesh,
+                        SurfaceFinish.None, null, null,
+                        RoomPlanner.Electrical.ElectricFixture.DarkAccent,
+                        0.75f, 0.45f, tint, stateColor, t);
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.MetalSubmesh,
+                        SurfaceFinish.None, null, null, _fixture.PanelMetalColor,
+                        0.38f, 0.65f, tint, stateColor, t);
+                    continue;
+                }
+
                 // a leaf view's "body" is every panel renderer, not just the first
                 bool body = i == 0 || _leafView != null;
                 bool needBlock = tint || (body && hasFinish);
@@ -303,6 +333,16 @@ namespace RoomPlanner.Editing
                     else r.SetPropertyBlock(null);   // restore the material's own color
                 }
             }
+        }
+
+        private void FixtureBlock(Renderer r, int index, SurfaceFinish finish, Texture2D tex,
+            Texture2D normal, Color ownColor, float smoothness, float metallic,
+            bool tint, Color stateColor, float t)
+        {
+            FillBlock(finish, tex, normal, tint, stateColor, t, ownColor);
+            if (finish.IsNone) _mpb.SetFloat(SmoothnessId, smoothness);
+            _mpb.SetFloat(MetallicId, metallic);
+            r.SetPropertyBlock(_mpb, index);
         }
 
         /// <summary>One body submesh of a per-side wall: block when painted or

@@ -158,6 +158,8 @@ namespace RoomPlanner.Import
                             Posts = s.Fixture.Posts,
                             Keys = s.Fixture.Keys,
                             Reserve = s.Fixture.ReservePercent,
+                            Black = s.Fixture.BlackVariant,
+                            PanelOpen = s.Fixture.PanelOpen,
                             Position = s.Fixture.transform.position,
                             Rotation = s.Fixture.transform.rotation,
                             BaseLevel = s.Fixture.BaseLevel,
