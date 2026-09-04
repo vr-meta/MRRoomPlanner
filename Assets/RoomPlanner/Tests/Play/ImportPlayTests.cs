@@ -4,6 +4,7 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using RoomPlanner.Core;
 using RoomPlanner.Core.Ifc;
 using RoomPlanner.Editing;
 using RoomPlanner.Floors;
@@ -201,6 +202,150 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(0.5f, sel.Paint.a, 1e-4, "alpha = 1 − transparency");
         }
 
+        /// <summary>Two materials on one product (design/29 §2): the mesh gets a submesh
+        /// per part and the renderer a material per submesh, so a sofa keeps its aluminium
+        /// legs instead of turning entirely into leather.</summary>
+        [UnityTest]
+        public IEnumerator MultiMaterialElementGetsOneSubmeshPerPart()
+        {
+            var (import, _, _) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            var sofa = TwoPartSofa();
+            b.Plumbing.Add(sofa);
+            import.BuildScene(b);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            Assert.IsNotNull(view);
+            var mesh = view.GetComponent<MeshFilter>().sharedMesh;
+            Assert.AreEqual(2, mesh.subMeshCount, "one submesh per material");
+            Assert.AreEqual(2, view.GetComponent<MeshRenderer>().sharedMaterials.Length);
+            Assert.AreEqual(2, view.Parts.Count, "parts survive on the view for the save");
+            Assert.AreEqual(4, mesh.uv.Length, "metric box UVs came along");
+            Assert.IsTrue(view.GetComponent<Selectable>().PaintAllSubmeshes,
+                "paint must cover every part, not just the first");
+
+            // A backsplash commonly arrives as another styled part of one kitchen
+            // product. Verify the finish reaches every material slot, not merely a flag.
+            var selectable = view.GetComponent<Selectable>();
+            var backsplashTexture = new Texture2D(4, 4);
+            selectable.SetFinish(SurfaceFinish.OfTexture("ceramic-white", 0.3f),
+                backsplashTexture);
+            var renderer = view.GetComponent<MeshRenderer>();
+            for (int slot = 0; slot < renderer.sharedMaterials.Length; slot++)
+            {
+                var block = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(block, slot);
+                Assert.IsFalse(block.isEmpty, $"part {slot} received a material block");
+                Assert.AreSame(backsplashTexture, block.GetTexture("_BaseMap"),
+                    $"part {slot}, including a backsplash, receives the finish");
+            }
+            Object.DestroyImmediate(backsplashTexture);
+        }
+
+        /// <summary>Issue #135: an imported element is a first-class scene object — it
+        /// has a collider on the selectable layer, it is registered in the model, B
+        /// deletes it (undoable), and a deleted one is not saved.</summary>
+        [UnityTest]
+        public IEnumerator ImportedElementCanBePickedAndDeleted()
+        {
+            var (import, walls, model) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            b.Plumbing.Add(TwoPartSofa());
+            import.BuildScene(b);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            var sel = view.GetComponent<Selectable>();
+            Assert.AreEqual(SelectableKind.Mep, sel.Kind, "its own kind, not «Measurement»");
+            Assert.AreEqual(6, view.gameObject.layer, "on the selectable layer");
+            var collider = view.GetComponent<MeshCollider>();
+            Assert.IsNotNull(collider, "pickable at all");
+            Assert.Contains(sel, new List<ISelectable>(model.Items), "registered for picking");
+
+            // a ray from above hits it
+            Physics.SyncTransforms();
+            var ray = new Ray(view.transform.position + Vector3.up * 5f, Vector3.down);
+            Assert.IsTrue(collider.Raycast(ray, out _, 20f), "the ray finds the element");
+
+            model.History.Execute(new DeleteCommand(sel));
+            yield return null;
+            Assert.IsTrue(sel.IsHidden, "B removes it");
+
+            var afterDelete = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(0, afterDelete.Plumbing.Count, "a deleted element is not saved");
+
+            model.History.Undo();
+            yield return null;
+            Assert.IsFalse(sel.IsHidden, "undo brings it back");
+        }
+
+        /// <summary>Round-trip (design/29 §6, format v5): capture → load restores both
+        /// parts with their names, colours and triangle ranges.</summary>
+        [UnityTest]
+        public IEnumerator PartsSurviveCaptureAndLoad()
+        {
+            var (import, walls, _) = MakeRig();
+            yield return null;
+
+            var b = new ImportedBuilding();
+            b.Plumbing.Add(TwoPartSofa());
+            import.BuildScene(b);
+            yield return null;
+
+            var data = ProjectStore.Capture(walls, null);
+            Assert.AreEqual(1, data.Plumbing.Count);
+            var saved = data.Plumbing[0];
+            Assert.AreEqual(2, saved.Parts.Count);
+            Assert.AreEqual("Textile - Leather - Black", saved.Parts[0].Name);
+            Assert.AreEqual(3, saved.Parts[0].TriCount, "one triangle = three indices");
+            Assert.AreEqual(3, saved.Parts[1].TriStart);
+            Assert.AreEqual(4, saved.Uvs.Count, "UVs are saved, not recomputed on load");
+
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(data, import, null);
+            yield return null;
+
+            var view = Object.FindAnyObjectByType<MepView>();
+            Assert.IsNotNull(view, "the element came back");
+            Assert.AreEqual(2, view.GetComponent<MeshFilter>().sharedMesh.subMeshCount,
+                "and still wears two materials");
+        }
+
+        /// <summary>A sofa: one quad of leather, one quad of aluminium legs, sharing the
+        /// vertex list — the shape the importer produces for a multi-styled product.</summary>
+        private static ImportedMep TwoPartSofa()
+        {
+            var sofa = new ImportedMep
+            {
+                Name = "Sofa", Category = MepCategory.Furniture,
+                Origin = new Vector3(1f, 0.4f, 1f),
+            };
+            sofa.Vertices.AddRange(new[]
+            {
+                new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, -0.5f),
+                new Vector3(0.5f, 0f, 0.5f), new Vector3(-0.5f, 0f, 0.5f),
+            });
+            sofa.Triangles.AddRange(new[] { 0, 2, 1, 0, 3, 2 });
+            RoomPlanner.Core.BoxUv.Fill(sofa.Vertices, sofa.Triangles, sofa.Uvs);
+            sofa.Parts.Add(new MepPart
+            {
+                Name = "Textile - Leather - Black", HasColor = true,
+                Color = new Color(0.1f, 0.1f, 0.1f), TriStart = 0, TriCount = 3,
+            });
+            sofa.Parts.Add(new MepPart
+            {
+                Name = "Metal - Aluminium", HasColor = true,
+                Color = new Color(0.9f, 0.9f, 0.9f), TriStart = 3, TriCount = 3,
+            });
+            return sofa;
+        }
+
         [UnityTest]
         public IEnumerator BuildsSegmentsAndSlabs_FromImportedBuilding()
         {
@@ -230,6 +375,52 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual(new Vector3(4f, 0.8f, 4f), mep[0].transform.position);
 
             StringAssert.Contains("2w 1s 1o 1h 1st 1p", import.Status);
+        }
+
+        [UnityTest]
+        public IEnumerator ImportedColumnPaintsEveryFace_AndSurvivesProjectRoundTrip()
+        {
+            var (import, walls, _) = MakeRig();
+            yield return null;
+
+            import.BuildScene(TwoStoreyBuilding());
+            yield return null;
+
+            var column = walls.Graph.Segments[1];
+            Assert.IsTrue(column.IsColumn, "the IFC semantic reaches the live wall graph");
+            var view = walls.ViewOf(column);
+            var renderer = view.GetComponent<MeshRenderer>();
+            renderer.sharedMaterials = new Material[5];
+            var selectable = view.GetComponent<Selectable>();
+            var finish = SurfaceFinish.OfColor(new Color(0.72f, 0.31f, 0.16f, 1f));
+
+            selectable.SetFinishSide(WallSide.Inner, finish, null);
+
+            Assert.AreEqual(finish, selectable.FinishOf(WallSide.Inner));
+            Assert.AreEqual(finish, selectable.FinishOf(WallSide.Outer),
+                "a column has no inside/outside: aiming one face paints the whole object");
+            foreach (int slot in new[] { 0, 3, 4 })
+            {
+                var block = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(block, slot);
+                Assert.AreEqual(finish.Color, block.GetColor("_BaseColor"),
+                    $"visible column submesh {slot} is painted");
+            }
+
+            var saved = ProjectStore.Capture(walls, null);
+            Assert.IsTrue(saved.Walls[1].FromColumn);
+            import.ClearScene();
+            yield return null;
+            ProjectStore.Apply(saved, import, null);
+            yield return null;
+
+            WallSegment restored = null;
+            foreach (var segment in walls.Graph.Segments)
+                if (segment.IsColumn) { restored = segment; break; }
+            Assert.IsNotNull(restored, "save/load keeps the object classified as a column");
+            var restoredFinish = walls.ViewOf(restored).GetComponent<Selectable>();
+            Assert.AreEqual(finish, restoredFinish.FinishOf(WallSide.Inner));
+            Assert.AreEqual(finish, restoredFinish.FinishOf(WallSide.Outer));
         }
 
         [UnityTest]

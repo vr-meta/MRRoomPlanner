@@ -139,6 +139,77 @@ namespace RoomPlanner.Tests
         }
 
         [Test]
+        public void Parse_ReadsSubcategoriesAndFiltersByThem()
+        {
+            // Two levels exist because 300 items under "Seating" is not a menu (#84).
+            var c = FurnitureCatalogParser.Parse(
+                @"{""Id"":""p"", ""Items"":[
+                   {""Id"":""s1"", ""File"":""a.glb"", ""Category"":""Seating"", ""Subcategory"":""Sofa"",
+                    ""Size"":{""x"":2,""y"":0.8,""z"":0.9}},
+                   {""Id"":""s2"", ""File"":""b.glb"", ""Category"":""Seating"", ""Subcategory"":""Chair"",
+                    ""Size"":{""x"":0.5,""y"":0.9,""z"":0.5}},
+                   {""Id"":""t1"", ""File"":""c.glb"", ""Category"":""Table"", ""Subcategory"":""Dining"",
+                    ""Size"":{""x"":1.6,""y"":0.75,""z"":0.9}}]}",
+                FurnitureSource.Cached, "p", out _);
+
+            var catalog = new FurnitureCatalog();
+            catalog.Add(c);
+
+            var subs = new System.Collections.Generic.List<string>();
+            catalog.SubcategoriesOf("p", FurnitureCategory.Seating, subs);
+            CollectionAssert.AreEqual(new[] { "Chair", "Sofa" }, subs, "only this category's, sorted");
+
+            var items = new System.Collections.Generic.List<FurnitureItem>();
+            catalog.ItemsOf("p", FurnitureCategory.Seating, "Sofa", items);
+            Assert.AreEqual(1, items.Count);
+            Assert.AreEqual("s1", items[0].Id);
+
+            catalog.ItemsOf("p", FurnitureCategory.Seating, null, items);
+            Assert.AreEqual(2, items.Count, "no subcategory = the whole category");
+        }
+
+        [Test]
+        public void Parse_NonCommercialPack_IsFlagged()
+        {
+            // Packs ship separately and are labelled (decision 2026-08-15): a CC BY-NC pack
+            // must be recognisable so it never lands in a commercial build.
+            var nc = FurnitureCatalogParser.Parse(
+                @"{""Id"":""abo"", ""License"":""CC BY-NC 4.0"", ""CommercialUse"":""false"", ""Items"":[]}",
+                FurnitureSource.Cached, "abo", out _);
+            Assert.IsFalse(nc.CommercialUse);
+            Assert.IsTrue(nc.NeedsAttribution);
+
+            var cc0 = FurnitureCatalogParser.Parse(
+                @"{""Id"":""free"", ""License"":""CC0"", ""Items"":[]}",
+                FurnitureSource.Bundled, "free", out _);
+            Assert.IsTrue(cc0.CommercialUse, "absent flag means the CC0 default");
+        }
+
+        [Test]
+        public void Parse_PreviewPath_IsCheckedLikeAModelPath()
+        {
+            var c = FurnitureCatalogParser.Parse(
+                @"{""Id"":""p"", ""Items"":[
+                   {""Id"":""ok"", ""File"":""a.glb"", ""Preview"":""a.preview.jpg"",
+                    ""Size"":{""x"":1,""y"":1,""z"":1}},
+                   {""Id"":""bad"", ""File"":""b.glb"", ""Preview"":""../../secret.png"",
+                    ""Size"":{""x"":1,""y"":1,""z"":1}}]}",
+                FurnitureSource.Cached, "p", out var report);
+
+            Assert.AreEqual(2, report.Accepted, "a bad preview costs the picture, not the item");
+            Assert.AreEqual("a.preview.jpg", c.Items[0].Preview);
+            Assert.IsNull(c.Items[1].Preview);
+        }
+
+        [Test]
+        public void ProceduralItem_HasNoFile()
+        {
+            // Slat partitions are generated from parameters (#86) — no model file at all.
+            Assert.IsTrue(new FurnitureItem { Id = "slat" }.IsProcedural);
+            Assert.IsFalse(new FurnitureItem { Id = "sofa", File = "sofa.glb" }.IsProcedural);
+        }
+
+        [Test]
         public void Parse_UnusableManifest_ReturnsNullWithReason()
         {
             Assert.IsNull(FurnitureCatalogParser.Parse("", FurnitureSource.Bundled, "x", out var r1));

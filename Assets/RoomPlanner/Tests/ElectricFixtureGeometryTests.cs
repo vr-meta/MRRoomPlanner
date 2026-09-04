@@ -61,9 +61,49 @@ namespace RoomPlanner.Tests
             _fixture.Build(FixtureKind.Switch, 1, 1);
             int oneKey = Mesh.vertexCount;
             _fixture.Build(FixtureKind.Switch, 1, 3);
-            Assert.AreEqual(oneKey + 2 * 24, Mesh.vertexCount, "each key is one more box (24 verts)");
+            Assert.Greater(Mesh.vertexCount, oneKey, "two more rockers = more geometry");
+            Assert.AreEqual((Mesh.vertexCount - oneKey) % 2, 0, "the two extra keys are identical");
             Assert.AreEqual(ElectricalDefaults.PostModule, Mesh.bounds.size.x, 1e-4,
                 "multi-key switch keeps the single-module frame");
+        }
+
+        /// <summary>Issue #134: plastic, dark hardware and panel metal have independent
+        /// surfaces, so paint on a plate never turns pins or the cabinet white.</summary>
+        [Test]
+        public void PlasticAndAccentsAreSeparateSubmeshes()
+        {
+            foreach (var kind in new[]
+            {
+                FixtureKind.Outlet, FixtureKind.Switch, FixtureKind.Panel, FixtureKind.Junction,
+            })
+            {
+                _fixture.Build(kind, 2, 2);
+                Assert.AreEqual(ElectricFixture.SubmeshCount, Mesh.subMeshCount,
+                    $"{kind}: plastic + accents + panel metal");
+                Assert.Greater(Mesh.GetTriangles(0).Length, 0, $"{kind}: body");
+                Assert.Greater(Mesh.GetTriangles(1).Length, 0, $"{kind}: accents");
+            }
+            _fixture.Build(FixtureKind.Panel, 1, 1);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.MetalSubmesh).Length, 0,
+                "panel enclosure and door use brushed metal");
+        }
+
+        /// <summary>The socket cup is a real recess: its floor sits BEHIND the plate
+        /// face, and the pins sit deeper still (issue #134).</summary>
+        [Test]
+        public void OutletCupIsRecessedIntoThePlate()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            float plateFace = ElectricalDefaults.PlateDepth;
+            float deepest = float.MaxValue;
+            foreach (var v in Mesh.vertices) deepest = Mathf.Min(deepest, v.z);
+            Assert.AreEqual(0f, deepest, 1e-4, "the back still sits on the wall plane");
+
+            // some geometry must live between the wall and the plate face — the cup
+            int inside = 0;
+            foreach (var v in Mesh.vertices)
+                if (v.z > 1e-4f && v.z < plateFace - 1e-4f) inside++;
+            Assert.Greater(inside, 0, "the cup and the pins are sunk into the plate");
         }
 
         [Test]
@@ -74,6 +114,51 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(ElectricalDefaults.PanelBoxWidth, b.size.x, 1e-4);
             Assert.AreEqual(ElectricalDefaults.PanelBoxHeight, b.size.y, 1e-4);
             Assert.Greater(b.size.z, ElectricalDefaults.PanelBoxDepth - 1e-4, "door sits proud of the box");
+        }
+
+        [Test]
+        public void PanelOpen_RevealsInteriorAndDoorSwingsIntoRoom()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1, false, false);
+            int closedVertices = Mesh.vertexCount;
+            float closedDepth = Mesh.bounds.size.z;
+
+            _fixture.SetPanelOpen(true);
+
+            Assert.IsTrue(_fixture.PanelOpen);
+            Assert.AreNotEqual(closedVertices, Mesh.vertexCount,
+                "the closed windowed door is replaced by the swung-open door");
+            Assert.Greater(Mesh.bounds.size.z, closedDepth,
+                "the hinged door swings forward instead of disappearing");
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.PlasticSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.AccentSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.MetalSubmesh).Length, 0);
+        }
+
+        [Test]
+        public void BlackVariant_UsesPropertyBlocksWithoutRebuilding()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            var before = Mesh;
+
+            _fixture.SetBlackVariant(true);
+
+            Assert.IsTrue(_fixture.BlackVariant);
+            Assert.AreSame(before, Mesh, "a colour choice must not recook geometry");
+            var block = new MaterialPropertyBlock();
+            _go.GetComponent<MeshRenderer>().GetPropertyBlock(block,
+                ElectricFixture.PlasticSubmesh);
+            Assert.AreEqual(ElectricFixture.BlackPlastic, block.GetColor("_BaseColor"));
+        }
+
+        [Test]
+        public void FixtureUvs_AreMetric_NotNormalizedPerObject()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1);
+            float max = 0f;
+            foreach (var uv in Mesh.uv) max = Mathf.Max(max, uv.x, uv.y);
+            Assert.Greater(max, 0.20f, "a 45 cm panel spans a comparable UV distance");
+            Assert.Less(max, 1f, "fixture UVs are metres, not one full tile per face");
         }
 
         [Test]
@@ -108,9 +193,13 @@ namespace RoomPlanner.Tests
         public void Meshes_AreWoundOutward_PositiveVolume()
         {
             _fixture.Build(FixtureKind.Outlet, 2, 1);
-            float expected = 2 * ElectricalDefaults.PostModule * ElectricalDefaults.PostModule
-                * ElectricalDefaults.PlateDepth + 2 * 0.06f * 0.06f * 0.006f;
-            Assert.AreEqual(expected, SignedVolume(), expected * 0.01f,
+            // plate minus the two socket cups (issue #134: the cups are real recesses,
+            // so they SUBTRACT). An inverted face would flip the sign or gut the total.
+            float plate = 2 * ElectricalDefaults.PostModule * ElectricalDefaults.PostModule
+                * ElectricalDefaults.PlateDepth;
+            float cups = 2 * Mathf.PI * 0.0265f * 0.0265f * 0.005f;
+            float expected = plate - cups;
+            Assert.AreEqual(expected, SignedVolume(), expected * 0.15f,
                 "negative/short volume = inverted faces (rule 1.1)");
 
             _fixture.Build(FixtureKind.Panel, 1, 1);

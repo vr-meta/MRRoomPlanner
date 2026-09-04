@@ -13,9 +13,9 @@ using RoomPlanner.Walls;
 namespace RoomPlanner.Tests.Play
 {
     /// <summary>
-    /// Navigation gestures through the REAL ToolManager.Update (#61): the A-tap
-    /// teleports the model (one undoable TeleportCommand), and the X/Y buttons run
-    /// global undo/redo. Scripted frames via the virtual MeasureInput seams.
+    /// Navigation gestures through the REAL ToolManager.Update (#61): A no longer
+    /// teleports (#87 — the portal arc is the only way to travel), and the X/Y buttons
+    /// run global undo/redo. Scripted frames via the virtual MeasureInput seams.
     /// </summary>
     public class NavGesturePlayTests
     {
@@ -107,8 +107,10 @@ namespace RoomPlanner.Tests.Play
         private void Frame(ToolManager manager) => _update.Invoke(manager, null);
 
         [UnityTest]
-        public IEnumerator ATap_TeleportsTheModel_XUndoes_YRedoes()
+        public IEnumerator A_NoLongerTeleports_EvenAimedAtASlab()
         {
+            // Regression for #87: A used to teleport on a short tap and open the radial on
+            // hold. One button, two meanings — and the portal already does the travelling.
             var (manager, input, pointer, model, slab) = MakeRig();
             yield return null;
             Physics.SyncTransforms();
@@ -116,39 +118,37 @@ namespace RoomPlanner.Tests.Play
             pointer.Ray = new Ray(new Vector3(1f, 2f, 1f), Vector3.down);
             Vector3 before = slab.Outline[0];      // slabs teleport by outline data, not transform
 
-            input.TapA = true; input.HoldA = false;
-            Frame(manager);                        // press+release inside the tap window
+            input.TapA = true;
+            Frame(manager);
             input.TapA = false;
+            Frame(manager);
 
-            Assert.AreEqual(1, model.History.UndoCount, "the tap recorded one TeleportCommand");
+            Assert.AreEqual(0, model.History.UndoCount, "A must record nothing");
+            Assert.AreEqual(before, slab.Outline[0], "and move nothing");
+        }
+
+        [UnityTest]
+        public IEnumerator X_Undoes_Y_Redoes_AnyRecordedCommand()
+        {
+            var (manager, input, pointer, model, slab) = MakeRig();
+            yield return null;
+
+            Vector3 before = slab.Outline[0];
+            var delta = new Vector3(1.5f, 0f, 0f);
+            model.History.Execute(new TeleportCommand(
+                null, new List<RoomPlanner.Floors.Floor> { slab }, delta));
             Vector3 after = slab.Outline[0];
-            Assert.Greater((after - before).magnitude, 1f,
-                "the model moved toward the head (aimed point goes under the feet)");
+            Assert.AreNotEqual(before, after);
 
             input.Undo = true;
             Frame(manager);                        // X — global undo
             input.Undo = false;
-            Assert.AreEqual(before, slab.Outline[0], "X undid the teleport");
+            Assert.AreEqual(before, slab.Outline[0], "X undid it");
 
             input.Redo = true;
             Frame(manager);                        // Y — global redo
             input.Redo = false;
-            Assert.AreEqual(after, slab.Outline[0], "Y re-applied the teleport");
-        }
-
-        [UnityTest]
-        public IEnumerator ATapOnEmptySpace_DoesNothing()
-        {
-            var (manager, input, pointer, model, slab) = MakeRig();
-            yield return null;
-            Physics.SyncTransforms();
-
-            pointer.Ray = new Ray(new Vector3(10f, 2f, 10f), Vector3.down);   // no slab there
-            input.TapA = true; input.HoldA = false;
-            Frame(manager);
-            input.TapA = false;
-
-            Assert.AreEqual(0, model.History.UndoCount, "no target — no teleport");
+            Assert.AreEqual(after, slab.Outline[0], "Y re-applied it");
         }
     }
 }

@@ -5,7 +5,7 @@ using RoomPlanner.Electrical;
 namespace RoomPlanner.Plumbing
 {
     /// <summary>
-    /// A point element of the Plumbing layer (docs/design/28-plumbing.md): a wall
+    /// A point element of the Plumbing layer (docs/design/30-plumbing.md): a wall
     /// stub-out for the toilet (D110) or the sink family (D50) — straight or with the
     /// classic 45-degree down elbow — or the floor drain. The mesh is built in LOCAL
     /// space (wall fixtures: back at z=0, +Z into the room; the drain: grate in the

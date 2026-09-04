@@ -38,6 +38,7 @@ namespace RoomPlanner.Tools
         private SettingsSchema _bound;
         private SettingsSchema _boundPage;
         private int _boundSelRows = -1;
+        private int _boundVersion;
         private readonly List<System.Action> _refreshers = new();
         private readonly List<SliderWidget> _sliders = new();
         private readonly List<(SettingField field, Transform fill, float width, Mesh mesh)> _progressBars = new();
@@ -122,17 +123,26 @@ namespace RoomPlanner.Tools
             _bound = null;
             _boundPage = null;
             _boundSelRows = -1;
+            _boundVersion = 0;
         }
 
         private void Bind(SettingsSchema schema, int selRows)
         {
             var page = schema.ActivePage();
+            // Content version: rows are built once and refreshed in place, so a row whose
+            // CONTENT changed (another category in a preview grid) has to force a rebuild —
+            // otherwise the panel keeps showing the previous pictures (feedback 2026-08-15).
+            int version = 0;
+            foreach (var f in page.Fields)
+                version = version * 397 + (f.ContentVersion?.Invoke() ?? 0);
+
             if (ReferenceEquals(_bound, schema) && ReferenceEquals(_boundPage, page)
-                && _boundSelRows == selRows) return;
+                && _boundSelRows == selRows && _boundVersion == version) return;
             Clear();
             _bound = schema;
             _boundPage = page;
             _boundSelRows = selRows;
+            _boundVersion = version;
 
             if (schema.HasTabs) BuildTabStrip(schema, selRows);
 
@@ -188,6 +198,9 @@ namespace RoomPlanner.Tools
                 case SettingKind.Header: BuildHeader(f, y); return;
                 case SettingKind.Action: BuildAction(f, y); return;
                 case SettingKind.Readout: BuildReadout(f, y); return;
+                case SettingKind.Swatch when f.PreviewProvider != null:
+                    BuildPreviewSwatchInline(f, y);   // catalog thumbnails (design/27 §3a)
+                    return;
                 case SettingKind.Swatch when f.TextureOptions != null:
                     BuildTextureSwatchInline(f, y);   // textured chips (design/04 «Текстуры v1»)
                     return;
@@ -438,6 +451,53 @@ namespace RoomPlanner.Tools
             });
         }
 
+        /// <summary>
+        /// Catalog previews (design/27 §3a): the same chip grid as textures, but the image
+        /// comes from the tool. Only the first <see cref="PreviewChipRows"/> rows are built
+        /// — a pack has hundreds of items and a panel taller than the user is worse than a
+        /// short one; the category/subcategory rows above are what narrows the list.
+        /// </summary>
+        private void BuildPreviewSwatchInline(SettingField f, float y)
+        {
+            const int perRow = TexChipsPerRow;
+            const float gap = 0.005f;
+            float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
+            int total = f.PreviewCount?.Invoke() ?? 0;
+            int shown = Mathf.Min(total, perRow * PreviewChipRows);
+
+            var rims = new GameObject[shown];
+            for (int i = 0; i < shown; i++)
+            {
+                int idx = i;
+                int row = i / perRow, col = i % perRow;
+                float x = -PanelLayout.ContentWidth * 0.5f + chip * 0.5f + col * (chip + gap);
+                float cy = y + UiTokens.RowHeight * 0.5f - chip * 0.5f - row * (chip + gap);
+                var mb = MakeButton(rowsRoot, $"{f.Id}Prev{i}", null,
+                    new Vector3(x, cy, 0f), new Vector2(chip, chip),
+                    () => f.SetIndex?.Invoke(idx), background: false);
+                var plate = MakePlate(mb.transform, "Prev", new Vector3(0f, 0f, 0.001f),
+                    chip, chip, UiTokens.RadiusS, buttonMaterial);
+                var r = plate.GetComponent<Renderer>();
+                var tex = f.PreviewProvider(idx);
+                if (tex != null) TintTextured(r, tex);
+                else Tint(r, UiTokens.InsetBg);
+                rims[i] = MakePlate(mb.transform, "Rim", new Vector3(0f, 0f, 0.002f),
+                    chip + 0.005f, chip + 0.005f, UiTokens.RadiusS + 0.0025f, buttonMaterial);
+                Tint(rims[i].GetComponent<Renderer>(), UiTokens.Hover);
+                rims[i].SetActive(false);
+            }
+
+            _refreshers.Add(() =>
+            {
+                int cur = f.GetIndex?.Invoke() ?? -1;
+                for (int i = 0; i < rims.Length; i++)
+                    if (rims[i] != null) rims[i].SetActive(i == cur);
+            });
+        }
+
+        /// <summary>Rows of preview chips shown inline (6 per row → 24 items).</summary>
+        private const int PreviewChipRows = 4;
+
         /// <summary>Extra row slots a texture-swatch grid occupies beyond its first —
         /// textured chips are taller than a standard row, so convert real height into
         /// RowStep units for the layout/auto-height math.</summary>
@@ -448,11 +508,15 @@ namespace RoomPlanner.Tools
 
         internal static int ExtraRowsFor(SettingField f)
         {
-            if (f.Kind != SettingKind.Swatch || f.TextureOptions == null) return 0;
+            if (f.Kind != SettingKind.Swatch) return 0;
+            if (f.TextureOptions == null && f.PreviewProvider == null) return 0;
             const int perRow = TexChipsPerRow;
             const float gap = 0.005f;
             float chip = (PanelLayout.ContentWidth - gap * (perRow - 1)) / perRow;
-            int chipRows = (f.TextureOptions.Length + perRow - 1) / perRow;
+            int count = f.TextureOptions != null
+                ? f.TextureOptions.Length
+                : Mathf.Min(f.PreviewCount?.Invoke() ?? 0, perRow * PreviewChipRows);
+            int chipRows = (count + perRow - 1) / perRow;
             float height = chipRows * (chip + gap);
             return Mathf.Max(0, Mathf.CeilToInt(height / UiTokens.RowStep) - 1);
         }

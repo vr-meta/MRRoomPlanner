@@ -6,7 +6,7 @@ using RoomPlanner.Editing;
 
 namespace RoomPlanner.EditorTools
 {
-    /// <summary>Plumb tool (design/28): fixture/pipe prefabs, pipe preview line and
+    /// <summary>Plumb tool (design/30): fixture/pipe prefabs, pipe preview line and
     /// controller wiring — the SetupElectricTool pattern.</summary>
     internal static class SetupPlumbTool
     {

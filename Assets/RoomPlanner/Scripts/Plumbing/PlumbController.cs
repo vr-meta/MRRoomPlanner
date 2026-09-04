@@ -9,7 +9,7 @@ using RoomPlanner.Editing;
 namespace RoomPlanner.Plumbing
 {
     /// <summary>
-    /// Plumb tool (docs/design/28-plumbing.md): rough-in drainage in four sub-modes —
+    /// Plumb tool (docs/design/30-plumbing.md): rough-in drainage in four sub-modes —
     /// Riser / Pipe / Outlet / Drain.
     ///
     /// A riser is one click on the floor: a vertical D110 pipe auto-extends to the
@@ -760,7 +760,7 @@ namespace RoomPlanner.Plumbing
             return sel != null ? sel.Id : null;
         }
 
-        // ---- project restore (format v5) ----
+        // ---- project restore (format v6) ----
 
         private SceneModel RestoreModel => sceneModel != null ? sceneModel : SceneModel.Instance;
 

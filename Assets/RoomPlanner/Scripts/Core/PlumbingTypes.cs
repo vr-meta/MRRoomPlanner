@@ -1,6 +1,6 @@
 namespace RoomPlanner.Plumbing
 {
-    /// <summary>Drain pipe assortment v1 (docs/design/28-plumbing.md): riser/toilet 110,
+    /// <summary>Drain pipe assortment v1 (docs/design/30-plumbing.md): riser/toilet 110,
     /// sink/shower/washer runs 50, appliance tails 40.</summary>
     public enum PipeDiameter { D110, D50, D40 }
 

@@ -241,6 +241,9 @@ namespace RoomPlanner.Tests.Play
             Assert.IsFalse(PaintController.CategoryAccepts("Tiles", SelectableKind.Stair));
             Assert.IsTrue(PaintController.CategoryAccepts("Ceiling", SelectableKind.Floor));
             Assert.IsFalse(PaintController.CategoryAccepts("Ceiling", SelectableKind.Wall));
+            Assert.IsTrue(PaintController.CategoryAccepts("Objects", SelectableKind.Mep),
+                "imported furniture/backsplashes accept object finishes");
+            Assert.IsTrue(PaintController.CategoryAccepts("Objects", SelectableKind.Furniture));
         }
 
         // ---- texture finishes (design/04 «Текстуры v1») ----

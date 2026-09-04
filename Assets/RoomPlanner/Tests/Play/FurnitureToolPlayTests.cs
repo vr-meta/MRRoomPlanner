@@ -39,6 +39,42 @@ namespace RoomPlanner.Tests.Play
             return go;
         }
 
+        private const string TestPackId = "test-pack";
+        private const string TestPackTitle = "Test pack";
+        private string _testPackFolder;
+
+        /// <summary>
+        /// Writes a pack into the side-load folder — the same one a user copies a pack
+        /// into (design/27). Manifest-only: the picker never opens a model, and this keeps
+        /// the test independent of which packs happen to be installed on the machine.
+        /// </summary>
+        private void WriteTestPack(int items)
+        {
+            _testPackFolder = System.IO.Path.Combine(FurnitureLibrary.SideloadRoot, TestPackId);
+            System.IO.Directory.CreateDirectory(_testPackFolder);
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{{\"Id\":\"{TestPackId}\",\"Title\":\"{TestPackTitle}\",\"License\":\"CC0\",\"Items\":[");
+            for (int i = 0; i < items; i++)
+            {
+                if (i > 0) sb.Append(',');
+                string category = i < items / 2 ? "Seating" : "Table";
+                sb.Append($"{{\"Id\":\"i{i}\",\"Name\":\"Item {i}\",\"Category\":\"{category}\"," +
+                          $"\"File\":\"i{i}.glb\",\"Size\":{{\"x\":1,\"y\":1,\"z\":1}}}}");
+            }
+            sb.Append("]}");
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(_testPackFolder, FurnitureCatalogParser.ManifestName), sb.ToString());
+        }
+
+        [TearDown]
+        public void RemoveTestPack()
+        {
+            if (_testPackFolder != null && System.IO.Directory.Exists(_testPackFolder))
+                System.IO.Directory.Delete(_testPackFolder, true);
+            _testPackFolder = null;
+        }
+
         private IEnumerator MakeLibrary(System.Action<FurnitureLibrary> onReady)
         {
             var go = Track(new GameObject("FurnitureLibrary"));
@@ -56,15 +92,43 @@ namespace RoomPlanner.Tests.Play
             yield return MakeLibrary(l => library = l);
 
             Assert.GreaterOrEqual(library.Catalog.Count, 1, library.Status);
-            var kenney = library.Catalog.Find("kenney-furniture");
-            Assert.NotNull(kenney, "the bundled Kenney pack must be in the catalog");
-            Assert.GreaterOrEqual(kenney.Items.Count, 100);
             CollectionAssert.IsEmpty(library.Problems, string.Join("; ", library.Problems));
 
-            // The manifest resolves to a real, readable model URL.
-            var sofa = library.Catalog.FindItem("kenney-furniture/loungeSofa");
-            Assert.NotNull(sofa);
-            StringAssert.Contains("loungeSofa.glb", library.UrlOf(sofa));
+            // The generated partitions are always available — with no packs installed at
+            // all, the tool still has something to place (#86).
+            var partitions = library.Catalog.Find(FurnitureLibrary.PartitionsId);
+            Assert.NotNull(partitions, "generated partitions must always be in the catalog");
+            Assert.Greater(partitions.Items.Count, 0);
+            Assert.IsTrue(partitions.Items[0].IsProcedural);
+
+            // Any pack that does ship must resolve its items to readable model URLs.
+            foreach (var c in library.Catalog.Collections)
+            {
+                if (c.Id == FurnitureLibrary.PartitionsId) continue;
+                foreach (var item in c.Items)
+                {
+                    StringAssert.Contains(item.File, library.UrlOf(item));
+                    break;
+                }
+            }
+        }
+
+        /// <summary>Any placeable item — a generated partition, so the test does not depend
+        /// on which packs are installed today.</summary>
+        private static FurnitureItem AnyItem(FurnitureLibrary library)
+        {
+            var partitions = library.Catalog.Find(FurnitureLibrary.PartitionsId);
+            Assert.NotNull(partitions, "generated partitions are the fallback content");
+            return partitions.Items[0];
+        }
+
+        /// <summary>First item backed by a real model file, or null when no pack ships.</summary>
+        private static FurnitureItem AnyModelItem(FurnitureLibrary library)
+        {
+            foreach (var c in library.Catalog.Collections)
+                foreach (var item in c.Items)
+                    if (!item.IsProcedural) return item;
+            return null;
         }
 
         [UnityTest]
@@ -77,11 +141,10 @@ namespace RoomPlanner.Tests.Play
             var loader = loaderGo.AddComponent<FurnitureLoader>();
             loader.Bind(library);
 
-            // A carcass with Fit=Stretch: its real 0.60 x 0.85 x 0.60 must be hit exactly,
-            // which is the whole reason the curated sizes exist.
-            var item = library.Catalog.FindItem("kenney-furniture/kitchenCabinet");
-            Assert.NotNull(item);
-            Assert.AreEqual(FurnitureFit.Stretch, item.Fit);
+            // Whatever pack ships, a placed model must end up measuring its declared
+            // real-world size — that is the entire promise of the catalog.
+            var item = AnyModelItem(library);
+            if (item == null) Assert.Ignore("no model-backed pack installed");
 
             var host = Track(new GameObject("Piece"));
             var view = host.AddComponent<FurnitureItemView>();
@@ -117,15 +180,15 @@ namespace RoomPlanner.Tests.Play
             SetField(tool, "library", library);
             SetField(tool, "sceneModel", model);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyItem(library);
             var pose = new FurniturePose { Position = new Vector3(1f, 0f, 2f), Yaw = 90f, Valid = true };
             var view = tool.Spawn(item, pose);
             _spawned.Add(view.gameObject);
 
             Assert.AreEqual(pose.Position, view.transform.position);
             Assert.AreEqual(90f, view.Yaw, 1e-3f);
-            Assert.AreEqual("kenney-furniture/loungeSofa", view.CatalogKey);
-            StringAssert.Contains("Kenney", view.Credit);
+            Assert.AreEqual(item.Key, view.CatalogKey);
+            Assert.IsFalse(string.IsNullOrEmpty(view.Credit), "a placed piece states where it came from");
 
             var selectable = view.GetComponent<Selectable>();
             Assert.NotNull(selectable);
@@ -156,7 +219,7 @@ namespace RoomPlanner.Tests.Play
             SetField(tool, "library", library);
             SetField(tool, "sceneModel", model);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyItem(library);
             var view = tool.Spawn(item, new FurniturePose { Position = Vector3.zero, Yaw = 0f, Valid = true });
             _spawned.Add(view.gameObject);
             var selectable = view.GetComponent<Selectable>();
@@ -200,7 +263,9 @@ namespace RoomPlanner.Tests.Play
 
             Assert.AreEqual(SettingKind.Select, kinds["collection"]);
             Assert.AreEqual(SettingKind.Select, kinds["category"]);
-            Assert.AreEqual(SettingKind.Select, kinds["item"]);
+            Assert.AreEqual(SettingKind.Select, kinds["sub"], "second level: Sofa vs Dining table");
+            // Pictures, not names (#83): the item row is a preview grid.
+            Assert.AreEqual(SettingKind.Swatch, kinds["item"]);
             Assert.AreEqual(SettingKind.Stepper, kinds["yaw"]);
             Assert.AreEqual(SettingKind.Toggle, kinds["snap"]);
             Assert.AreEqual(SettingKind.Readout, kinds["size"]);
@@ -212,8 +277,9 @@ namespace RoomPlanner.Tests.Play
                     Assert.AreNotEqual(SettingKind.Cycle, f.Kind, "design/20 §2: Cycle is banned");
             }
 
-            // The collection list is the catalog's, and the size readout speaks centimetres.
-            CollectionAssert.Contains(Row(place, "collection").ResolveOptions(), "Kenney Furniture Kit");
+            // The collection list is the catalog's — packs are re-curated, so assert on the
+            // one collection that is always there rather than on today's pack.
+            CollectionAssert.Contains(Row(place, "collection").ResolveOptions(), "Partitions");
             StringAssert.Contains("cm", Row(place, "size").Value());
         }
 
@@ -253,11 +319,19 @@ namespace RoomPlanner.Tests.Play
             SetField(tool, "input", input);
             SetField(tool, "pointer", pointer);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyItem(library);
             var view = tool.Spawn(item, new FurniturePose { Position = Vector3.zero, Yaw = 0f, Valid = true });
             _spawned.Add(view.gameObject);
             model.Register(view.GetComponent<Selectable>());
-            yield return null;   // let the collider register with the physics scene
+            yield return null;
+            Physics.SyncTransforms();   // the pick ray needs the collider where it was placed
+
+            // Aim from ABOVE the piece: a room divider is 2.2 m tall, so a ray starting at
+            // 2 m begins inside its own collider and hits nothing.
+            pointer.Value = new Ray(view.transform.position + Vector3.up * 5f, Vector3.down);
+            Assert.IsTrue(model.TryPick(pointer.Value, out var picked, out _)
+                          && ReferenceEquals(picked, view.GetComponent<Selectable>()),
+                "the ray must actually hit the piece — otherwise the rest tests nothing");
 
             // Move tab, ray straight down onto the piece.
             tool.GetSettings().SelectTab(1);
@@ -295,7 +369,8 @@ namespace RoomPlanner.Tests.Play
             loader.Bind(library);
             loader.BindMaterial(template);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyModelItem(library);
+            if (item == null) Assert.Ignore("no model-backed pack installed");
             var host = Track(new GameObject("Piece"));
             var task = loader.InstantiateAsync(item, host.transform);
             float deadline = Time.realtimeSinceStartup + 30f;
@@ -330,7 +405,7 @@ namespace RoomPlanner.Tests.Play
             SetField(tool, "library", library);
             SetField(tool, "sceneModel", model);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyItem(library);
             var view = tool.Spawn(item, new FurniturePose
             {
                 Position = new Vector3(2f, 0f, 1f), Yaw = 0f, Valid = true,
@@ -350,6 +425,94 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator Picker_Paginates_AndChangesContentWhenTheFilterChanges()
+        {
+            // Headset feedback 2026-08-15: the grid showed the first two dozen items with
+            // no way to reach the rest, and switching category left the previous pictures
+            // on screen. Both come from rows being built once: the grid needs a page, and
+            // the panel needs to know the content changed.
+            WriteTestPack(40);
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+
+            var place = tool.GetSettings().TabPages[0];
+            var page = Row(place, "page");
+            var grid = Row(place, "item");
+            var categoryRow = Row(place, "category");
+            var collectionRow = Row(place, "collection");
+            Assert.NotNull(page.Value, "the picker states which page it is on");
+            Assert.NotNull(grid.ContentVersion, "the grid must announce content changes");
+
+            // Point at the test pack (two categories, 40 items — more than one page).
+            var names = collectionRow.ResolveOptions();
+            int packIndex = System.Array.IndexOf(names, TestPackTitle);
+            Assert.GreaterOrEqual(packIndex, 0, "the test pack must be in the catalog");
+            collectionRow.SetIndex(packIndex);
+
+            // One page at a time, never the whole pack in one wall of chips.
+            Assert.AreEqual(FurnitureController.ItemsPerPage, grid.PreviewCount());
+            StringAssert.StartsWith("1/2", page.Value());
+
+            int firstPage = grid.ContentVersion();
+            page.Increase?.Invoke();
+            StringAssert.StartsWith("2/2", page.Value());
+            Assert.AreNotEqual(firstPage, grid.ContentVersion(), "a new page is new content");
+            Assert.AreEqual(40 - FurnitureController.ItemsPerPage, grid.PreviewCount(),
+                "the last page is short");
+
+            // Switching category must invalidate the grid AND go back to page one —
+            // otherwise the panel keeps showing the previous category (feedback 2026-08-15).
+            int beforeCategory = grid.ContentVersion();
+            categoryRow.SetIndex(1);
+            Assert.AreNotEqual(beforeCategory, grid.ContentVersion(),
+                "changing the category must rebuild the pictures");
+            StringAssert.StartsWith("1/", page.Value(), "a filter change returns to page one");
+        }
+
+        [UnityTest]
+        public IEnumerator Partition_IsGeneratedOnPlacement_AndResizesFromItsInspector()
+        {
+            // A slat screen is parameters, not a file (#86): it must be complete the moment
+            // it is placed — no loader, no waiting — and re-generate when resized.
+            FurnitureLibrary library = null;
+            yield return MakeLibrary(l => library = l);
+
+            var rig = Track(new GameObject("Rig"));
+            var model = rig.AddComponent<SceneModel>();
+            var tool = rig.AddComponent<FurnitureController>();
+            SetField(tool, "library", library);
+            SetField(tool, "sceneModel", model);
+
+            var item = library.Catalog.FindItem($"{FurnitureLibrary.PartitionsId}/slat-room");
+            Assert.NotNull(item);
+            Assert.IsTrue(item.IsProcedural);
+
+            var view = tool.Spawn(item, new FurniturePose { Position = Vector3.zero, Yaw = 0f, Valid = true });
+            _spawned.Add(view.gameObject);
+            yield return null;
+
+            var filter = view.GetComponent<MeshFilter>();
+            Assert.NotNull(filter, "the screen exists immediately, without a loader");
+            Assert.Greater(filter.sharedMesh.vertexCount, 0);
+            Assert.AreEqual(item.Size.x, filter.sharedMesh.bounds.size.x, 0.01f, "it measures its width");
+
+            // Widening it through the inspector rebuilds the mesh and the pick box.
+            var rows = view.GetSettings();
+            SettingField width = null;
+            foreach (var f in rows.Fields) if (f.Id == "w") width = f;
+            Assert.NotNull(width, "a generated piece exposes its size");
+            width.CommitNumber?.Invoke(view.Size.x, 2.4f);
+            yield return null;
+
+            Assert.AreEqual(2.4f, filter.sharedMesh.bounds.size.x, 0.01f, "the mesh followed");
+            Assert.AreEqual(2.4f, view.GetComponent<BoxCollider>().size.x, 0.01f, "so did the collider");
+        }
+
+        [UnityTest]
         public IEnumerator Project_RoundTripsAPlacedPiece()
         {
             FurnitureLibrary library = null;
@@ -361,7 +524,7 @@ namespace RoomPlanner.Tests.Play
             SetField(tool, "library", library);
             SetField(tool, "sceneModel", model);
 
-            var item = library.Catalog.FindItem("kenney-furniture/loungeSofa");
+            var item = AnyItem(library);
             var view = tool.Spawn(item, new FurniturePose
             {
                 Position = new Vector3(1.25f, 0f, -0.5f), Yaw = 135f, Valid = true,
@@ -373,7 +536,7 @@ namespace RoomPlanner.Tests.Play
 
             var data = RoomPlanner.Import.ProjectStore.Capture(null, null);
             Assert.AreEqual(1, data.Furniture.Count, "the piece is captured");
-            Assert.AreEqual("kenney-furniture/loungeSofa", data.Furniture[0].Key);
+            Assert.AreEqual(item.Key, data.Furniture[0].Key);
             Assert.AreEqual(item.Size, data.Furniture[0].Size);
 
             // Through JSON and back into an empty scene.
@@ -394,7 +557,7 @@ namespace RoomPlanner.Tests.Play
 
             Assert.AreEqual(new Vector3(1.25f, 0f, -0.5f), restored.transform.position);
             Assert.AreEqual(135f, restored.Yaw, 0.1f);
-            Assert.AreEqual("kenney-furniture/loungeSofa", restored.CatalogKey);
+            Assert.AreEqual(item.Key, restored.CatalogKey);
             Assert.AreEqual("furn-1", restored.GetComponent<Selectable>().Id);
         }
 

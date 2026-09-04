@@ -42,6 +42,14 @@ namespace RoomPlanner.Electrical
         private CableType _cable = CableType.C3x25;
         private bool _ortho = true;
         private int _reserve = ElectricalDefaults.DefaultReservePercent;
+        private bool _blackVariant;
+        private bool _panelOpen;
+
+        private static readonly Color[] FixtureVariants =
+        {
+            ElectricFixture.WhitePlastic,
+            ElectricFixture.BlackPlastic,
+        };
 
         // ---- wire-drawing state ----
         private readonly List<Vector3> _pts = new();
@@ -63,6 +71,7 @@ namespace RoomPlanner.Electrical
         private ElectricFixture _ghost;          // placement preview, never registered
         private SubMode _ghostMode = (SubMode)(-1);
         private int _ghostPosts = -1, _ghostKeys = -1;
+        private bool _ghostBlack, _ghostPanelOpen;
 
         private SettingsSchema _schema;          // tabbed root (design/20 §2.12) — one instance
 
@@ -224,12 +233,14 @@ namespace RoomPlanner.Electrical
                 _ghost.name = "FixturePreview";
                 _ghost.gameObject.SetActive(true);
             }
-            if (_ghostMode != _mode || _ghostPosts != _posts || _ghostKeys != _keys)
+            if (_ghostMode != _mode || _ghostPosts != _posts || _ghostKeys != _keys
+                || _ghostBlack != _blackVariant || _ghostPanelOpen != _panelOpen)
             {
-                _ghost.Build(ModeKind(), _posts, _keys);
+                _ghost.Build(ModeKind(), _posts, _keys, _blackVariant, _panelOpen);
                 var col = _ghost.GetComponent<MeshCollider>();
                 if (col != null) col.enabled = false;   // a preview must not catch rays
                 _ghostMode = _mode; _ghostPosts = _posts; _ghostKeys = _keys;
+                _ghostBlack = _blackVariant; _ghostPanelOpen = _panelOpen;
             }
             _ghost.gameObject.SetActive(true);
             _ghost.transform.SetPositionAndRotation(place, rot);
@@ -262,7 +273,7 @@ namespace RoomPlanner.Electrical
 
             var fx = Instantiate(fixturePrefab, transform);
             if (!fx.gameObject.activeSelf) fx.gameObject.SetActive(true);
-            fx.Build(ModeKind(), _posts, _keys);
+            fx.Build(ModeKind(), _posts, _keys, _blackVariant, _panelOpen);
             fx.transform.SetPositionAndRotation(place, rot);
             fx.BaseLevel = Level();   // heights stay storey-relative on upper floors
             if (_mode == SubMode.Panel) fx.ReservePercent = _reserve;
@@ -340,7 +351,7 @@ namespace RoomPlanner.Electrical
                 go.AddComponent<ElectricFixtureParameters>();
                 go.AddComponent<Selectable>();
             }
-            fx.Build((FixtureKind)f.Kind, f.Posts, f.Keys);
+            fx.Build((FixtureKind)f.Kind, f.Posts, f.Keys, f.Black, f.PanelOpen);
             fx.transform.SetPositionAndRotation(f.Position, f.Rotation);
             fx.BaseLevel = f.BaseLevel;
             if (f.Reserve >= 0) fx.ReservePercent = f.Reserve;
@@ -679,7 +690,9 @@ namespace RoomPlanner.Electrical
                     () => _outletHeight,
                     v => _outletHeight = ClampHeight(v, ElectricalDefaults.MinOutletHeight),
                     (_, v) => _outletHeight = ClampHeight(v, ElectricalDefaults.MinOutletHeight),
-                    () => $"{_outletHeight * 100f:0} cm", displayScale: 100f);
+                    () => $"{_outletHeight * 100f:0} cm", displayScale: 100f)
+                .Swatch("ofinish", "Finish", FixtureVariants,
+                    () => _blackVariant ? 1 : 0, i => _blackVariant = i == 1);
             var sw = new SettingsSchema()
                 .Stepper("keys", "Keys", () => $"{_keys}",
                     () => _keys = Mathf.Max(1, _keys - 1),
@@ -689,7 +702,9 @@ namespace RoomPlanner.Electrical
                     () => _switchHeight,
                     v => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
                     (_, v) => _switchHeight = ClampHeight(v, ElectricalDefaults.MinSwitchHeight),
-                    () => $"{_switchHeight * 100f:0} cm", displayScale: 100f);
+                    () => $"{_switchHeight * 100f:0} cm", displayScale: 100f)
+                .Swatch("sfinish", "Finish", FixtureVariants,
+                    () => _blackVariant ? 1 : 0, i => _blackVariant = i == 1);
             // v2: no "Ceiling off" row — runs are routed by hand, the wire goes where
             // the user clicks and nowhere else (headset feedback 2026-08-10)
             var wire = new SettingsSchema()
@@ -699,14 +714,19 @@ namespace RoomPlanner.Electrical
                 .Segmented("routing", "Route", new[] { "Ortho", "Free" },
                     () => _ortho ? 0 : 1, i => _ortho = i == 0);
             var box = new SettingsSchema()
-                .Readout("jmount", "Mount", () => "Wall / ceiling");
+                .Readout("jmount", "Mount", () => "Wall / ceiling")
+                .Swatch("jfinish", "Finish", FixtureVariants,
+                    () => _blackVariant ? 1 : 0, i => _blackVariant = i == 1);
             var panel = new SettingsSchema()
                 .Slider("res", "Reserve", 0f, ElectricalDefaults.MaxReservePercent,
                     ElectricalDefaults.ReserveStep,
                     () => _reserve,
                     v => _reserve = Mathf.Clamp(Mathf.RoundToInt(v), 0, ElectricalDefaults.MaxReservePercent),
                     (_, v) => _reserve = Mathf.Clamp(Mathf.RoundToInt(v), 0, ElectricalDefaults.MaxReservePercent),
-                    () => $"{_reserve} %");
+                    () => $"{_reserve} %")
+                .Swatch("pfinish", "Finish", FixtureVariants,
+                    () => _blackVariant ? 1 : 0, i => _blackVariant = i == 1)
+                .Toggle("popen", "Door open", () => _panelOpen, v => _panelOpen = v);
 
             return SettingsSchema.Tabbed(
                 new[] { "Outlet", "Switch", "Wire", "Box", "Panel" },

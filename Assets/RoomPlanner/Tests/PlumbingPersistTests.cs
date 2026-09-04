@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace RoomPlanner.Tests
 {
-    /// <summary>Format v5 (design/28): the plumbing layer must survive the JSON
+    /// <summary>Format v6 (design/30): the plumbing layer must survive the JSON
     /// round-trip with ids intact — pipe ends re-attach by them on load.</summary>
     public class PlumbingPersistTests
     {

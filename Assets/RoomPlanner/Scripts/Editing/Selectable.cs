@@ -25,6 +25,7 @@ namespace RoomPlanner.Editing
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int UseUv1Id = Shader.PropertyToID("_UseUV1");
         private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
         private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
         private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
         private static readonly int UvRotId = Shader.PropertyToID("_UvRot");
@@ -46,6 +47,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Plumbing.PipeRoute _pipe;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
+        private RoomPlanner.Import.MepView _mep;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -55,6 +57,12 @@ namespace RoomPlanner.Editing
         public string Id { get; set; }
         public Transform Transform => transform;
         public bool IsHidden => !gameObject.activeSelf;
+
+        /// <summary>Paint and highlight cover EVERY submesh, not just the body (material
+        /// 0). Set by the IFC importer for elements split into per-material parts
+        /// (design/29 §2): their submeshes are all «body», there is no glass slot to
+        /// protect. Walls, doors and furniture leave it false.</summary>
+        public bool PaintAllSubmeshes { get; set; }
 
         // `this` is compile-time typed as a UnityEngine.Object here, so the overloaded
         // null-check correctly reports a destroyed component (unlike interface-typed refs).
@@ -86,7 +94,14 @@ namespace RoomPlanner.Editing
             _pipe = GetComponent<RoomPlanner.Plumbing.PipeRoute>();
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
+            _mep = GetComponent<RoomPlanner.Import.MepView>();
+            // Every material slot of a baked IFC product is a physical part of the same
+            // paintable object. Do not rely on one specific importer call to opt it in.
+            if (_mep != null) PaintAllSubmeshes = true;
             if (_furniture != null) _kind = SelectableKind.Furniture;
+            // baked IFC elements: their own kind since issue #135, so they can be picked,
+            // deleted and re-dressed instead of silently reading as «Measurement»
+            else if (_mep != null) _kind = SelectableKind.Mep;
             else if (_wall != null) _kind = SelectableKind.Wall;
             else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
@@ -178,7 +193,9 @@ namespace RoomPlanner.Editing
             get
             {
                 Resolve();
-                return _finish.Kind == FinishKind.Color ? _finish.Color : _ownColors[0];
+                return _finish.Kind == FinishKind.Color ? _finish.Color
+                    : _fixture != null ? _fixture.PlasticColor
+                    : _ownColors[0];
             }
         }
 
@@ -208,6 +225,13 @@ namespace RoomPlanner.Editing
         {
             Resolve();
             if (_wall == null) { SetFinish(finish, texture, normal); return; }
+            // Rectangular IFC columns reuse Wall's five-submesh mesh, but have no
+            // semantic inside/outside. A finish chosen on any face covers the object.
+            if (_wall.Segment != null && _wall.Segment.IsColumn)
+            {
+                SetFinish(finish, texture, normal);
+                return;
+            }
             var tex = finish.Kind == FinishKind.Texture ? texture : null;
             var nrm = finish.Kind == FinishKind.Texture ? normal : null;
             if (side == WallSide.Outer)
@@ -239,6 +263,14 @@ namespace RoomPlanner.Editing
             Resolve();
             if (_state == state) return;
             _state = state;
+            ApplyVisual();
+        }
+
+        /// <summary>Re-apply finish and highlight after an owner changes its native
+        /// material state, for example an electrical fixture colour variant.</summary>
+        public void RefreshVisual()
+        {
+            Resolve();
             ApplyVisual();
         }
 
@@ -276,25 +308,71 @@ namespace RoomPlanner.Editing
                     continue;
                 }
 
+                // A closed panel has no plastic triangles, so highlighting only slot 0
+                // makes selection invisible. Tint all three fixture surfaces while
+                // preserving their deliberately different plastic/metal responses.
+                if (i == 0 && _fixture != null
+                    && r.sharedMaterials.Length >= RoomPlanner.Electrical.ElectricFixture.SubmeshCount)
+                {
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.PlasticSubmesh,
+                        _finish, _finishTexture, _finishNormal, _fixture.PlasticColor,
+                        0.55f, 0f, tint, stateColor, t);
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.AccentSubmesh,
+                        SurfaceFinish.None, null, null,
+                        RoomPlanner.Electrical.ElectricFixture.DarkAccent,
+                        0.75f, 0.45f, tint, stateColor, t);
+                    FixtureBlock(r, RoomPlanner.Electrical.ElectricFixture.MetalSubmesh,
+                        SurfaceFinish.None, null, null, _fixture.PanelMetalColor,
+                        0.38f, 0.65f, tint, stateColor, t);
+                    continue;
+                }
+
                 // a leaf view's "body" is every panel renderer, not just the first
                 bool body = i == 0 || _leafView != null;
                 bool needBlock = tint || (body && hasFinish);
-                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1;
+                // Imported elements wear one material PER PART (design/29 §2), so paint
+                // and highlight must cover every submesh; walls/doors keep the body-only
+                // rule that protects their glass and joinery.
+                bool bodyOnly = i == 0 && r.sharedMaterials.Length > 1 && !PaintAllSubmeshes;
+                bool everySubmesh = i == 0 && PaintAllSubmeshes
+                    && r.sharedMaterials.Length > 1;
 
                 if (needBlock)
                 {
                     var finish = body ? _finish : SurfaceFinish.None;
                     FillBlock(finish, body ? _finishTexture : null, body ? _finishNormal : null,
                         tint, stateColor, t, _ownColors[i]);
-                    if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
+                    if (everySubmesh)
+                    {
+                        r.SetPropertyBlock(null);
+                        for (int slot = 0; slot < r.sharedMaterials.Length; slot++)
+                            r.SetPropertyBlock(_mpb, slot);
+                    }
+                    else if (bodyOnly) r.SetPropertyBlock(_mpb, 0);
                     else r.SetPropertyBlock(_mpb);
                 }
                 else
                 {
-                    if (bodyOnly) r.SetPropertyBlock(null, 0);
+                    if (everySubmesh)
+                    {
+                        r.SetPropertyBlock(null);
+                        for (int slot = 0; slot < r.sharedMaterials.Length; slot++)
+                            r.SetPropertyBlock(null, slot);
+                    }
+                    else if (bodyOnly) r.SetPropertyBlock(null, 0);
                     else r.SetPropertyBlock(null);   // restore the material's own color
                 }
             }
+        }
+
+        private void FixtureBlock(Renderer r, int index, SurfaceFinish finish, Texture2D tex,
+            Texture2D normal, Color ownColor, float smoothness, float metallic,
+            bool tint, Color stateColor, float t)
+        {
+            FillBlock(finish, tex, normal, tint, stateColor, t, ownColor);
+            if (finish.IsNone) _mpb.SetFloat(SmoothnessId, smoothness);
+            _mpb.SetFloat(MetallicId, metallic);
+            r.SetPropertyBlock(_mpb, index);
         }
 
         /// <summary>One body submesh of a per-side wall: block when painted or
@@ -576,7 +654,7 @@ namespace RoomPlanner.Editing
         private static string PlumbingDrainLabel() =>
             $"{RoomPlanner.Plumbing.PlumbingDefaults.DrainSize * 100f:0}×{RoomPlanner.Plumbing.PlumbingDefaults.DrainSize * 100f:0} cm";
 
-        /// <summary>A riser's description IS the plumbing BOM (docs/design/28-plumbing.md),
+        /// <summary>A riser's description IS the plumbing BOM (docs/design/30-plumbing.md),
         /// the electrical-panel precedent; an ordinary pipe reports its own size and length.
         /// Selection-time only — the allocation here never runs per frame.</summary>
         private string DescribePipe()

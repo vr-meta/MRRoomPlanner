@@ -197,6 +197,7 @@ namespace RoomPlanner.Tests
             wall.Height = 3.1f;
             wall.Offset = WallOffsetMode.Center;
             wall.Join = WallJoin.Bevel;
+            wall.IsColumn = true;
 
             var mid = g.SplitSegmentAt(wall, P(2, 0));
             var tail = mid.Segments[1] == wall ? mid.Segments[0] : mid.Segments[1];
@@ -205,6 +206,7 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(3.1f, tail.Height, 1e-5f);
             Assert.AreEqual(WallOffsetMode.Center, tail.Offset);
             Assert.AreEqual(WallJoin.Bevel, tail.Join);
+            Assert.IsTrue(tail.IsColumn, "a T split must not turn a column into a wall");
         }
 
         [Test]

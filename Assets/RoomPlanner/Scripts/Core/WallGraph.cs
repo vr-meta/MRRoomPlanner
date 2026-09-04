@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using RoomPlanner.Core;
 
 namespace RoomPlanner.Walls
 {
@@ -46,6 +47,20 @@ namespace RoomPlanner.Walls
         /// A VIEW state, not a scene edit: persisted (format v3) but never in the undo
         /// history. The leaf child view applies it via transforms.</summary>
         public float OpenFraction;
+
+        /// <summary>What the frame and the leaf are made of (issue #133): the finish the
+        /// IFC material name resolved to, or None for hand-drawn openings — those keep
+        /// the rig's joinery material. Pure data; the texture is looked up at the edges
+        /// like every other finish.</summary>
+        public SurfaceFinish FrameFinish;
+
+        /// <summary>Resolved texture of <see cref="FrameFinish"/>, filled by the scene
+        /// side (importer / project load). Not part of the model: never saved, and a
+        /// device without the texture files still keeps the finish id.</summary>
+        [System.NonSerialized] public Texture2D FrameTexture;
+
+        /// <summary>Optional relief of the frame finish; null for most materials.</summary>
+        [System.NonSerialized] public Texture2D FrameNormal;
     }
 
     /// <summary>
@@ -94,6 +109,10 @@ namespace RoomPlanner.Walls
         public float BaseHeight = 0f;
         public WallOffsetMode Offset = WallOffsetMode.Outer;
         public WallJoin Join = WallJoin.Miter;
+
+        /// <summary>An IFC rectangular column uses the wall mesh for geometry, but is
+        /// one finishable object: painting any face must cover all four sides and rims.</summary>
+        public bool IsColumn;
 
         /// <summary>
         /// A deleted-but-undoable wall: it stays in the graph (undo restores it with its
@@ -167,6 +186,7 @@ namespace RoomPlanner.Walls
             Offset = s.Offset;
             Join = s.Join;
             SideSign = s.SideSign;
+            IsColumn = s.IsColumn;
         }
 
         public override string ToString() => $"Seg#{Id}({A.Id}->{B.Id}) len={Length:0.##}";

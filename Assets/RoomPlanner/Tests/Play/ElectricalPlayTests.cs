@@ -79,11 +79,11 @@ namespace RoomPlanner.Tests.Play
             CollectionAssert.AreEqual(new[] { "Outlet", "Switch", "Wire", "Box", "Panel" }, schema.Tabs);
 
             Assert.AreEqual(0, schema.ActiveTab());
-            CollectionAssert.AreEqual(new[] { "posts", "oh" },
+            CollectionAssert.AreEqual(new[] { "posts", "oh", "ofinish" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
             schema.SelectTab(1);
-            CollectionAssert.AreEqual(new[] { "keys", "sh" },
+            CollectionAssert.AreEqual(new[] { "keys", "sh", "sfinish" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
             schema.SelectTab(2);
@@ -94,13 +94,13 @@ namespace RoomPlanner.Tests.Play
                 "cable options are all visible (design/20 §2.3)");
 
             schema.SelectTab(3);
-            CollectionAssert.AreEqual(new[] { "jmount" },
+            CollectionAssert.AreEqual(new[] { "jmount", "jfinish" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
             Assert.AreEqual(SettingKind.Readout, schema.ActivePage().Fields[0].Kind,
                 "the junction box has nothing to configure — just the mount hint");
 
             schema.SelectTab(4);
-            CollectionAssert.AreEqual(new[] { "res" },
+            CollectionAssert.AreEqual(new[] { "res", "pfinish", "popen" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
         }
 
@@ -259,6 +259,50 @@ namespace RoomPlanner.Tests.Play
         }
 
         [Test]
+        public void FixtureAppearanceCommands_UndoVariantAndPanelDoor()
+        {
+            var panel = MakeFixture(FixtureKind.Panel);
+            var p = panel.GetComponent<ElectricFixtureParameters>();
+            int closedVertices = panel.GetComponent<MeshFilter>().sharedMesh.vertexCount;
+
+            _model.History.Execute(FixtureParamCommand.ForVariant(p, true));
+            Assert.IsTrue(panel.BlackVariant);
+            _model.History.Execute(FixtureParamCommand.ForPanelOpen(p, true));
+            Assert.IsTrue(panel.PanelOpen);
+            Assert.Greater(panel.GetComponent<MeshFilter>().sharedMesh.vertexCount, closedVertices);
+
+            _model.History.Undo();
+            Assert.IsFalse(panel.PanelOpen);
+            _model.History.Undo();
+            Assert.IsFalse(panel.BlackVariant);
+            _model.History.Redo();
+            _model.History.Redo();
+            Assert.IsTrue(panel.BlackVariant);
+            Assert.IsTrue(panel.PanelOpen);
+        }
+
+        [Test]
+        public void ClosedPanel_HighlightTintsItsVisibleMetalSlot()
+        {
+            var panel = MakeFixture(FixtureKind.Panel);
+            var selectable = panel.GetComponent<Selectable>();
+            var renderer = panel.GetComponent<MeshRenderer>();
+            var block = new MaterialPropertyBlock();
+
+            selectable.SetHighlight(HighlightState.Selected);
+            renderer.GetPropertyBlock(block, ElectricFixture.MetalSubmesh);
+
+            Assert.AreNotEqual(ElectricFixture.BrushedMetal, block.GetColor("_BaseColor"),
+                "the closed panel has no plastic faces, so selection must tint its metal slot");
+            Assert.AreEqual(0.38f, block.GetFloat("_Smoothness"), 1e-4f);
+            Assert.AreEqual(0.65f, block.GetFloat("_Metallic"), 1e-4f);
+
+            selectable.SetHighlight(HighlightState.None);
+            renderer.GetPropertyBlock(block, ElectricFixture.MetalSubmesh);
+            Assert.AreEqual(ElectricFixture.BrushedMetal, block.GetColor("_BaseColor"));
+        }
+
+        [Test]
         public void RouteCableCommand_UndoRestoresType()
         {
             var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
@@ -307,9 +351,9 @@ namespace RoomPlanner.Tests.Play
             panel.transform.position = new Vector3(3f, 1.5f, 0f);   // out of the clearance zone
             var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
 
-            CollectionAssert.AreEqual(new[] { "fposts", "fh" },
+            CollectionAssert.AreEqual(new[] { "fposts", "fh", "ffinish" },
                 outlet.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
-            CollectionAssert.AreEqual(new[] { "fres" },
+            CollectionAssert.AreEqual(new[] { "fres", "ffinish", "fopen" },
                 panel.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
             CollectionAssert.AreEqual(new[] { "rcable" },
                 route.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());

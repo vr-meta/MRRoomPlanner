@@ -14,7 +14,7 @@ using RoomPlanner.Walls;
 namespace RoomPlanner.Tests.Play
 {
     /// <summary>
-    /// Plumb gestures through the REAL PlumbController.Tick (design/28, #88): a riser
+    /// Plumb gestures through the REAL PlumbController.Tick (design/30, #88): a riser
     /// from one floor click, a pipe run teeing into the riser axis, stub-out and drain
     /// placement, and the save/load round-trip of the whole layer.
     /// </summary>

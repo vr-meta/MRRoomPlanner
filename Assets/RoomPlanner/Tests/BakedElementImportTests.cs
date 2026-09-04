@@ -101,6 +101,21 @@ END-ISO-10303-21;";
         private static ImportedMep[] CubeElements() =>
             Building.Plumbing.Where(m => !ExtraNames.Contains(m.Name)).ToArray();
 
+        private static string WithOpeningAssembly()
+        {
+            const string records = @"#100=IFCOPENINGELEMENT('o1',$,'Opening',$,$,#36,$,$);
+#101=IFCWINDOW('w1',$,'Bathroom Window',$,$,#36,$,$,$,1.,1.);
+#102=IFCMEMBER('m1',$,'Standalone Member',$,$,#36,#33,$,$);
+#103=IFCMEMBER('m2',$,'Window Mullion',$,$,#36,#33,$,$);
+#104=IFCPLATE('p2',$,'Window Crossbar',$,$,#36,#33,$,$);
+#105=IFCRELFILLSELEMENT('fill1',$,$,$,#100,#101);
+#106=IFCRELAGGREGATES('aggregate1',$,$,$,#101,(#103));
+#107=IFCRELNESTS('nest1',$,$,$,#101,(#104));
+";
+            int end = Doc.LastIndexOf("ENDSEC;");
+            return Doc.Insert(end, records);
+        }
+
         [Test]
         public void ImportsFurnitureProxyAndRailingAsBakedMeshes()
         {
@@ -162,6 +177,23 @@ END-ISO-10303-21;";
             var fridge = Building.Plumbing.Single(m => m.Name == "Fridge");
             Assert.AreEqual(24, fridge.Vertices.Count);
             Assert.AreEqual(36, fridge.Triangles.Count);
+        }
+
+        [Test]
+        public void WindowAssemblyMembersAreNotBakedAsDuplicateFrames()
+        {
+            var building = IfcImporter.Import(StepFile.Parse(WithOpeningAssembly()));
+            var names = building.Plumbing.Select(m => m.Name).ToArray();
+
+            CollectionAssert.Contains(names, "Standalone Member",
+                "ordinary IfcMember products must remain visible");
+            CollectionAssert.DoesNotContain(names, "Window Mullion",
+                "an aggregated window mullion is replaced by the native frame");
+            CollectionAssert.DoesNotContain(names, "Window Crossbar",
+                "a nested window plate is replaced by the native frame");
+            Assert.AreEqual(Building.Plumbing.Count + 1, building.Plumbing.Count);
+            Assert.AreEqual(0, building.SkippedMep,
+                "intentionally replaced window parts are not failed MEP imports");
         }
 
         [Test]

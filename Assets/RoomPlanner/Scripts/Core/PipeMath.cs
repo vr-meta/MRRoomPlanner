@@ -5,7 +5,7 @@ using RoomPlanner.Electrical;
 namespace RoomPlanner.Plumbing
 {
     /// <summary>
-    /// Pure polyline math of the Plumbing layer (docs/design/28-plumbing.md). Tube
+    /// Pure polyline math of the Plumbing layer (docs/design/30-plumbing.md). Tube
     /// meshes and length reuse WireMath — this file adds what drainage needs on top:
     /// the LOW ortho elbow (mains run along the floor, not the ceiling), the riser-axis
     /// snap and elbow classification for the BOM. No scene dependencies.

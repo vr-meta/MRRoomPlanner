@@ -5,7 +5,7 @@ using RoomPlanner.Electrical;
 namespace RoomPlanner.Plumbing
 {
     /// <summary>
-    /// A drain pipe run of the Plumbing layer (docs/design/28-plumbing.md): parametric
+    /// A drain pipe run of the Plumbing layer (docs/design/30-plumbing.md): parametric
     /// polyline on room surfaces rendered as a gray PP tube of the chosen diameter.
     /// A riser is the same route flagged IsRiser — two points, floor to ceiling; pipes
     /// tee into it anywhere along the axis. Ends may be logically attached to plumb

@@ -15,12 +15,15 @@ namespace RoomPlanner.Tests.Play
     public class WallOpeningPlayTests
     {
         private readonly List<GameObject> _spawned = new();
+        private readonly List<Material> _materials = new();
 
         [TearDown]
         public void Cleanup()
         {
             foreach (var go in _spawned) if (go != null) Object.DestroyImmediate(go);
             _spawned.Clear();
+            foreach (var m in _materials) if (m != null) Object.DestroyImmediate(m);
+            _materials.Clear();
         }
 
         private (Wall view, WallSegment seg) MakeWall(params WallOpening[] openings)
@@ -33,7 +36,17 @@ namespace RoomPlanner.Tests.Play
             _spawned.Add(template);
             template.SetActive(false);
             template.AddComponent<MeshFilter>();
-            template.AddComponent<MeshRenderer>();
+            // five slots like the real prefab (inner / glass / joinery / outer / rims) —
+            // the frame finish of issue #133 rides slot 2
+            var shader = Shader.Find("RoomPlanner/LitVertexAO")
+                ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Sprites/Default");
+            var mats = new Material[5];
+            for (int i = 0; i < mats.Length; i++)
+            {
+                mats[i] = new Material(shader);
+                _materials.Add(mats[i]);
+            }
+            template.AddComponent<MeshRenderer>().sharedMaterials = mats;
             var prefab = template.AddComponent<Wall>();
             template.AddComponent<Selectable>();
 
@@ -174,7 +187,8 @@ namespace RoomPlanner.Tests.Play
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
             Assert.AreEqual(5, mesh.subMeshCount, "inner/glass/joinery/outer/rims (#34)");
             Assert.Greater(mesh.GetTriangles(1).Length, 0, "window pane lives in the glass submesh");
-            Assert.Greater(mesh.GetTriangles(2).Length, 0, "window frame lives in the joinery submesh");
+            Assert.AreEqual(4 * 6 * 6, mesh.GetTriangles(2).Length,
+                "a window is exactly four six-faced frame bars, with no mullions or crossbars");
 
             // under-sill band is solid, and its top face sits at sill height;
             // z = 0.08 keeps the probe clear of the 100 mm deep frame bars around the mid-plane
@@ -197,6 +211,57 @@ namespace RoomPlanner.Tests.Play
             var mesh = view.GetComponent<MeshFilter>().sharedMesh;
             Assert.AreEqual(0, mesh.GetTriangles(1).Length, "doors get a leaf, not a glass pane");
             Assert.Greater(mesh.GetTriangles(2).Length, 0, "the leaf/frame live in joinery");
+        }
+
+        /// <summary>The IFC material of a door dresses its frame AND its leaf
+        /// (issue #133): a property block on the joinery submesh and on the leaf
+        /// renderers, never a mutated shared material.</summary>
+        [UnityTest]
+        public IEnumerator DoorFrameFinishReachesJoineryAndLeaf()
+        {
+            var tex = new Texture2D(4, 4);
+            var op = new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f,
+                Kind = OpeningKind.Door, SwingDir = Vector3.forward, HingeDir = Vector3.right,
+                FrameFinish = RoomPlanner.Core.SurfaceFinish.OfTexture("wood-birch", 0.8f),
+                FrameTexture = tex,
+            };
+            var (view, _) = MakeWall(op);
+            yield return null;
+
+            var block = new MaterialPropertyBlock();
+            var mr = view.GetComponent<MeshRenderer>();
+            mr.GetPropertyBlock(block, 2);
+            Assert.IsFalse(block.isEmpty, "joinery submesh carries the frame block");
+            Assert.AreSame(tex, block.GetTexture("_BaseMap"), "with the finish texture");
+
+            var leaf = view.GetComponentInChildren<OpeningLeafView>();
+            Assert.IsNotNull(leaf, "the door has a leaf child");
+            var leafRenderer = leaf.GetComponentInChildren<MeshRenderer>();
+            Assert.IsNotNull(leafRenderer);
+            var leafBlock = new MaterialPropertyBlock();
+            leafRenderer.GetPropertyBlock(leafBlock);
+            Assert.IsFalse(leafBlock.isEmpty, "the leaf wears the same finish");
+
+            Object.DestroyImmediate(tex);
+        }
+
+        /// <summary>A hand-drawn opening has no finish — the joinery keeps the rig's own
+        /// material and no block is left behind.</summary>
+        [UnityTest]
+        public IEnumerator OpeningWithoutFinishLeavesTheJoineryAlone()
+        {
+            var (view, _) = MakeWall(new WallOpening
+            {
+                Id = 1, AlongFraction = 0.5f, Width = 0.9f, Height = 2.1f,
+                Kind = OpeningKind.Door,
+            });
+            yield return null;
+
+            var block = new MaterialPropertyBlock();
+            view.GetComponent<MeshRenderer>().GetPropertyBlock(block, 2);
+            Assert.IsTrue(block.isEmpty);
         }
 
         [UnityTest]

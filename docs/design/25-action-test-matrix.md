@@ -39,6 +39,7 @@
 | Paint | по сторонам стены / текстуры | к | `PaintPlayTests`, round-trip |
 | Paint | ластик «Original look» | — | |
 | Electric | схема/команды/BOM щитка | к | `ElectricalPlayTests` |
+| Electric | геометрия фурнитуры: выемки вычитают объём, сабмеши | к | `ElectricFixtureGeometryTests` |
 | Electric | жест: розетка триггером по стене | — | |
 | Electric | жест: продолжение трассы от свободного конца | ✓ | `WireGesturePlayTests` |
 | Electric | жест: трасса с нуля + клик по терминалу | — | |
@@ -51,9 +52,14 @@
 | Plumb | продолжение трубы от свободного конца | — | (код — паттерн #81) |
 | Import | build/replace/electrical-очистка | к | `ImportPlayTests` |
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
+| Import | материалы: части по стилям, имя → отделка, box-UV | к | `ObjectMaterialTests` |
+| Import | сабмеш+материал на часть, круг save/load (v5) | к | `ImportPlayTests` |
+| Import | нормали: острые рёбра режутся, кривые остаются гладкими | к | `MeshSmoothingTests` |
+| Import | импортированный элемент: пик, удаление, undo, не сохраняется скрытым | к | `ImportPlayTests` |
+| Openings | материал рамы/створки из IFC на joinery и створке | к | `WallOpeningPlayTests` |
 | Projects | Save/New/Open/Delete через виджеты | ✓ | `ProjectsToolPlayTests` |
 | Blueprint | загрузка плана, калибровка 2 парами | — | (файлы устройства) |
-| Teleport | A-тап: модель к ногам, 1 undo | ✓ | `NavGesturePlayTests` |
+| Teleport | A больше не телепортирует (#87); X/Y отменяют/повторяют записанное | ✓ | `NavGesturePlayTests` |
 | Teleport | портал левым триггером | — | (команда — к, `TeleportPlayTests`) |
 | Teleport | сдвиг всех слоёв + undo | к | `TeleportPlayTests` |
 | Undo/Redo | X/Y глобально | ✓ | `NavGesturePlayTests` |

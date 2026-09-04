@@ -95,7 +95,7 @@ namespace RoomPlanner.Tools
             if (_furniture != null)
                 foreach (var f in _furniture)
                     if (f != null) f.MoveBy(d);
-            // The plumbing layer rides exactly like the electrical one (design/28):
+            // The plumbing layer rides exactly like the electrical one (design/30):
             // fixtures shift with their BaseLevel, pipes shift whole — id-attached ends
             // must not move twice, so the raw MoveBy is used, never Selectable.MoveBy.
             if (_plumbFixtures != null)

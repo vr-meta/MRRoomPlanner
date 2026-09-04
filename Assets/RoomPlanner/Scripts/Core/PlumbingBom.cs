@@ -25,7 +25,7 @@ namespace RoomPlanner.Plumbing
     }
 
     /// <summary>
-    /// Pipe bill of materials (docs/design/28-plumbing.md): polyline lengths by
+    /// Pipe bill of materials (docs/design/30-plumbing.md): polyline lengths by
     /// diameter + a per-connection allowance + a reserve percent, plus fitting counts
     /// (90/45 elbows). Pure math — the mirror of ElectricalBom.
     /// </summary>
