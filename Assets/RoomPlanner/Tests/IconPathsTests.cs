@@ -99,7 +99,7 @@ namespace RoomPlanner.Tests
                 if (definition.Reserved) reserved++;
             }
 
-            Assert.AreEqual(2, reserved, "only Furniture and Plumbing should be reserved");
+            Assert.AreEqual(0, reserved, "all twelve radial slots now have registered tools");
             foreach (string id in ToolManager.RegisteredToolIds)
                 Assert.GreaterOrEqual(ToolManager.DefaultToolIndex(id), 0,
                     $"registered tool '{id}' has no stable index");

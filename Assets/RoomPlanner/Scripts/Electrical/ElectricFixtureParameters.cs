@@ -15,6 +15,10 @@ namespace RoomPlanner.Electrical
         private ElectricFixture _fixture;
         private SettingsSchema _schema;
         private FixtureKind _schemaKind;
+        private readonly ElectricPlacement _placement = new();
+        private bool _fromEnd;
+        private int _tab;
+        private string _placementStatus = "";
 
         private static readonly Color[] FixtureVariants =
         {
@@ -67,9 +71,29 @@ namespace RoomPlanner.Electrical
                         () => ApplyReserve(Fx.ReservePercent + ElectricalDefaults.ReserveStep));
                     AddVariantRow(s);
                     s.Toggle("fopen", "Door open", () => Fx.PanelOpen, ApplyPanelOpen);
+                    AddHeightRow(s, 0.1f);
                     break;
             }
-            return s;
+            var dimensions = new SettingsSchema()
+                .Readout("size", "Size", () => $"{Fx.BlockWidth * 100f:0.#} × {Fx.BlockHeight * 100f:0.#} cm")
+                .Toggle("dimensions", "Dimension lines", () => Fx.ShowDimensions, value =>
+                {
+                    Fx.ShowDimensions = value;
+                    if (GetComponent<RoomPlanner.Tools.ServiceDimensionDisplay>() == null)
+                        gameObject.AddComponent<RoomPlanner.Tools.ServiceDimensionDisplay>().Material = GetComponent<MeshRenderer>().sharedMaterial;
+                });
+            if (kind != FixtureKind.Junction)
+            {
+                dimensions.Segmented("base", "Measure from", new[] { "Start", "End" },
+                    () => _fromEnd ? 1 : 0, i => _fromEnd = i == 1)
+                    .Numeric("gap", "Edge gap", 0f, 100f, Gap,
+                        (_, v) => ApplyGap(v), () => Fx.MountHost != null ? $"{Gap() * 100f:0.#} cm" : "Unhosted",
+                        displayScale: 100f);
+            }
+            dimensions.Readout("placement", "Placement", () => _placementStatus.Length > 0
+                ? _placementStatus : GetComponent<RoomPlanner.Tools.MountedServiceFollower>()?.Status
+                    ?? (Fx.MountHost != null ? "Hosted" : "Unhosted"));
+            return SettingsSchema.Tabbed(new[] { "Properties", "Dimensions" }, () => _tab, i => _tab = i, s, dimensions);
         }
 
         /// <summary>Height as a v2 numeric field (design/20 §2.6): exact cm entry, ONE
@@ -84,8 +108,41 @@ namespace RoomPlanner.Electrical
             s.Swatch("ffinish", "Finish", FixtureVariants,
                 () => Fx.BlackVariant ? 1 : 0, i => ApplyBlackVariant(i == 1));
 
-        private void ApplyPosts(int value) =>
-            Apply(FixtureParamCommand.ForPosts(this, Mathf.Clamp(value, 1, ElectricalDefaults.MaxPosts)));
+        private void ApplyPosts(int value)
+        {
+            int posts = Mathf.Clamp(value, 1, ElectricalDefaults.MaxPosts);
+            if (posts != Fx.Posts && Validate(Fx.transform.position, posts))
+                Apply(FixtureParamCommand.ForPosts(this, posts));
+        }
+
+        public bool Validate(Vector3 position, int posts)
+        {
+            if (!ServicePlacement.Finite(position)) return false;
+            if (Fx.MountHost == null) return true; // legacy objects retain their existing editing behaviour
+            var result = _placement.Validate(Fx.MountHost, position, Fx.transform.rotation,
+                Fx.Kind, posts, SceneModel.Instance, Fx);
+            _placementStatus = ServicePlacement.Describe(result);
+            return result == PlacementFailure.None;
+        }
+
+        private float Gap()
+        {
+            if (!_placement.Resolve(Fx.MountHost, Fx.transform.position, Fx.transform.forward)) return 0f;
+            return ServicePlacement.EdgeGap(_placement.Surface, Fx.transform.position, Fx.BlockWidth, _fromEnd);
+        }
+
+        private void ApplyGap(float gap)
+        {
+            if (!ServicePlacement.Finite(gap) || gap < 0f
+                || !_placement.Resolve(Fx.MountHost, Fx.transform.position, Fx.transform.forward)) return;
+            Vector3 target = ServicePlacement.WithEdgeGap(_placement.Surface, Fx.transform.position, Fx.BlockWidth, gap, _fromEnd);
+            if (!Validate(target, Fx.Posts)) return;
+            Vector3 delta = target - Fx.transform.position;
+            if (delta.sqrMagnitude < 1e-10f) return;
+            var model = SceneModel.Instance;
+            if (model != null) model.History.Execute(new MoveCommand(Owner, delta));
+            else Owner.MoveBy(delta);
+        }
 
         private void ApplyKeys(int value) =>
             Apply(FixtureParamCommand.ForKeys(this, Mathf.Clamp(value, 1, ElectricalDefaults.MaxKeys)));
@@ -104,7 +161,9 @@ namespace RoomPlanner.Electrical
             // clamp in storey-relative space: on an upper floor the world Y is offset by
             // the fixture's BaseLevel, and 30–180 cm still must mean "above THIS floor"
             float rel = Mathf.Clamp(relValue, min, ElectricalDefaults.MaxMountHeight);
-            Apply(FixtureParamCommand.ForHeight(this, Fx.BaseLevel + rel));
+            var target = Fx.transform.position; target.y = Fx.BaseLevel + rel;
+            if (Mathf.Abs(target.y - Fx.transform.position.y) > 1e-6f && Validate(target, Fx.Posts))
+                Apply(FixtureParamCommand.ForHeight(this, target.y));
         }
 
         /// <summary>Routes attached to this fixture by id (selection-time readout only).</summary>

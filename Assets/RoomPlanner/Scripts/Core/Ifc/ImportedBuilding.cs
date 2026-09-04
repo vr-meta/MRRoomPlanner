@@ -17,6 +17,7 @@ namespace RoomPlanner.Core.Ifc
 
     public sealed class ImportedWall
     {
+        public string MountKey;
         /// <summary>Axis polyline in world space (â‰¥2 points), at the wall's base level.</summary>
         public List<Vector3> Path = new();
         public float Thickness;
@@ -41,6 +42,7 @@ namespace RoomPlanner.Core.Ifc
 
     public sealed class ImportedSlab
     {
+        public string MountKey;
         /// <summary>Closed outline on the TOP plane of the slab (no duplicate last point).</summary>
         public List<Vector3> Outline = new();
         /// <summary>Holes cut through the slab (stairwells, shafts) â€” rings on the top plane.</summary>

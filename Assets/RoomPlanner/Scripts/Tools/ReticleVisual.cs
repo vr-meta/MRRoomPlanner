@@ -81,7 +81,7 @@ namespace RoomPlanner.Tools
             bool show = !string.IsNullOrWhiteSpace(text);
             if (_dimensionBadge != null) _dimensionBadge.SetActive(show);
             _dimension.gameObject.SetActive(show);
-            if (show) _dimension.text = text;
+            if (show && _dimension.text != text) _dimension.text = text;
         }
 
         public static Vector2[] Shape(ReticleSnapKind kind)

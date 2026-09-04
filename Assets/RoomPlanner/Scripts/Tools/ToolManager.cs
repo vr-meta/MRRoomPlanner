@@ -35,6 +35,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private BlueprintController blueprint;
         [SerializeField] private RoomPlanner.Import.ImportController importTool;
         [SerializeField] private RoomPlanner.Electrical.ElectricController electric;
+        [SerializeField] private PlumbingController plumbing;
         [SerializeField] private PaintController paint;
         [SerializeField] private RoomPlanner.Walls.OpeningsController openings;
         [SerializeField] private RoomPlanner.Import.ProjectsController projects;
@@ -131,7 +132,7 @@ namespace RoomPlanner.Tools
             // Heating's reserve slot went to Projects (#58) — heating will ship as a
             // tab of a future MEP tool (07-mep-layers), not as its own radial sector.
             ("projects", "folder", "Projects", new Color(0.91f, 0.93f, 0.96f)),
-            (null, "pipe", "Plumbing", Color.gray),
+            ("plumbing", "pipe", "Plumbing", UiTokens.LayerPlumbing),
             ("paint", "paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f)),       // Interior
         };
 
@@ -143,7 +144,7 @@ namespace RoomPlanner.Tools
         public static readonly string[] RegistryIds =
         {
             "select", "measure", "wall", "floor", "blueprint", "import",
-            "electric", "paint", "openings", "projects", "furniture",
+            "electric", "paint", "openings", "projects", "furniture", "plumbing",
         };
 
         /// <summary>Index of a tool in the registry, or -1 — for Editor-side wiring.</summary>
@@ -219,7 +220,7 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (the radial's fixed slot table above maps tools to compass positions).
-            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture, plumbing };
 
             for (int i = 0; i < _tools.Length && i < RegistryIds.Length; i++)
                 if (_tools[i] != null && _tools[i].Id != RegistryIds[i])
@@ -948,6 +949,7 @@ namespace RoomPlanner.Tools
             "openings" => "Trigger: place · B: delete",
             "blueprint" => "Trigger: calibrate point",
             "electric" => "Trigger: place / route · B: finish",
+            "plumbing" => "Trigger: place / pipe point · B: finish",
             "paint" => "Trigger: apply finish",
             "furniture" => "Trigger: place / drag · stick: rotate",
             _ => "Trigger: use tool · B: back",

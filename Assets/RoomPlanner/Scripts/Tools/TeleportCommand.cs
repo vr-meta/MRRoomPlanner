@@ -25,6 +25,7 @@ namespace RoomPlanner.Tools
         private readonly List<RoomPlanner.Measure.Measurement> _measurements;
         private readonly List<RoomPlanner.Furniture.FurnitureItemView> _furniture;
         private readonly Vector3 _delta;
+        private readonly List<PlumbingObject> _plumbing = new();
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
             List<Stair> stairs = null, List<RoomPlanner.Import.MepView> mep = null,
@@ -33,6 +34,8 @@ namespace RoomPlanner.Tools
             List<RoomPlanner.Measure.Measurement> measurements = null,
             List<RoomPlanner.Furniture.FurnitureItemView> furniture = null)
         {
+            foreach (var p in Object.FindObjectsByType<PlumbingObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (p.GetComponent<RoomPlanner.Editing.Selectable>() != null) _plumbing.Add(p);
             _furniture = furniture;
             _walls = walls;
             _floors = floors;
@@ -86,6 +89,12 @@ namespace RoomPlanner.Tools
             if (_furniture != null)
                 foreach (var f in _furniture)
                     if (f != null) f.MoveBy(d);
+            foreach (var p in _plumbing)
+                if (p != null)
+                {
+                    p.MoveBy(d);
+                    if (p.Fixture != null) p.Fixture.BaseLevel += d.y;
+                }
         }
 
         /// <summary>Every measurement, hidden ones included — same rule as slabs.</summary>

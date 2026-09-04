@@ -310,6 +310,7 @@ namespace RoomPlanner.Import
                 var sel = view.GetComponent<Selectable>();
                 _created.Add((sel, segments[i].storey));
                 var src = building.Walls[segments[i].wallIndex];
+                MountIdentity.Restore(view.gameObject, src.MountKey);
                 if (!ApplyWallFinish(sel, src.Finish, src.FinishB) && src.HasPaint && sel != null)
                     sel.SetPaint(src.PaintColor);
             }
@@ -324,6 +325,7 @@ namespace RoomPlanner.Import
                 foreach (var hole in slab.Holes)
                     if (f.AddHole(hole)) holeCount++;          // refusal (outside/crossed) is not fatal
                 var slabSel = f.GetComponent<Selectable>();
+                MountIdentity.Restore(f.gameObject, slab.MountKey);
                 if (!ApplyFinish(slabSel, slab.Finish) && slab.HasPaint && slabSel != null)
                     slabSel.SetPaint(slab.PaintColor);
                 _created.Add((slabSel, slab.StoreyIndex));
@@ -851,6 +853,7 @@ namespace RoomPlanner.Import
                 if (m != null) Destroy(m.gameObject);
             ClearElectrical();
             ClearFurniture();
+            ClearPlumbing();
             _created.Clear();
             _importedSegments.Clear();
             _building = null;
@@ -880,6 +883,17 @@ namespace RoomPlanner.Import
             foreach (var item in new List<ISelectable>(sceneModel.Items))
                 if (item is Selectable s && s.IsAlive && s.Kind == SelectableKind.Furniture)
                     Destroy(s.gameObject);
+        }
+
+        private void ClearPlumbing()
+        {
+            if (sceneModel == null) return;
+            foreach (var item in new List<ISelectable>(sceneModel.Items))
+                if (item is Selectable s && s.IsAlive && s.Kind == SelectableKind.Plumbing)
+                {
+                    sceneModel.Unregister(s);
+                    Destroy(s.gameObject);
+                }
         }
 
         private List<ISelectable> CollectSelectables()

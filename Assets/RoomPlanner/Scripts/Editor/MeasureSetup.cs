@@ -32,6 +32,7 @@ namespace RoomPlanner.EditorTools
             SetupBlueprintTool.Build(ctx);
             SetupImportTool.Build(ctx);
             SetupElectricTool.Build(ctx);
+            SetupPlumbingTool.Build(ctx);
             SetupPaintTool.Build(ctx);
             SetupOpeningsTool.Build(ctx);   // after SetupWallTool: needs the graph renderer
             SetupProjectsTool.Build(ctx);   // after SetupImportTool: needs import + autosave

@@ -79,11 +79,11 @@ namespace RoomPlanner.Tests.Play
             CollectionAssert.AreEqual(new[] { "Outlet", "Switch", "Wire", "Box", "Panel" }, schema.Tabs);
 
             Assert.AreEqual(0, schema.ActiveTab());
-            CollectionAssert.AreEqual(new[] { "posts", "oh", "ofinish" },
+            CollectionAssert.AreEqual(new[] { "posts", "oh", "ofinish", "mount", "edge", "gap", "placement" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
             schema.SelectTab(1);
-            CollectionAssert.AreEqual(new[] { "keys", "sh", "sfinish" },
+            CollectionAssert.AreEqual(new[] { "keys", "sh", "sfinish", "mount", "edge", "gap", "placement" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
 
             schema.SelectTab(2);
@@ -94,13 +94,13 @@ namespace RoomPlanner.Tests.Play
                 "cable options are all visible (design/20 §2.3)");
 
             schema.SelectTab(3);
-            CollectionAssert.AreEqual(new[] { "jmount", "jfinish" },
+            CollectionAssert.AreEqual(new[] { "jmount", "jfinish", "placement" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
             Assert.AreEqual(SettingKind.Readout, schema.ActivePage().Fields[0].Kind,
                 "the junction box has nothing to configure — just the mount hint");
 
             schema.SelectTab(4);
-            CollectionAssert.AreEqual(new[] { "res", "pfinish", "popen" },
+            CollectionAssert.AreEqual(new[] { "res", "pfinish", "popen", "ph", "mount", "edge", "gap", "placement" },
                 schema.ActivePage().Fields.Select(f => f.Id).ToArray());
         }
 
@@ -132,7 +132,7 @@ namespace RoomPlanner.Tests.Play
             Assert.AreEqual("Junction box · 2 wires", box.GetComponent<Selectable>().Describe());
 
             var rows = box.GetComponent<ElectricFixtureParameters>().GetSettings();
-            var wiresRow = rows.Fields.Single(f => f.Id == "fjwires");
+            var wiresRow = rows.ActivePage().Fields.Single(f => f.Id == "fjwires");
             Assert.AreEqual("2", wiresRow.Value());
         }
 
@@ -352,9 +352,9 @@ namespace RoomPlanner.Tests.Play
             var route = MakeRoute(CableType.C3x25, new Vector3(0f, 2.3f, 0f), new Vector3(2f, 2.3f, 0f));
 
             CollectionAssert.AreEqual(new[] { "fposts", "fh", "ffinish" },
-                outlet.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
-            CollectionAssert.AreEqual(new[] { "fres", "ffinish", "fopen" },
-                panel.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
+                outlet.GetComponent<Selectable>().GetSettings().ActivePage().Fields.Select(f => f.Id).ToArray());
+            CollectionAssert.AreEqual(new[] { "fres", "ffinish", "fopen", "fh" },
+                panel.GetComponent<Selectable>().GetSettings().ActivePage().Fields.Select(f => f.Id).ToArray());
             CollectionAssert.AreEqual(new[] { "rcable" },
                 route.GetComponent<Selectable>().GetSettings().Fields.Select(f => f.Id).ToArray());
         }

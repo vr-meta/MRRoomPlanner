@@ -46,6 +46,7 @@ namespace RoomPlanner.Editing
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
         private RoomPlanner.Import.MepView _mep;
+        private RoomPlanner.Tools.PlumbingObject _plumbing;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -93,10 +94,12 @@ namespace RoomPlanner.Editing
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
             _mep = GetComponent<RoomPlanner.Import.MepView>();
+            _plumbing = GetComponent<RoomPlanner.Tools.PlumbingObject>();
             // Every material slot of a baked IFC product is a physical part of the same
             // paintable object. Do not rely on one specific importer call to opt it in.
             if (_mep != null) PaintAllSubmeshes = true;
-            if (_furniture != null) _kind = SelectableKind.Furniture;
+            if (_plumbing != null) _kind = SelectableKind.Plumbing;
+            else if (_furniture != null) _kind = SelectableKind.Furniture;
             // baked IFC elements: their own kind since issue #135, so they can be picked,
             // deleted and re-dressed instead of silently reading as «Measurement»
             else if (_mep != null) _kind = SelectableKind.Mep;
@@ -436,7 +439,8 @@ namespace RoomPlanner.Editing
         {
             Resolve();
             if (_leafView != null) return;   // doors move with the Openings tool, not Select
-            if (_furniture != null) _furniture.MoveBy(delta);
+            if (_plumbing != null) _plumbing.MoveBy(delta);
+            else if (_furniture != null) _furniture.MoveBy(delta);
             else if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
@@ -529,6 +533,8 @@ namespace RoomPlanner.Editing
 
         public string Describe()
         {
+            Resolve();
+            if (_plumbing != null) return _plumbing.Describe();
             Resolve();
             switch (_kind)
             {

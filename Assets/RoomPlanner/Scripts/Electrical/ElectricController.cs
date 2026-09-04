@@ -44,6 +44,14 @@ namespace RoomPlanner.Electrical
         private int _reserve = ElectricalDefaults.DefaultReservePercent;
         private bool _blackVariant;
         private bool _panelOpen;
+        private float _panelHeight = ElectricalDefaults.PanelHeight;
+        private int _edgeMode;
+        private float _edgeGap = 0.15f;
+        private readonly ElectricPlacement _placement = new();
+        private GameObject _hitObject;
+        private string _placementStatus = "Aim at a wall";
+        private int _displayHeight = int.MinValue, _displayGap = int.MinValue;
+        private string _dimensionText;
 
         private static readonly Color[] FixtureVariants =
         {
@@ -122,12 +130,14 @@ namespace RoomPlanner.Electrical
         {
             point = default; normal = default; hitFixture = null;
 
-            bool haveScan = raycaster.TryRaycast(ray, out Vector3 sp, out Vector3 sn, out _);
+            bool haveScan = raycaster.TryRaycast(ray, out Vector3 sp, out Vector3 sn, out GameObject scanObject);
+            _hitObject = null;
             float scanDist = haveScan ? Vector3.Distance(ray.origin, sp) : float.MaxValue;
 
             float ownDist = float.MaxValue;
             Vector3 op = default, on = default;
             ElectricFixture of = null;
+            GameObject ownObject = null;
             int n = Physics.RaycastNonAlloc(ray, _ownHits, 10f, 1 << SelectableLayer, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < n; i++)
             {
@@ -142,12 +152,12 @@ namespace RoomPlanner.Electrical
                 if (sel.Kind == SelectableKind.Wire) continue;             // wires are not a surface
                 var fx = sel.Fixture;
                 if (fx != null && _ghost != null && fx == _ghost) continue; // never hit our own preview
-                ownDist = h.distance; op = h.point; on = h.normal; of = fx;
+                ownDist = h.distance; op = h.point; on = h.normal; of = fx; ownObject = go;
             }
 
             if (!haveScan && ownDist == float.MaxValue) return false;
-            if (ownDist < scanDist) { point = op; normal = on; hitFixture = of; }
-            else { point = sp; normal = sn; }
+            if (ownDist < scanDist) { point = op; normal = on; hitFixture = of; _hitObject = ownObject; }
+            else { point = sp; normal = sn; _hitObject = scanObject; }
             return true;
         }
 
@@ -162,7 +172,7 @@ namespace RoomPlanner.Electrical
         {
             SubMode.Outlet => _outletHeight,
             SubMode.Switch => _switchHeight,
-            _ => ElectricalDefaults.PanelHeight,
+            _ => _panelHeight,
         };
 
         private FixtureKind ModeKind() => _mode switch
@@ -179,12 +189,15 @@ namespace RoomPlanner.Electrical
 
             // junction boxes (v2) mount on walls AND ceilings; everything else is wall-only
             bool junction = _mode == SubMode.Junction;
-            bool valid = hasHit && (IsWall(normal) || (junction && IsCeiling(normal)));
+            bool valid = hasHit && _placement.Resolve(_hitObject, point, normal)
+                && (_placement.Surface.Kind == MountSurfaceKind.Wall
+                    || (junction && _placement.Surface.Kind == MountSurfaceKind.Ceiling));
             if (!valid)
             {
                 // no air fixtures, ever: a miss shows no ghost and a click places nothing
                 if (reticle != null) reticle.gameObject.SetActive(false);
                 if (_ghost != null) _ghost.gameObject.SetActive(false);
+                _placementStatus = hasHit ? "Wrong surface" : "Aim at a wall";
                 if (input.ConfirmPressed()) input.Pulse(0.2f, 0.01f);   // refusal tick
                 if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
                 return;
@@ -194,7 +207,12 @@ namespace RoomPlanner.Electrical
             // must not decide mounting heights; grip frees the vertical for odd cases.
             // The junction box has no preset: it sits wherever the run needs it.
             Vector3 place = point;
-            if (!junction && !input.SnapHeld()) place.y = Level() + PresetHeight();
+            float baseLevel = _hitObject != null && _hitObject.GetComponentInParent<RoomPlanner.Walls.Wall>() != null
+                ? _placement.Surface.BaseLevel : Level();
+            if (!junction && !input.SnapHeld()) place.y = baseLevel + PresetHeight();
+            if (_edgeMode != 0 && _placement.Surface.Kind == MountSurfaceKind.Wall)
+                place = ServicePlacement.WithEdgeGap(_placement.Surface, place,
+                    ElectricPlacement.Size(ModeKind(), _posts).x, _edgeGap, _edgeMode == 2);
 
             Quaternion rot;
             if (IsWall(normal))
@@ -215,11 +233,16 @@ namespace RoomPlanner.Electrical
 
             if (reticle != null) { reticle.gameObject.SetActive(true); reticle.position = place; }
             UpdateGhost(place, rot);
+            var failure = _placement.Validate(_hitObject, place, rot, ModeKind(), _posts, sceneModel);
+            _placementStatus = ServicePlacement.Describe(failure);
+            if (_mode == SubMode.Panel && FindPanel() != null) _placementStatus = "Panel already exists";
+            UpdatePlacementDimensions(place, baseLevel, failure);
 
             if (input.ConfirmPressed() && Time.time >= _nextPlaceAllowed)
             {
                 _nextPlaceAllowed = Time.time + ElectricalDefaults.PlaceDebounceSeconds;
-                TryPlaceFixture(place, rot);
+                if (failure == PlacementFailure.None) TryPlaceFixture(place, rot);
+                else input.Pulse(0.2f, 0.01f);
             }
             if (input.ClearPressed() && manager != null) manager.ActivateTool("select");
         }
@@ -249,6 +272,8 @@ namespace RoomPlanner.Electrical
         private void TryPlaceFixture(Vector3 place, Quaternion rot)
         {
             if (fixturePrefab == null || sceneModel == null) return;
+            if (_placement.Validate(_hitObject, place, rot, ModeKind(), _posts, sceneModel) != PlacementFailure.None)
+                return;
 
             if (_mode == SubMode.Panel)
             {
@@ -269,41 +294,39 @@ namespace RoomPlanner.Electrical
                     Destroy(hiddenPanel.gameObject);
                 }
             }
-            if (OverlapsExistingFixture(place)) { input.Pulse(0.2f, 0.01f); return; }
-
             var fx = Instantiate(fixturePrefab, transform);
             if (!fx.gameObject.activeSelf) fx.gameObject.SetActive(true);
             fx.Build(ModeKind(), _posts, _keys, _blackVariant, _panelOpen);
             fx.transform.SetPositionAndRotation(place, rot);
-            fx.BaseLevel = Level();   // heights stay storey-relative on upper floors
+            fx.BaseLevel = _hitObject.GetComponentInParent<RoomPlanner.Walls.Wall>() != null
+                ? _placement.Surface.BaseLevel : Level();
+            fx.MountHost = _hitObject;
+            fx.MountKey = MountIdentity.GetOrCreate(_hitObject);
             if (_mode == SubMode.Panel) fx.ReservePercent = _reserve;
             sceneModel.Register(fx.GetComponent<Selectable>());
+            fx.gameObject.AddComponent<MountedServiceFollower>().Initialize();
             input.Pulse(0.6f, 0.02f);
         }
 
-        private bool OverlapsExistingFixture(Vector3 place)
+        private void UpdatePlacementDimensions(Vector3 place, float baseLevel, PlacementFailure failure)
         {
-            if (sceneModel == null) return false;
-            var items = sceneModel.Items;
-            float newHalf = HalfWidth(ModeKind(), _posts);
-            for (int i = 0; i < items.Count; i++)
+            var visual = ReticleVisual.For(reticle);
+            if (visual == null) return;
+            if (failure != PlacementFailure.None)
             {
-                var item = items[i];
-                if (item == null || !item.IsAlive || item.IsHidden) continue;
-                if (item is not Selectable s || s.Fixture == null) continue;
-                float minGap = newHalf + s.Fixture.BlockWidth * 0.5f + ElectricalDefaults.FixtureClearance;
-                if (Vector3.Distance(s.Fixture.transform.position, place) < minGap) return true;
+                visual.SetDimension(_placementStatus);
+                return;
             }
-            return false;
+            int h = Mathf.RoundToInt((place.y - baseLevel) * 100f);
+            int gap = Mathf.RoundToInt(ServicePlacement.EdgeGap(_placement.Surface, place,
+                ElectricPlacement.Size(ModeKind(), _posts).x, _edgeMode == 2) * 100f);
+            if (_displayHeight != h || _displayGap != gap || _dimensionText == null)
+            {
+                _displayHeight = h; _displayGap = gap;
+                _dimensionText = $"Center {h} cm · Edge {gap} cm";
+            }
+            visual.SetDimension(_dimensionText);
         }
-
-        private static float HalfWidth(FixtureKind kind, int posts) => kind switch
-        {
-            FixtureKind.Outlet => posts * ElectricalDefaults.PostModule * 0.5f,
-            FixtureKind.Switch => ElectricalDefaults.PostModule * 0.5f,
-            FixtureKind.Junction => ElectricalDefaults.JunctionBoxSize * 0.5f,
-            _ => ElectricalDefaults.PanelBoxWidth * 0.5f,
-        };
 
         private ElectricFixture FindPanel()
         {
@@ -354,10 +377,16 @@ namespace RoomPlanner.Electrical
             fx.Build((FixtureKind)f.Kind, f.Posts, f.Keys, f.Black, f.PanelOpen);
             fx.transform.SetPositionAndRotation(f.Position, f.Rotation);
             fx.BaseLevel = f.BaseLevel;
+            fx.MountKey = f.MountKey;
+            fx.MountHost = MountIdentity.Find(f.MountKey);
+            fx.ShowDimensions = f.ShowDimensions;
+            if (f.ShowDimensions)
+                fx.gameObject.AddComponent<ServiceDimensionDisplay>().Material = fx.GetComponent<MeshRenderer>().sharedMaterial;
             if (f.Reserve >= 0) fx.ReservePercent = f.Reserve;
             var sel = fx.GetComponent<Selectable>();
             if (sel != null && !string.IsNullOrEmpty(f.Id)) sel.Id = f.Id;
             model.Register(sel);
+            fx.gameObject.AddComponent<MountedServiceFollower>().Initialize();
             return fx;
         }
 
@@ -732,6 +761,13 @@ namespace RoomPlanner.Electrical
                     () => _blackVariant ? 1 : 0, i => _blackVariant = i == 1)
                 .Toggle("popen", "Door open", () => _panelOpen, v => _panelOpen = v);
 
+            panel.Numeric("ph", "Center height", 0.1f, 5f, () => _panelHeight,
+                (_, v) => _panelHeight = v, () => $"{_panelHeight * 100f:0} cm", displayScale: 100f);
+            AddPlacementRows(outlet);
+            AddPlacementRows(sw);
+            AddPlacementRows(panel);
+            box.Readout("placement", "Placement", () => _placementStatus);
+
             return SettingsSchema.Tabbed(
                 new[] { "Outlet", "Switch", "Wire", "Box", "Panel" },
                 () => (int)_mode, SetMode, outlet, sw, wire, box, panel);
@@ -741,6 +777,17 @@ namespace RoomPlanner.Electrical
         {
             FinishOrCancelRoute();               // switching modes never eats a drawn run
             _mode = (SubMode)Mathf.Clamp(mode, 0, 4);
+            _dimensionText = null;
+        }
+
+        private void AddPlacementRows(SettingsSchema schema)
+        {
+            schema.Header("mount", "Placement")
+                .Segmented("edge", "Measure from", new[] { "Ray", "Start", "End" },
+                () => _edgeMode, i => { _edgeMode = i; _dimensionText = null; })
+                .Numeric("gap", "Edge gap", 0f, 100f, () => _edgeGap,
+                    (_, v) => _edgeGap = v, () => $"{_edgeGap * 100f:0} cm", displayScale: 100f)
+                .Readout("placement", "Placement", () => _placementStatus);
         }
 
         private static float ClampHeight(float value, float min) =>

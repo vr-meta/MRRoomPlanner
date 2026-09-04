@@ -66,7 +66,7 @@ namespace RoomPlanner.Core.Furniture
         }
 
         /// <summary>Axis-aligned box, outward winding, flat normals per face.</summary>
-        private static void AddBox(List<Vector3> v, List<int> t, List<Vector3> n,
+        public static void AddBox(List<Vector3> v, List<int> t, List<Vector3> n,
             Vector3 c, Vector3 e)
         {
             // face order: +X, -X, +Y, -Y, +Z, -Z

@@ -59,6 +59,12 @@ namespace RoomPlanner.Electrical
         /// relative to it — display and clamps must survive non-zero storeys.</summary>
         public float BaseLevel { get; set; }
 
+        /// <summary>Live placement support. Legacy/imported fixtures without a known
+        /// support remain editable; persistent surface identities are a separate migration.</summary>
+        public GameObject MountHost { get; set; }
+        public string MountKey { get; set; }
+        public bool ShowDimensions { get; set; }
+
         /// <summary>Mounting height above the storey level, meters.</summary>
         public float HeightAboveLevel => transform.position.y - BaseLevel;
 

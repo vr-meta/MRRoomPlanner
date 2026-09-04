@@ -227,6 +227,9 @@ namespace RoomPlanner.Editing
                             _cursorValid = true;
                         }
                         Vector3 delta = cur - _lastCursor; delta.y = 0f;
+                        var mounted = _dragging.Transform.GetComponent<RoomPlanner.Electrical.ElectricFixture>();
+                        if (mounted != null && mounted.MountHost != null)
+                            delta = Vector3.ProjectOnPlane(delta, mounted.transform.forward);
                         if (delta.sqrMagnitude > 0f)
                         {
                             // Cheap preview: shift the transform only. The parametric geometry
@@ -500,6 +503,14 @@ namespace RoomPlanner.Editing
             bool far = total.sqrMagnitude > 0.0004f;   // ≤2 cm = accidental jiggle → revert
             if (record && far)
             {
+                var plumbing = moved.Transform.GetComponent<RoomPlanner.Tools.PlumbingObject>();
+                if (plumbing != null && !plumbing.CanMove(total)) return;
+                var fixtureSettings = moved.Transform.GetComponent<RoomPlanner.Electrical.ElectricFixtureParameters>();
+                if (fixtureSettings != null)
+                {
+                    var fixture = moved.Transform.GetComponent<RoomPlanner.Electrical.ElectricFixture>();
+                    if (fixture != null && !fixtureSettings.Validate(moved.Transform.position + total, fixture.Posts)) return;
+                }
                 moved.MoveBy(total);
                 sceneModel.History.Record(new MoveCommand(moved, total));
             }

@@ -12,7 +12,7 @@
 | 04 | [surfaces-materials](04-surfaces-materials.md) | Отделка: метрические UV, зоны 🔜 |
 | 05 | [ai-placement](05-ai-placement.md) | AI-расстановка мебели (Claude) 🧭 |
 | 06 | [project-format](06-project-format.md) | Формат проекта (JSON + glTF) 🧭 |
-| 07 | [mep-layers](07-mep-layers.md) | Слои + инженерные сети (электрика/отопление/сантехника) 🧭 |
+| 07 | [mep-layers](07-mep-layers.md) | **Размещение электрики и сантехники**: базовые опоры, габариты, порты, трубы/уклон, Undo, v6 в коде; расширенные связи/размеры 🔜 |
 | 08 | [interop](08-interop.md) | Импорт/экспорт: **IFC**, DWG, glTF 🧭 |
 | 09 | [project-structure](09-project-structure.md) | **Корневой:** Дом→Этажи→Комнаты, захват и сборка, Ingest 🔜 |
 | 10 | [controls](10-controls.md) | Карта кнопок (раскладка ввода) ✅ |
@@ -45,7 +45,7 @@
 5. **Blueprint** — подложка чертежа + калибровка
 6. **AI Placement** — расстановка мебели (Claude) + glTF-каталог
 7. **Project I/O** — сохранение/загрузка + экспорт glTF
-8. **MEP + слои** 🧭 — слои + общие примитивы (Fixture / RouteSpline / смета): электрика → отопление → сантехника
+8. **MEP + слои** 🔜 — базовая сантехника/трубы и монтажные размеры в коде; далее Rehost, связи и слои; отопление позже
 9. **Interop** 🧭 — импорт/экспорт IFC (round-trip с Revit/ArchiCAD), DWG-подложка
 
 Верхнеуровневая карта — в [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md).

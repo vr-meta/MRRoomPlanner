@@ -38,6 +38,7 @@ namespace RoomPlanner.Import
                     var sel = view != null ? view.GetComponent<Editing.Selectable>() : null;
                     var w = new ProjectWall
                     {
+                        MountKey = view != null ? MountIdentity.Existing(view.gameObject) : null,
                         NodeA = nodeIndex[s.A],
                         NodeB = nodeIndex[s.B],
                         Thickness = s.Thickness,
@@ -75,6 +76,7 @@ namespace RoomPlanner.Import
                 var fsel = f.GetComponent<Editing.Selectable>();
                 var pf = new ProjectFloor
                 {
+                    MountKey = MountIdentity.Existing(f.gameObject),
                     Level = f.Level,
                     Thickness = f.Thickness,
                     Outline = new List<Vector3>(f.Outline),
@@ -150,10 +152,20 @@ namespace RoomPlanner.Import
                 foreach (var item in model.Items)
                 {
                     if (item is not Editing.Selectable s || !s.IsAlive || s.IsHidden) continue;
-                    if (s.Fixture != null)
+                    if (s.Kind == Editing.SelectableKind.Plumbing)
+                    {
+                        var plumbing = s.GetComponent<PlumbingObject>();
+                        if (plumbing == null) continue;
+                        if (plumbing.IsPipe)
+                            data.PipeRoutes.Add(JsonUtility.FromJson<PipeRouteData>(JsonUtility.ToJson(plumbing.Pipe)));
+                        else
+                            data.PlumbingFixtures.Add(JsonUtility.FromJson<PlumbingFixtureData>(JsonUtility.ToJson(plumbing.Fixture)));
+                    }
+                    else if (s.Fixture != null)
                     {
                         data.Fixtures.Add(new ProjectFixture
                         {
+                            MountKey = s.Fixture.MountKey,
                             Id = s.Id,
                             Kind = (int)s.Fixture.Kind,
                             Posts = s.Fixture.Posts,
@@ -161,6 +173,7 @@ namespace RoomPlanner.Import
                             Reserve = s.Fixture.ReservePercent,
                             Black = s.Fixture.BlackVariant,
                             PanelOpen = s.Fixture.PanelOpen,
+                            ShowDimensions = s.Fixture.ShowDimensions,
                             Position = s.Fixture.transform.position,
                             Rotation = s.Fixture.transform.rotation,
                             BaseLevel = s.Fixture.BaseLevel,
@@ -225,6 +238,7 @@ namespace RoomPlanner.Import
             RestoreElectrical(data);
             RestoreMeasurements(data);
             RestoreFurniture(data);
+            RestorePlumbing(data);
             if (blueprint != null)
                 blueprint.SetPlacement(data.PlanScale, data.PlanRotationDeg,
                     data.PlanOffsetX, data.PlanOffsetZ);
@@ -246,6 +260,16 @@ namespace RoomPlanner.Import
             }
             foreach (var f in data.Fixtures) electric.RestoreFixture(f);
             foreach (var w in data.Wires) electric.RestoreWire(w);
+        }
+
+        public static void RestorePlumbing(ProjectData data)
+        {
+            var tool = Object.FindFirstObjectByType<PlumbingController>();
+            if (tool == null) return;
+            if (data.PlumbingFixtures != null)
+                foreach (var fixture in data.PlumbingFixtures) tool.RestoreFixture(fixture);
+            if (data.PipeRoutes != null)
+                foreach (var pipe in data.PipeRoutes) tool.RestorePipe(pipe);
         }
 
         /// <summary>
@@ -325,6 +349,7 @@ namespace RoomPlanner.Import
                     || w.NodeB < 0 || w.NodeB >= data.Nodes.Count) continue;
                 var iw = new ImportedWall
                 {
+                    MountKey = w.MountKey,
                     Thickness = w.Thickness,
                     Height = w.Height,
                     BaseHeight = w.BaseHeight,
@@ -361,6 +386,7 @@ namespace RoomPlanner.Import
             {
                 var slab = new ImportedSlab
                 {
+                    MountKey = f.MountKey,
                     Outline = new List<Vector3>(f.Outline),
                     Level = f.Level,
                     Thickness = f.Thickness,

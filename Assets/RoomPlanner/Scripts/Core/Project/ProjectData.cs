@@ -52,6 +52,7 @@ namespace RoomPlanner.Core.Project
     [Serializable]
     public class ProjectWall
     {
+        public string MountKey;
         public int NodeA, NodeB;              // indices into ProjectData.Nodes
         public float Thickness, Height, BaseHeight, SideSign;
         public int Offset, Join;
@@ -76,6 +77,7 @@ namespace RoomPlanner.Core.Project
     [Serializable]
     public class ProjectFloor
     {
+        public string MountKey;
         public List<Vector3> Outline = new();
         public List<ProjectRing> Holes = new();
         public float Level, Thickness;
@@ -139,6 +141,7 @@ namespace RoomPlanner.Core.Project
     [Serializable]
     public class ProjectFixture
     {
+        public string MountKey;
         /// <summary>SceneModel id, kept verbatim — wire ends re-attach by this id.</summary>
         public string Id;
         public int Kind;                  // FixtureKind as int
@@ -146,6 +149,7 @@ namespace RoomPlanner.Core.Project
         public int Reserve = -1;          // panel BOM reserve %; -1 = default
         public bool Black;                // white trade plastic / matte-black variant
         public bool PanelOpen;            // panel door pose; false for legacy files
+        public bool ShowDimensions;
         public Vector3 Position;
         public Quaternion Rotation = Quaternion.identity;
         public float BaseLevel;
@@ -195,7 +199,7 @@ namespace RoomPlanner.Core.Project
         /// (design/27); 5 = + per-material parts and box UVs of imported elements
         /// (design/29). Readers accept anything up to this and refuse newer — an
         /// older build silently dropping the furniture would be worse than refusing.</summary>
-        public const int CurrentVersion = 5;
+        public const int CurrentVersion = 6;
 
         public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();
@@ -203,6 +207,8 @@ namespace RoomPlanner.Core.Project
         public List<ProjectFloor> Floors = new();
         public List<ProjectStair> Stairs = new();
         public List<ProjectMep> Plumbing = new();
+        public List<PlumbingFixtureData> PlumbingFixtures = new();
+        public List<PipeRouteData> PipeRoutes = new();
         public List<ProjectFixture> Fixtures = new();
         public List<ProjectWire> Wires = new();
         public List<ProjectMeasure> Measures = new();
