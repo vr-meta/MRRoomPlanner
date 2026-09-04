@@ -284,6 +284,7 @@ namespace RoomPlanner.Import
                     if (iw.JoinOverride >= 0) seg.Join = (WallJoin)iw.JoinOverride;
                     if (iw.SideSignOverride != 0f) seg.SideSign = iw.SideSignOverride;
                     seg.BaseHeight = iw.BaseHeight;
+                    seg.IsColumn = iw.FromColumn;
                     touched.Add(a);
                     touched.Add(b);
                     segments.Add((seg, iw.StoreyIndex, wi));
@@ -361,37 +362,96 @@ namespace RoomPlanner.Import
             if (headroomFixes > 0)
                 Debug.Log($"[Import] stair headroom: widened/created {headroomFixes} slab opening(s)");
 
-            int mepCount = 0;
+            int mepCount = 0, submeshCount = 0, vertsBefore = 0, vertsAfter = 0;
             foreach (var mep in building.Plumbing)
             {
-                var go = new GameObject($"{mep.Category} {mep.Name}");
+                // selectable layer since issue #135 — a file always brings furniture the
+                // user does not want, and there was no way to delete it
+                var go = new GameObject($"{mep.Category} {mep.Name}") { layer = SelectableLayer };
                 go.transform.SetParent(transform, false);
                 go.transform.position = mep.Origin;
                 var mesh = new Mesh { name = "MepMesh" };
+                // Angle-based normals BEFORE anything else (issue #132): IFC extrusions
+                // share their ring vertices, so RecalculateNormals rounded off every
+                // 90° corner — square bars looked like cylinders. This splits sharp
+                // edges and keeps tessellated curves smooth; triangle order survives,
+                // so the parts' ranges still address their own triangles.
+                _smoothNormals.Clear();
+                vertsBefore += mep.Vertices.Count;
+                MeshSmoothing.Apply(mep.Vertices, mep.Triangles, _smoothNormals);
+                vertsAfter += mep.Vertices.Count;
+                // the split invalidates the saved UVs — reproject on the new vertices
+                BoxUv.Fill(mep.Vertices, mep.Triangles, mep.Uvs);
                 mesh.SetVertices(mep.Vertices);
-                mesh.SetTriangles(mep.Triangles, 0);
-                mesh.RecalculateNormals();
+                // One submesh per material of the product (design/29 §2): a sofa is
+                // leather + aluminium legs, a TV is plastic + glass.
+                var parts = mep.Parts != null && mep.Parts.Count > 0 ? mep.Parts : null;
+                if (parts == null)
+                {
+                    mesh.SetTriangles(mep.Triangles, 0);
+                    submeshCount++;
+                }
+                else
+                {
+                    mesh.subMeshCount = parts.Count;
+                    for (int i = 0; i < parts.Count; i++)
+                    {
+                        _partTris.Clear();
+                        int end = parts[i].TriStart + parts[i].TriCount;
+                        for (int t = parts[i].TriStart; t < end && t < mep.Triangles.Count; t++)
+                            _partTris.Add(mep.Triangles[t]);
+                        mesh.SetTriangles(_partTris, i);
+                    }
+                    submeshCount += parts.Count;
+                }
+                // metric box UVs (design/29 §4) — without them a texture finish on an
+                // imported element samples one texel and reads as flat colour
+                if (mep.Uvs != null && mep.Uvs.Count == mep.Vertices.Count)
+                    mesh.SetUVs(0, mep.Uvs);
+                if (_smoothNormals.Count == mep.Vertices.Count) mesh.SetNormals(_smoothNormals);
+                else mesh.RecalculateNormals();
                 mesh.RecalculateBounds();
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
-                var mat = MaterialFor(mep);
-                if (mat != null) mr.sharedMaterial = mat;
+                if (parts == null)
+                {
+                    var mat = MaterialFor(mep);
+                    if (mat != null) mr.sharedMaterial = mat;
+                }
+                else
+                {
+                    var mats = new Material[parts.Count];
+                    for (int i = 0; i < parts.Count; i++) mats[i] = MaterialForPart(mep, parts[i]);
+                    mr.sharedMaterials = mats;
+                }
                 var view = go.AddComponent<MepView>();
                 view.Category = mep.Category;
                 view.Transparency = mep.Transparency;
+                if (parts != null) view.Parts.AddRange(parts);   // survives save/load (v5)
                 view.StoreyIndex = mep.StoreyIndex;   // survives capture — storey filter after load (B6)
                 view.ApplyShadowMode();   // interior objects cast sun shadows (toggleable)
-                // Selectable only for the hide/show machinery (undo, storey filter) — no
-                // collider, so it is invisible to picking and never registered for it.
+                // Pickable since issue #135: one MeshCollider per element (cooked once at
+                // import), registered in the model — Select highlights it, B deletes it
+                // through DeleteCommand (undoable), and the paint tools can re-dress it.
+                go.AddComponent<MeshCollider>().sharedMesh = mesh;
                 var sel = go.AddComponent<Selectable>();
+                if (sceneModel != null) sceneModel.Register(sel);
+                // A multi-part element wears its materials, so user paint has to cover
+                // every submesh — otherwise painting a sofa would only hit its leather.
+                sel.PaintAllSubmeshes = parts != null;
                 // The file's own colour rides the paint machinery: one visual writer,
-                // undo-able, round-trips through the project format.
-                if (!ApplyFinish(sel, mep.Finish) && mep.HasColor)
+                // undo-able, round-trips through the project format. Parts carry their
+                // own look, so a whole-element colour is only for the single-part case.
+                if (!ApplyFinish(sel, mep.Finish) && mep.HasColor && parts == null)
                     sel.SetPaint(new Color(mep.Color.r, mep.Color.g, mep.Color.b,
                         1f - Mathf.Clamp01(mep.Transparency)));
                 _created.Add((sel, mep.StoreyIndex));
                 mepCount++;
             }
+            if (mepCount > 0)
+                Debug.Log($"[Import] baked elements: {mepCount}, submeshes: {submeshCount}, "
+                    + $"materials: {_partMaterials.Count}, "
+                    + $"vertices: {vertsBefore} → {vertsAfter} (sharp-edge split)");
 
             int outletCount = SpawnImportedOutlets(building);
 
@@ -530,6 +590,116 @@ namespace RoomPlanner.Import
             return _finishLibrary != null ? _finishLibrary.NormalOf(finish.TextureId) : null;
         }
 
+        /// <summary>Triangle buffer reused while slicing an element into submeshes.</summary>
+        private readonly List<int> _partTris = new();
+
+        /// <summary>Normals produced by the angle-based split (issue #132).</summary>
+        private readonly List<Vector3> _smoothNormals = new();
+
+        /// <summary>Materials built for imported parts, keyed by look (design/29 §2) —
+        /// ~40 for a flat, far below the SRP batcher's comfort zone. Owned here: runtime
+        /// materials are not freed by destroying the objects that use them (rule 1.5).</summary>
+        private readonly Dictionary<string, Material> _partMaterials = new();
+
+        /// <summary>
+        /// Material of ONE part: the file's own colour, plus the finish its material name
+        /// resolved to (design/29 §3). Transparent parts take the glass material even when
+        /// the element as a whole is opaque — that is the TV screen and the shower door.
+        /// </summary>
+        private Material MaterialForPart(ImportedMep mep, Core.Ifc.MepPart part)
+        {
+            const float glassThreshold = 0.3f;
+            bool glass = part.Transparency >= glassThreshold || Core.Ifc.IfcMaterialMap.IsGlass(part.Name);
+            var template = glass && mepGlassMat != null
+                ? mepGlassMat
+                : screenMat != null && LooksLikeScreen(mep.Name) ? screenMat : CategoryMaterial(mep.Category);
+            if (template == null) return null;
+            if (glass) return template;
+
+            // a loaded project already carries the finish its name resolved to at import
+            // time; a fresh import resolves it now
+            var finish = part.Finish.IsNone
+                ? FinishForName(part.Name, part.HasColor ? part.Color : Color.white)
+                : part.Finish;
+            part.Finish = finish;
+            if (finish.IsNone && !part.HasColor) return template;
+
+            string key = $"{template.GetInstanceID()}|{finish}|{(part.HasColor ? ColorUtility.ToHtmlStringRGB(part.Color) : "-")}";
+            if (_partMaterials.TryGetValue(key, out var cached) && cached != null) return cached;
+
+            var mat = new Material(template) { name = $"MepPart {part.Name}" };
+            if (finish.Kind == Core.FinishKind.Texture)
+            {
+                var tex = ResolveFinishTexture(finish);
+                if (tex != null)
+                {
+                    mat.SetTexture(BaseMapId, tex);
+                    mat.SetVector(BaseMapStId, finish.UvScaleOffset());
+                    mat.SetFloat(SmoothnessId, finish.Smoothness);
+                    var normal = ResolveFinishNormal(finish);
+                    if (normal != null)
+                    {
+                        mat.SetTexture(BumpMapId, normal);
+                        mat.SetFloat(HasBumpId, 1f);
+                    }
+                }
+                mat.SetColor(BaseColorId, finish.Color);
+            }
+            else if (part.HasColor)
+            {
+                mat.SetColor(BaseColorId, part.Color);
+            }
+            _partMaterials[key] = mat;
+            return mat;
+        }
+
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
+        private static readonly int HasBumpId = Shader.PropertyToID("_HasBump");
+
+        /// <summary>
+        /// Finish for an IFC material name (design/29 §3): the catalog supplies the tile
+        /// size and gloss, the table only says WHICH material this is. Tintable finishes
+        /// (white plastic, ceramic, painted panel) keep the file's colour as a tint —
+        /// «yellow plastic» really is white plastic × yellow; wood/leather/metal carry
+        /// their colour in the texture and are never tinted.
+        /// </summary>
+        private Core.SurfaceFinish FinishForName(string name, Color fileColor)
+        {
+            var match = Core.Ifc.IfcMaterialMap.Resolve(name);
+            if (match.IsNone) return Core.SurfaceFinish.None;
+            if (_finishLibrary == null) _finishLibrary = FindFirstObjectByType<FinishLibrary>();
+            if (_finishLibrary == null) return Core.SurfaceFinish.None;
+            if (!_finishLibrary.TryGet(match.FinishId, out _, out float tile, out float gloss))
+                return Core.SurfaceFinish.None;
+            return Core.SurfaceFinish.OfTexture(match.FinishId, tile,
+                tint: match.Tintable ? fileColor : Color.white, smoothness: gloss);
+        }
+
+        private Material CategoryMaterial(MepCategory category) => category switch
+        {
+            MepCategory.Furniture => furnitureMat != null ? furnitureMat : plumbingMat,
+            MepCategory.Proxy => proxyMat != null ? proxyMat : plumbingMat,
+            MepCategory.Railing => railingMat != null ? railingMat : plumbingMat,
+            _ => plumbingMat,
+        };
+
+        /// <summary>Free the per-part materials (rule 1.5) — done on re-import and on
+        /// teardown, since a material is not released by destroying its users.</summary>
+        private void ReleasePartMaterials()
+        {
+            foreach (var mat in _partMaterials.Values)
+            {
+                if (mat == null) continue;
+                if (Application.isPlaying) Destroy(mat);
+                else DestroyImmediate(mat);
+            }
+            _partMaterials.Clear();
+        }
+
         /// <summary>Material by category; strongly transparent surfaces (glass shower
         /// walls and the like) get the see-through material whatever the category.</summary>
         private Material MaterialFor(ImportedMep mep)
@@ -537,13 +707,7 @@ namespace RoomPlanner.Import
             const float glassThreshold = 0.3f;
             if (mep.Transparency >= glassThreshold && mepGlassMat != null) return mepGlassMat;
             if (screenMat != null && LooksLikeScreen(mep.Name)) return screenMat;
-            return mep.Category switch
-            {
-                MepCategory.Furniture => furnitureMat != null ? furnitureMat : plumbingMat,
-                MepCategory.Proxy => proxyMat != null ? proxyMat : plumbingMat,
-                MepCategory.Railing => railingMat != null ? railingMat : plumbingMat,
-                _ => plumbingMat,
-            };
+            return CategoryMaterial(mep.Category);
         }
 
         /// <summary>TVs and monitors read as wood/plastic under the category material
@@ -561,7 +725,7 @@ namespace RoomPlanner.Import
         /// The wall mesh does not cut them yet (Phase D panelisation, docs/design/03) — the
         /// data rides on the graph so they appear the moment that lands.
         /// </summary>
-        private static int AttachOpenings(ImportedBuilding building, List<List<WallSegment>> wallSegments)
+        private int AttachOpenings(ImportedBuilding building, List<List<WallSegment>> wallSegments)
         {
             int count = 0, nextId = 1;
             foreach (var op in building.Openings)
@@ -596,7 +760,15 @@ namespace RoomPlanner.Import
                     SwingDir = op.SwingDir,
                     HingeDir = op.HingeDir,
                     OpenFraction = Mathf.Clamp01(op.OpenFraction),
+                    // frame + leaf material (issue #133): a project file carries the
+                    // finish itself, a fresh IFC import resolves it from the name
+                    FrameFinish = op.FrameFinish.IsNone
+                        ? FinishForName(op.FrameMaterial, Color.white)
+                        : op.FrameFinish,
                 });
+                var added = host.Openings[host.Openings.Count - 1];
+                added.FrameTexture = ResolveFinishTexture(added.FrameFinish);
+                added.FrameNormal = ResolveFinishNormal(added.FrameFinish);
                 count++;
             }
             return count;
@@ -619,9 +791,12 @@ namespace RoomPlanner.Import
                 Destroy(sel.gameObject);
             }
             _created.Clear();
+            ReleasePartMaterials();
             // the old batch command would replay against destroyed objects — drop it
             if (sceneModel != null) sceneModel.History.PurgeWhere(c => c is ImportBatchCommand);
         }
+
+        private void OnDestroy() => ReleasePartMaterials();
 
         /// <summary>Full reset (the Projects tool's "New project" action, #58): clear the
         /// scene AND delete the unnamed autosave, or yesterday's building would resurrect

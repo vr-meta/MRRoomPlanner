@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEngine;
 using RoomPlanner.Core;
 using RoomPlanner.Tools;
+using RoomPlanner.Electrical;
 
 namespace RoomPlanner.EditorTools
 {
@@ -78,8 +79,41 @@ namespace RoomPlanner.EditorTools
             // outlets/switches = glossy trade plastic, wires = satin PVC sheath.
             ctx.WireMat = CreatePlainLitMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
             MakeGlossy(ctx.WireMat, 0.30f);
-            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", ElectricFixture.WhitePlastic);
             MakeGlossy(ctx.FixtureMat, 0.55f);
+            // real trade plastic instead of a flat tint (issue #134): the catalog's white
+            // plastic over the fixture's METRIC uvs, so the grain has a real-world scale
+            var plastic = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TextureDownloader.PathFor("Objects", "plastic-white"));
+            if (plastic != null)
+            {
+                ApplyTexture(ctx.FixtureMat, plastic);
+                // 0.3 m tile — the catalog value for plastic-white
+                var tiling = new Vector2(1f / 0.3f, 1f / 0.3f);
+                ctx.FixtureMat.SetTextureScale("_BaseMap", tiling);
+                ctx.FixtureMat.SetTextureScale("_MainTex", tiling);
+            }
+            ApplyNormalMap(ctx.FixtureMat,
+                CreateElectricalNormalTexture("Electric_PlasticNormal"), 0.22f, 12f);
+            // accents (issue #134): socket pins, screws, DIN rail, panel handle — dark
+            // metal on submesh 1, so paint on the plate never touches them
+            ctx.FixtureAccentMat = CreatePlainLitMat("Electric_Accent", ElectricFixture.DarkAccent);
+            MakeGlossy(ctx.FixtureAccentMat, 0.75f);
+            ctx.FixtureMetalMat = CreatePlainLitMat("Electric_Metal", ElectricFixture.BrushedMetal);
+            MakeGlossy(ctx.FixtureMetalMat, 0.38f);
+            if (ctx.FixtureMetalMat.HasProperty("_Metallic"))
+                ctx.FixtureMetalMat.SetFloat("_Metallic", 0.65f);
+            var metal = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TextureDownloader.PathFor("Objects", "metal-brushed"));
+            if (metal != null)
+            {
+                ApplyTexture(ctx.FixtureMetalMat, metal);
+                ctx.FixtureMetalMat.SetTextureScale("_BaseMap", Vector2.one * 20f);
+                ctx.FixtureMetalMat.SetTextureScale("_MainTex", Vector2.one * 20f);
+            }
+            var metalNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TextureDownloader.NormalPathFor("Objects", "metal-brushed"));
+            ApplyNormalMap(ctx.FixtureMetalMat, metalNormal, 0.35f, 20f);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiTokens.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiTokens.PanelRim);
@@ -296,6 +330,16 @@ namespace RoomPlanner.EditorTools
             mat.mainTextureScale = Vector2.one;   // scale lives in the metric UVs, not here
         }
 
+        private static void ApplyNormalMap(Material mat, Texture2D normal, float strength,
+            float repeatsPerMetre)
+        {
+            if (mat == null || normal == null || !mat.HasProperty("_BumpMap")) return;
+            mat.SetTexture("_BumpMap", normal);
+            mat.SetTextureScale("_BumpMap", Vector2.one * repeatsPerMetre);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", strength);
+            mat.EnableKeyword("_NORMALMAP");
+        }
+
         /// <summary>
         /// Seamless concrete: a few octaves of PERIODIC value noise plus fine speckle. Periodic
         /// means the lattice wraps, so the tile repeats without a visible seam — which matters
@@ -336,6 +380,39 @@ namespace RoomPlanner.EditorTools
             tex.SetPixels(px);
             tex.Apply();
 
+            AssetDatabase.CreateAsset(tex, path);
+            return tex;
+        }
+
+        /// <summary>Small deterministic tangent-space relief for moulded plastic.
+        /// Stored as an asset so Setup is reproducible without a binary texture.</summary>
+        private static Texture2D CreateElectricalNormalTexture(string name)
+        {
+            string path = $"{MatDir}/{name}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 32;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, true)
+            {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                anisoLevel = 4,
+                name = name,
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float nx = (Hash(x * 73856093 ^ y * 19349663) - 0.5f) * 0.055f;
+                float ny = (Hash(x * 83492791 ^ y * 297121507) - 0.5f) * 0.055f;
+                float nz = Mathf.Sqrt(Mathf.Max(0.001f, 1f - nx * nx - ny * ny));
+                float encodedX = nx * 0.5f + 0.5f;
+                pixels[y * size + x] = new Color(encodedX, ny * 0.5f + 0.5f,
+                    nz * 0.5f + 0.5f, encodedX);
+            }
+            tex.SetPixels(pixels);
+            tex.Apply();
             AssetDatabase.CreateAsset(tex, path);
             return tex;
         }

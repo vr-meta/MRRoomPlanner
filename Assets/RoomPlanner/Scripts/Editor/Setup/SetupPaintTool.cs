@@ -45,10 +45,10 @@ namespace RoomPlanner.EditorTools
             var tiles = new List<float>();
             var glosses = new List<float>();
             var cats = new List<string>();
-            var normals = new List<Texture2D>();   // null for the CC0 set (design/22)
+            var normals = new List<Texture2D>();   // relief where the set ships one (design/29 §5)
 
             int missing = 0;
-            foreach (var (cat, _, id, tile, gloss) in TextureDownloader.Curated)
+            foreach (var (cat, _, id, tile, gloss, bump) in TextureDownloader.Curated)
             {
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TextureDownloader.PathFor(cat, id));
                 if (tex == null) { missing++; continue; }
@@ -57,7 +57,9 @@ namespace RoomPlanner.EditorTools
                 tiles.Add(tile);
                 glosses.Add(gloss);
                 cats.Add(cat);
-                normals.Add(null);
+                normals.Add(bump
+                    ? AssetDatabase.LoadAssetAtPath<Texture2D>(TextureDownloader.NormalPathFor(cat, id))
+                    : null);
             }
             if (missing > 0)
                 Debug.LogWarning($"[Setup] FinishLibrary: {missing} texture(s) missing — " +
@@ -98,6 +100,16 @@ namespace RoomPlanner.EditorTools
             if (tileMissing > 0)
                 Debug.LogWarning($"[Setup] FinishLibrary: {tileMissing} ceramic bake(s) missing — " +
                     "run RoomPlanner → Bake Tiles, then SetupRig again");
+
+            // The IFC dressing table (design/29 §3) names finishes by id — a typo or a
+            // dropped catalog entry would show up on the headset as an undressed cabinet,
+            // so it is checked here, while the rig is being built.
+            var missingIds = new List<string>();
+            foreach (string id in RoomPlanner.Core.Ifc.IfcMaterialMap.AllFinishIds)
+                if (!ids.Contains(id) && !missingIds.Contains(id)) missingIds.Add(id);
+            if (missingIds.Count > 0)
+                Debug.LogError("[Setup] IfcMaterialMap points at finishes the catalog does not "
+                    + $"have: {string.Join(", ", missingIds)}");
 
             var so = new SerializedObject(lib);
             FillArray(so.FindProperty("ids"), ids.Count, (p, i) => p.stringValue = ids[i]);

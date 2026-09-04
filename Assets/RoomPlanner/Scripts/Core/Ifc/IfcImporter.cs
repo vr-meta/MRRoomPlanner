@@ -19,7 +19,9 @@ namespace RoomPlanner.Core.Ifc
             MapElementsToStoreys(ctx, b);
             MapLayerThickness(ctx);
             MapVoidsAndFills(ctx);
+            MapParametricOpeningParts(ctx);
             MapStyles(ctx);
+            MapMaterials(ctx);
             ImportWalls(ctx, b);
             ImportColumns(ctx, b);
             ImportSlabs(ctx, b);
@@ -61,7 +63,14 @@ namespace RoomPlanner.Core.Ifc
         {
             foreach (var (type, category) in BakedTypes)
             foreach (int id in c.F.OfType(type))
+            {
+                // A filled opening is rebuilt as one native frame/leaf or frame/glass
+                // assembly by Wall. Some exporters also expose its mullions and plates as
+                // independent products; baking those again creates the elaborate duplicate
+                // frames seen around imported bathroom windows (issue #120).
+                if (c.ParametricOpeningParts.Contains(id)) continue;
                 if (!BakeProduct(c, b, id, category)) b.SkippedMep++;
+            }
         }
 
         /// <summary>Bake one product's Body geometry as a mesh element. Also the visual
@@ -76,7 +85,8 @@ namespace RoomPlanner.Core.Ifc
 
             var verts = new List<Vector3>();
             var tris = new List<int>();
-            if (!BrepWorldMesh(c, a[6], place, verts, tris, out bool hasColor, out Color color,
+            var spans = new List<(int Start, int Count, StyleRec Style, bool Styled)>();
+            if (!BrepWorldMesh(c, a[6], place, verts, tris, spans, out bool hasColor, out Color color,
                     out float transparency) || verts.Count == 0)
                 return false;
 
@@ -103,7 +113,7 @@ namespace RoomPlanner.Core.Ifc
 
             for (int i = 0; i < verts.Count; i++) verts[i] -= origin;
 
-            b.Plumbing.Add(new ImportedMep
+            var mep = new ImportedMep
             {
                 Name = name,
                 Category = category,
@@ -114,9 +124,114 @@ namespace RoomPlanner.Core.Ifc
                 HasColor = hasColor,
                 Color = color,
                 Transparency = transparency,
-            });
+            };
+
+            // The product's material is the fallback name/colour for parts the geometry
+            // did not style — 152 of ~260 products in the reference export (design/29 §1.3).
+            bool hasMat = c.TryFirstMaterial(id, out int matId);
+            string matName = hasMat && c.MaterialName.TryGetValue(matId, out string mn) ? mn : null;
+            StyleRec matStyle = default;
+            bool matStyled = hasMat && c.StyleOfMaterial.TryGetValue(matId, out matStyle);
+
+            BuildParts(tris, spans, matName, matStyled, matStyle, mep.Parts);
+            if (!mep.HasColor && matStyled)
+            {
+                mep.HasColor = true;
+                mep.Color = matStyle.Color;
+                mep.Transparency = matStyle.Transparency;
+            }
+            BoxUv.Fill(verts, tris, mep.Uvs);
+
+            b.Plumbing.Add(mep);
             return true;
         }
+
+        /// <summary>
+        /// Group the emitted spans by style into contiguous parts, reordering
+        /// <paramref name="tris"/> so each part is a plain (start, count) range — the
+        /// project file then stores six fields per part instead of a second index list
+        /// (design/29 §2). Spans without a style of their own fall back to the product's
+        /// material; a product with a single style yields exactly one part, i.e. the
+        /// behaviour that existed before parts.
+        /// </summary>
+        private static void BuildParts(List<int> tris,
+            List<(int Start, int Count, StyleRec Style, bool Styled)> spans,
+            string materialName, bool materialStyled, StyleRec materialStyle,
+            List<MepPart> parts)
+        {
+            parts.Clear();
+            if (tris.Count == 0) return;
+
+            // key = style name (or "" for the material fallback); order of first appearance
+            var order = new List<string>();
+            var byKey = new Dictionary<string, MepPart>();
+            var indices = new Dictionary<string, List<int>>();
+
+            void Add(string key, MepPart part, int start, int count)
+            {
+                if (!byKey.ContainsKey(key))
+                {
+                    byKey[key] = part;
+                    indices[key] = new List<int>();
+                    order.Add(key);
+                }
+                var list = indices[key];
+                for (int i = 0; i < count; i++) list.Add(tris[start + i]);
+            }
+
+            int covered = 0;
+            foreach (var span in spans)
+            {
+                covered += span.Count;
+                var part = span.Styled
+                    ? new MepPart
+                    {
+                        Name = span.Style.Name ?? materialName,
+                        HasColor = true,
+                        Color = span.Style.Color,
+                        Transparency = span.Style.Transparency,
+                    }
+                    : new MepPart
+                    {
+                        Name = materialName,
+                        HasColor = materialStyled,
+                        Color = materialStyled ? materialStyle.Color : default,
+                        Transparency = materialStyled ? materialStyle.Transparency : 0f,
+                    };
+                Add(Key(part), part, span.Start, span.Count);
+            }
+
+            // triangles nobody claimed (a geometry kind that emits outside EmitItem)
+            if (covered < tris.Count)
+            {
+                var rest = new MepPart
+                {
+                    Name = materialName,
+                    HasColor = materialStyled,
+                    Color = materialStyled ? materialStyle.Color : default,
+                    Transparency = materialStyled ? materialStyle.Transparency : 0f,
+                };
+                Add(Key(rest), rest, covered, tris.Count - covered);
+            }
+
+            tris.Clear();
+            foreach (string key in order)
+            {
+                var part = byKey[key];
+                var list = indices[key];
+                part.TriStart = tris.Count;
+                part.TriCount = list.Count;
+                tris.AddRange(list);
+                parts.Add(part);
+            }
+        }
+
+        /// <summary>Identity of a part for merging: the style name when the file gives
+        /// one, otherwise the colour (Revit reuses unnamed styles per colour).</summary>
+        private static string Key(MepPart p) =>
+            !string.IsNullOrEmpty(p.Name)
+                ? p.Name
+                : (p.HasColor ? $"#{ColorUtility.ToHtmlStringRGB(p.Color)}/{p.Transparency:0.00}" : "");
 
         /// <summary>
         /// Triangulated FacetedBrep(s) of a Body representation (direct or one mapped-item
@@ -125,7 +240,7 @@ namespace RoomPlanner.Core.Ifc
         /// mapped item) supplies the element's colour and transparency.
         /// </summary>
         private static bool BrepWorldMesh(Ctx c, StepValue pdsRef, Matrix4x4 place,
-            List<Vector3> verts, List<int> tris,
+            List<Vector3> verts, List<int> tris, List<(int Start, int Count, StyleRec Style, bool Styled)> spans,
             out bool hasColor, out Color color, out float transparency)
         {
             hasColor = false; color = default; transparency = 0f;
@@ -280,23 +395,38 @@ namespace RoomPlanner.Core.Ifc
                 any = true;
             }
 
-            void EmitItem(StepValue itemRef, Matrix4x4 m)
+            // Each geometry item is one SPAN of triangles with one style — that is what
+            // turns a sofa into leather + aluminium legs instead of one leather blob
+            // (design/29 §2). A mapped item's own style is inherited by its contents.
+            void Span(int start, int itemId, bool hasInherited, StyleRec inherited)
             {
+                int count = tris.Count - start;
+                if (count <= 0) return;
+                if (c.StyleOfItem.TryGetValue(itemId, out var own))
+                    spans?.Add((start, count, own, true));
+                else
+                    spans?.Add((start, count, inherited, hasInherited));
+            }
+
+            void EmitItem(StepValue itemRef, Matrix4x4 m, bool hasInherited, StyleRec inherited)
+            {
+                int start = tris.Count;
                 switch (c.F.TypeOf(itemRef.Ref))
                 {
                     case "IFCFACETEDBREP":
                         EmitBrep(itemRef.Ref, m);
-                        TakeStyle(itemRef.Ref);
                         break;
                     case "IFCEXTRUDEDAREASOLID":
                         EmitExtruded(itemRef.Ref, m);
-                        TakeStyle(itemRef.Ref);
                         break;
                     case "IFCFACEBASEDSURFACEMODEL":
                         EmitSurfaceModel(itemRef.Ref, m);
-                        TakeStyle(itemRef.Ref);
                         break;
+                    default:
+                        return;
                 }
+                TakeStyle(itemRef.Ref);
+                Span(start, itemRef.Ref, hasInherited, inherited);
             }
 
             foreach (var it in items)
@@ -312,13 +442,14 @@ namespace RoomPlanner.Core.Ifc
                     var rep = c.F.Deref(map[1]);
                     if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
                     TakeStyle(it.Ref);
+                    bool mapped = c.StyleOfItem.TryGetValue(it.Ref, out var mappedStyle);
                     foreach (var inner in rep[3].Items)
                         if (inner.Kind == StepKind.Ref)
-                            EmitItem(inner, place * extra);
+                            EmitItem(inner, place * extra, mapped, mappedStyle);
                 }
                 else
                 {
-                    EmitItem(it, place);
+                    EmitItem(it, place, false, default);
                 }
             }
             hasColor = foundStyle;
@@ -495,49 +626,209 @@ namespace RoomPlanner.Core.Ifc
             public readonly Dictionary<int, float> LayerThickness = new();  // element id → summed layers (file units)
             public readonly Dictionary<int, List<int>> VoidsOfElement = new(); // element id → opening ids
             public readonly Dictionary<int, int> FillerOfOpening = new();   // opening id → door/window id
+            public readonly HashSet<int> ParametricOpeningParts = new(); // descendants replaced by native joinery
             public readonly Dictionary<int, int> TypeOfElement = new();     // element id → style/type record
-            public readonly Dictionary<int, (Color Color, float Transparency)> StyleOfItem = new();
+            public readonly Dictionary<int, StyleRec> StyleOfItem = new();  // geometry item id → style
+            public readonly Dictionary<int, StyleRec> StyleOfMaterial = new(); // IfcMaterial id → style
+            // element/type id → its IfcMaterials, in file order (Revit ships doors and
+            // windows as a LIST: wood + aluminium + painted metal + glass)
+            public readonly Dictionary<int, List<int>> MaterialsOfElement = new();
+            public readonly Dictionary<int, string> MaterialName = new();   // IfcMaterial id → name
+
+            /// <summary>First material of an element, the one baked parts fall back to.</summary>
+            public bool TryFirstMaterial(int element, out int material)
+            {
+                material = 0;
+                if (!MaterialsOfElement.TryGetValue(element, out var list) || list.Count == 0)
+                    return false;
+                material = list[0];
+                return true;
+            }
+
+            /// <summary>Names of an element's materials (empty when it has none).</summary>
+            public List<string> MaterialNamesOf(int element)
+            {
+                var names = new List<string>();
+                if (!MaterialsOfElement.TryGetValue(element, out var list)) return names;
+                foreach (int id in list)
+                    if (MaterialName.TryGetValue(id, out string n) && !string.IsNullOrEmpty(n))
+                        names.Add(n);
+                return names;
+            }
+        }
+
+        /// <summary>One IfcSurfaceStyle as we use it: the NAME (the only reliable signal
+        /// about what the thing is made of — design/29 §1), the colour and transparency.</summary>
+        private readonly struct StyleRec
+        {
+            public readonly string Name;
+            public readonly Color Color;
+            public readonly float Transparency;
+            public StyleRec(string name, Color color, float transparency)
+            {
+                Name = name; Color = color; Transparency = transparency;
+            }
         }
 
         /// <summary>
-        /// IFCSTYLEDITEM(Item, Styles, Name) → geometry-item id → surface colour (+
-        /// transparency). Chain: PresentationStyleAssignment → SurfaceStyle →
-        /// SurfaceStyleRendering/Shading → ColourRgb.
+        /// IFCSTYLEDITEM(Item, Styles, Name) → geometry-item id → surface style. Chain:
+        /// PresentationStyleAssignment → SurfaceStyle → SurfaceStyleRendering/Shading →
+        /// ColourRgb. Styled items with a null Item belong to a material definition
+        /// (see MapMaterials) and are read there.
         /// </summary>
         private static void MapStyles(Ctx c)
         {
             foreach (int id in c.F.OfType("IFCSTYLEDITEM"))
             {
                 var a = c.F.Args(id);
-                if (a == null || a.Count < 2 || a[0].Kind != StepKind.Ref || a[1].Kind != StepKind.List) continue;
-                foreach (var assignRef in a[1].Items)
+                if (a == null || a.Count < 2 || a[0].Kind != StepKind.Ref) continue;
+                if (TryReadStyle(c, id, out var rec)) c.StyleOfItem[a[0].Ref] = rec;
+            }
+        }
+
+        /// <summary>Reusable one-element list for the IFC4 «style attached directly»
+        /// branch — the parse is not a per-frame path, but the allocation is pointless.</summary>
+        private static readonly List<StepValue> OneRefBuffer = new() { null };
+
+        private static List<StepValue> OneRef(StepValue v)
+        {
+            OneRefBuffer[0] = v;
+            return OneRefBuffer;
+        }
+
+        /// <summary>Parse one IFCSTYLEDITEM into a style record; false when it carries no
+        /// surface style with a colour (curve/text styles do not).</summary>
+        private static bool TryReadStyle(Ctx c, int styledItemId, out StyleRec rec)
+        {
+            rec = default;
+            var a = c.F.Args(styledItemId);
+            if (a == null || a.Count < 2 || a[1].Kind != StepKind.List) return false;
+            foreach (var assignRef in a[1].Items)
+            {
+                if (assignRef.Kind != StepKind.Ref) continue;
+                // IFC4 attaches the style directly; IFC2X3 wraps it in an assignment
+                List<StepValue> styles;
+                if (c.F.TypeOf(assignRef.Ref) == "IFCPRESENTATIONSTYLEASSIGNMENT")
                 {
-                    var assign = c.F.Deref(assignRef);   // IFCPRESENTATIONSTYLEASSIGNMENT((styles))
+                    var assign = c.F.Deref(assignRef);   // ((styles))
                     if (assign == null || assign.Count < 1 || assign[0].Kind != StepKind.List) continue;
-                    foreach (var styleRef in assign[0].Items)
-                    {
-                        if (styleRef.Kind != StepKind.Ref || c.F.TypeOf(styleRef.Ref) != "IFCSURFACESTYLE") continue;
-                        var surf = c.F.Args(styleRef.Ref);   // (Name, Side, (renderings))
-                        if (surf == null || surf.Count < 3 || surf[2].Kind != StepKind.List) continue;
-                        foreach (var rendRef in surf[2].Items)
-                        {
-                            if (rendRef.Kind != StepKind.Ref) continue;
-                            string t = c.F.TypeOf(rendRef.Ref);
-                            if (t != "IFCSURFACESTYLERENDERING" && t != "IFCSURFACESTYLESHADING") continue;
-                            var rend = c.F.Args(rendRef.Ref);   // (SurfaceColour, Transparency?, …)
-                            if (rend == null || rend.Count < 1 || rend[0].Kind != StepKind.Ref) continue;
-                            var rgb = c.F.Args(rend[0].Ref);    // IFCCOLOURRGB(Name, R, G, B)
-                            if (rgb == null || rgb.Count < 4) continue;
-                            float tr = rend.Count > 1 && rend[1].Kind == StepKind.Number
-                                ? Mathf.Clamp01(rend[1].AsFloat) : 0f;
-                            c.StyleOfItem[a[0].Ref] =
-                                (new Color(rgb[1].AsFloat, rgb[2].AsFloat, rgb[3].AsFloat), tr);
-                            break;
-                        }
-                        if (c.StyleOfItem.ContainsKey(a[0].Ref)) break;
-                    }
-                    if (c.StyleOfItem.ContainsKey(a[0].Ref)) break;
+                    styles = assign[0].Items;
                 }
+                else styles = OneRef(assignRef);
+                if (styles == null) continue;
+                foreach (var styleRef in styles)
+                {
+                    if (styleRef.Kind != StepKind.Ref || c.F.TypeOf(styleRef.Ref) != "IFCSURFACESTYLE") continue;
+                    var surf = c.F.Args(styleRef.Ref);   // (Name, Side, (renderings))
+                    if (surf == null || surf.Count < 3 || surf[2].Kind != StepKind.List) continue;
+                    string name = surf[0].Kind == StepKind.Text ? surf[0].Text : null;
+                    foreach (var rendRef in surf[2].Items)
+                    {
+                        if (rendRef.Kind != StepKind.Ref) continue;
+                        string t = c.F.TypeOf(rendRef.Ref);
+                        if (t != "IFCSURFACESTYLERENDERING" && t != "IFCSURFACESTYLESHADING") continue;
+                        var rend = c.F.Args(rendRef.Ref);   // (SurfaceColour, Transparency?, …)
+                        if (rend == null || rend.Count < 1 || rend[0].Kind != StepKind.Ref) continue;
+                        var rgb = c.F.Args(rend[0].Ref);    // IFCCOLOURRGB(Name, R, G, B)
+                        if (rgb == null || rgb.Count < 4) continue;
+                        float tr = rend.Count > 1 && rend[1].Kind == StepKind.Number
+                            ? Mathf.Clamp01(rend[1].AsFloat) : 0f;
+                        rec = new StyleRec(name,
+                            new Color(rgb[1].AsFloat, rgb[2].AsFloat, rgb[3].AsFloat), tr);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Materials of products (design/29 §1.3): 152 of ~260 baked products in the
+        /// reference Revit export carry NO IfcStyledItem at all — their look lives in the
+        /// material, either as a name we can dress from the catalog or as a colour inside
+        /// IfcMaterialDefinitionRepresentation. Revit also assigns the material to the
+        /// TYPE more often than to the instance, so IfcRelDefinesByType is followed too.
+        /// </summary>
+        private static void MapMaterials(Ctx c)
+        {
+            foreach (int id in c.F.OfType("IFCMATERIAL"))
+            {
+                var a = c.F.Args(id);
+                if (a != null && a.Count > 0 && a[0].Kind == StepKind.Text)
+                    c.MaterialName[id] = a[0].Text;
+            }
+
+            // IFCMATERIALDEFINITIONREPRESENTATION(Name, Desc, Representations, Material)
+            foreach (int id in c.F.OfType("IFCMATERIALDEFINITIONREPRESENTATION"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 4 || a[2].Kind != StepKind.List
+                    || a[3].Kind != StepKind.Ref) continue;
+                foreach (var repRef in a[2].Items)
+                {
+                    var rep = c.F.Deref(repRef);    // IFCSTYLEDREPRESENTATION(…, items)
+                    if (rep == null || rep.Count < 4 || rep[3].Kind != StepKind.List) continue;
+                    foreach (var itemRef in rep[3].Items)
+                    {
+                        if (itemRef.Kind != StepKind.Ref) continue;
+                        if (c.F.TypeOf(itemRef.Ref) != "IFCSTYLEDITEM") continue;
+                        if (!TryReadStyle(c, itemRef.Ref, out var rec)) continue;
+                        // the material's own name beats the style's when both exist
+                        string nm = c.MaterialName.TryGetValue(a[3].Ref, out string mn) ? mn : rec.Name;
+                        c.StyleOfMaterial[a[3].Ref] = new StyleRec(nm, rec.Color, rec.Transparency);
+                        break;
+                    }
+                }
+            }
+
+            // IFCRELASSOCIATESMATERIAL(…, RelatedObjects, RelatingMaterial)
+            var found = new List<int>();
+            foreach (int id in c.F.OfType("IFCRELASSOCIATESMATERIAL"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 6 || a[4].Kind != StepKind.List
+                    || a[5].Kind != StepKind.Ref) continue;
+                found.Clear();
+                CollectMaterials(c, a[5].Ref, 0, found);
+                if (found.Count == 0) continue;
+                foreach (var el in a[4].Items)
+                    if (el.Kind == StepKind.Ref && !c.MaterialsOfElement.ContainsKey(el.Ref))
+                        c.MaterialsOfElement[el.Ref] = new List<int>(found);
+            }
+
+            // IFCRELDEFINESBYTYPE(…, RelatedObjects, RelatingType) — inherit the type's
+            // materials where the instance has none of its own
+            foreach (int id in c.F.OfType("IFCRELDEFINESBYTYPE"))
+            {
+                var a = c.F.Args(id);
+                if (a == null || a.Count < 6 || a[4].Kind != StepKind.List
+                    || a[5].Kind != StepKind.Ref) continue;
+                if (!c.MaterialsOfElement.TryGetValue(a[5].Ref, out var mats)) continue;
+                foreach (var el in a[4].Items)
+                    if (el.Kind == StepKind.Ref && !c.MaterialsOfElement.ContainsKey(el.Ref))
+                        c.MaterialsOfElement[el.Ref] = new List<int>(mats);
+            }
+        }
+
+        /// <summary>Every IfcMaterial inside a RelatingMaterial (which may be a material,
+        /// a list, a layer set or a layer-set usage), in file order and without repeats —
+        /// a door arrives as «Aluminum + Wood - Birch + Metal - Paint Finish - Grey».</summary>
+        private static void CollectMaterials(Ctx c, int id, int depth, List<int> result)
+        {
+            if (id == 0 || depth > 4) return;
+            if (c.F.TypeOf(id) == "IFCMATERIAL")
+            {
+                if (!result.Contains(id)) result.Add(id);
+                return;
+            }
+            var a = c.F.Args(id);
+            if (a == null) return;
+            foreach (var v in a)
+            {
+                if (v.Kind == StepKind.Ref) CollectMaterials(c, v.Ref, depth + 1, result);
+                else if (v.Kind == StepKind.List)
+                    foreach (var it in v.Items)
+                        if (it.Kind == StepKind.Ref) CollectMaterials(c, it.Ref, depth + 1, result);
             }
         }
 
@@ -568,6 +859,51 @@ namespace RoomPlanner.Core.Ifc
                 foreach (var el in a[4].Items)
                     if (el.Kind == StepKind.Ref)
                         c.TypeOfElement[el.Ref] = a[5].Ref;
+            }
+        }
+
+        /// <summary>
+        /// Marks decomposed products below a door/window that fills an opening. IFC
+        /// exporters may publish mullions, crossbars and plates as separate IfcMember /
+        /// IfcPlate products under that filler. The wall renderer already replaces the
+        /// entire filler with a deliberately simple native assembly, so importing those
+        /// descendants as baked meshes would render the frame twice.
+        /// </summary>
+        private static void MapParametricOpeningParts(Ctx c)
+        {
+            var children = new Dictionary<int, List<int>>();
+
+            void AddRelations(string relationType)
+            {
+                foreach (int id in c.F.OfType(relationType))
+                {
+                    var a = c.F.Args(id);
+                    if (a == null || a.Count < 6 || a[4].Kind != StepKind.Ref
+                        || a[5].Kind != StepKind.List) continue;
+                    if (!children.TryGetValue(a[4].Ref, out var list))
+                        children[a[4].Ref] = list = new List<int>();
+                    foreach (var child in a[5].Items)
+                        if (child.Kind == StepKind.Ref)
+                            list.Add(child.Ref);
+                }
+            }
+
+            AddRelations("IFCRELAGGREGATES");
+            AddRelations("IFCRELNESTS");
+
+            void MarkDescendants(int parent)
+            {
+                if (!children.TryGetValue(parent, out var list)) return;
+                foreach (int child in list)
+                    if (c.ParametricOpeningParts.Add(child))
+                        MarkDescendants(child);
+            }
+
+            foreach (int filler in c.FillerOfOpening.Values)
+            {
+                string type = c.F.TypeOf(filler);
+                if (type == "IFCWINDOW" || type == "IFCDOOR")
+                    MarkDescendants(filler);
             }
         }
 
@@ -764,6 +1100,11 @@ namespace RoomPlanner.Core.Ifc
                     HingeDir = hingeDir,
                     // swing known → the door stands open (the pre-#50 imported look)
                     OpenFraction = swingDir.sqrMagnitude > 1e-6f ? 0.75f : 0f,
+                    // what the frame and the leaf are made of (issue #133): the door or
+                    // window itself carries the material list, the empty opening does not
+                    FrameMaterial = filler != 0
+                        ? IfcMaterialMap.PickFrame(c.MaterialNamesOf(filler))
+                        : null,
                 });
             }
         }

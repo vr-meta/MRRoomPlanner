@@ -46,6 +46,7 @@ namespace RoomPlanner.Import
                         SideSign = s.SideSign,
                         Offset = (int)s.Offset,
                         Join = (int)s.Join,
+                        FromColumn = s.IsColumn,
                         Painted = sel != null && sel.IsPainted,
                         Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
                         // v3 (issue #34): Finish = inner side, FinishB = outer side
@@ -62,6 +63,7 @@ namespace RoomPlanner.Import
                             Kind = (int)op.Kind,
                             Swing = op.SwingDir, Hinge = op.HingeDir,
                             Open = op.OpenFraction,
+                            Frame = Capture(op.FrameFinish),   // v5 (issue #133)
                         });
                     data.Walls.Add(w);
                 }
@@ -118,7 +120,24 @@ namespace RoomPlanner.Import
                     Finish = CaptureFinish(msel),
                 };
                 pm.Vertices.AddRange(mf.sharedMesh.vertices);
+                // mesh.triangles concatenates the submeshes in order, so the parts'
+                // (start, count) ranges keep pointing at their own triangles (v5)
                 pm.Triangles.AddRange(mf.sharedMesh.triangles);
+                pm.Uvs.AddRange(mf.sharedMesh.uv);
+                foreach (var part in m.Parts)
+                {
+                    if (part == null) continue;
+                    pm.Parts.Add(new ProjectMepPart
+                    {
+                        Name = part.Name,
+                        Painted = part.HasColor,
+                        Paint = part.Color,
+                        Transparency = part.Transparency,
+                        TriStart = part.TriStart,
+                        TriCount = part.TriCount,
+                        Finish = Capture(part.Finish),
+                    });
+                }
                 data.Plumbing.Add(pm);
             }
 
@@ -140,6 +159,8 @@ namespace RoomPlanner.Import
                             Posts = s.Fixture.Posts,
                             Keys = s.Fixture.Keys,
                             Reserve = s.Fixture.ReservePercent,
+                            Black = s.Fixture.BlackVariant,
+                            PanelOpen = s.Fixture.PanelOpen,
                             Position = s.Fixture.transform.position,
                             Rotation = s.Fixture.transform.rotation,
                             BaseLevel = s.Fixture.BaseLevel,
@@ -310,6 +331,7 @@ namespace RoomPlanner.Import
                     OffsetOverride = w.Offset,
                     JoinOverride = w.Join,
                     SideSignOverride = w.SideSign,
+                    FromColumn = w.FromColumn,
                     HasPaint = w.Painted,
                     PaintColor = w.Paint,
                     Finish = ToFinish(w.Finish),
@@ -332,6 +354,7 @@ namespace RoomPlanner.Import
                         // v2 files rendered swing-known doors open at 75° — keep that look
                         OpenFraction = data.Version >= 3 ? op.Open
                             : (op.Swing.sqrMagnitude > 1e-6f ? 0.75f : 0f),
+                        FrameFinish = ToFinish(op.Frame),   // v5 (issue #133)
                     });
             }
             foreach (var f in data.Floors)
@@ -360,18 +383,37 @@ namespace RoomPlanner.Import
                     Finish = ToFinish(s.Finish),
                 });
             foreach (var m in data.Plumbing)
-                b.Plumbing.Add(new ImportedMep
+            {
+                var mep = new ImportedMep
                 {
                     Name = m.Name, Origin = m.Origin,
                     Vertices = new List<Vector3>(m.Vertices),
                     Triangles = new List<int>(m.Triangles),
+                    Uvs = m.Uvs != null ? new List<Vector2>(m.Uvs) : new List<Vector2>(),
                     StoreyIndex = m.Storey,
                     Category = (MepCategory)m.Category,
                     Transparency = m.Transparency,
                     HasColor = m.Painted,
                     Color = m.Paint,
                     Finish = ToFinish(m.Finish),
-                });
+                };
+                if (m.Parts != null)
+                    foreach (var p in m.Parts)
+                    {
+                        if (p == null) continue;
+                        mep.Parts.Add(new MepPart
+                        {
+                            Name = p.Name,
+                            HasColor = p.Painted,
+                            Color = p.Paint,
+                            Transparency = p.Transparency,
+                            TriStart = p.TriStart,
+                            TriCount = p.TriCount,
+                            Finish = ToFinish(p.Finish),
+                        });
+                    }
+                b.Plumbing.Add(mep);
+            }
             return b;
         }
     }
