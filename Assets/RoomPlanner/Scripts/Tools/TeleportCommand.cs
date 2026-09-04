@@ -24,6 +24,9 @@ namespace RoomPlanner.Tools
         private readonly List<RoomPlanner.Electrical.WireRoute> _routes;
         private readonly List<RoomPlanner.Measure.Measurement> _measurements;
         private readonly List<RoomPlanner.Furniture.FurnitureItemView> _furniture;
+        private readonly List<RoomPlanner.Plumbing.PlumbFixture> _plumbFixtures;
+        private readonly List<RoomPlanner.Plumbing.PipeRoute> _pipes;
+        private readonly System.Action<Vector3> _draftShift;
         private readonly Vector3 _delta;
 
         public TeleportCommand(WallGraphRenderer walls, List<Floor> floors, Vector3 delta,
@@ -31,8 +34,12 @@ namespace RoomPlanner.Tools
             List<RoomPlanner.Electrical.ElectricFixture> fixtures = null,
             List<RoomPlanner.Electrical.WireRoute> routes = null,
             List<RoomPlanner.Measure.Measurement> measurements = null,
-            List<RoomPlanner.Furniture.FurnitureItemView> furniture = null)
+            List<RoomPlanner.Furniture.FurnitureItemView> furniture = null,
+            List<RoomPlanner.Plumbing.PlumbFixture> plumbFixtures = null,
+            List<RoomPlanner.Plumbing.PipeRoute> pipes = null,
+            System.Action<Vector3> draftShift = null)
         {
+            _draftShift = draftShift;
             _furniture = furniture;
             _walls = walls;
             _floors = floors;
@@ -41,6 +48,8 @@ namespace RoomPlanner.Tools
             _fixtures = fixtures;
             _routes = routes;
             _measurements = measurements;
+            _plumbFixtures = plumbFixtures;
+            _pipes = pipes;
             _delta = delta;
         }
 
@@ -86,6 +95,19 @@ namespace RoomPlanner.Tools
             if (_furniture != null)
                 foreach (var f in _furniture)
                     if (f != null) f.MoveBy(d);
+            // The plumbing layer rides exactly like the electrical one (design/30):
+            // fixtures shift with their BaseLevel, pipes shift whole — id-attached ends
+            // must not move twice, so the raw MoveBy is used, never Selectable.MoveBy.
+            if (_plumbFixtures != null)
+                foreach (var fx in _plumbFixtures)
+                    if (fx != null) { fx.MoveBy(d); fx.BaseLevel += d.y; }
+            if (_pipes != null)
+                foreach (var p in _pipes)
+                    if (p != null) p.MoveBy(d);
+            // A HALF-DRAWN run (wire or pipe points not yet finished) is model data
+            // too — left out of the shift it visually follows the user, exactly the
+            // tape-measure bug of 2026-08-10. Undo shifts it back with everything.
+            _draftShift?.Invoke(d);
         }
 
         /// <summary>Every measurement, hidden ones included — same rule as slabs.</summary>
@@ -159,6 +181,24 @@ namespace RoomPlanner.Tools
             var list = new List<RoomPlanner.Electrical.WireRoute>();
             foreach (var r in Object.FindObjectsByType<RoomPlanner.Electrical.WireRoute>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (r.PointCount >= 2) list.Add(r);
+            return list;
+        }
+
+        /// <summary>Every plumb fixture, hidden ones included — same rule as slabs.</summary>
+        public static List<RoomPlanner.Plumbing.PlumbFixture> CollectPlumbFixtures()
+        {
+            var list = new List<RoomPlanner.Plumbing.PlumbFixture>();
+            foreach (var f in Object.FindObjectsByType<RoomPlanner.Plumbing.PlumbFixture>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                list.Add(f);
+            return list;
+        }
+
+        /// <summary>Every pipe run with real points, hidden ones included.</summary>
+        public static List<RoomPlanner.Plumbing.PipeRoute> CollectPipes()
+        {
+            var list = new List<RoomPlanner.Plumbing.PipeRoute>();
+            foreach (var p in Object.FindObjectsByType<RoomPlanner.Plumbing.PipeRoute>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (p.PointCount >= 2) list.Add(p);
             return list;
         }
     }

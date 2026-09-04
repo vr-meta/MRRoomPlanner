@@ -292,19 +292,6 @@ namespace RoomPlanner.Walls
             void FaceCapForward(float t, float y0, float y1) => // faces +t (wall end / left jamb)
                 Face(rims, I(t, y0), I(t, y1), O(t, y1), O(t, y0), U(t), VV(y0), U(t) + wu, VV(y1));
 
-            // A free-standing joinery block (frame bar / door leaf): all six faces, each
-            // reusing the orientation of the corresponding verified wall-face pattern.
-            void Box(float t0, float t1, float y0, float y1, float d0, float d1)
-            {
-                float dw = Mathf.Abs(d1 - d0) * wu;   // metric depth of the block
-                Face(joinery, P(t0, y0, d0), P(t0, y1, d0), P(t1, y1, d0), P(t1, y0, d0), U(t0), VV(y0), U(t1), VV(y1));
-                Face(joinery, P(t0, y1, d1), P(t0, y0, d1), P(t1, y0, d1), P(t1, y1, d1), U(t0), VV(y1), U(t1), VV(y0));
-                Face(joinery, P(t0, y1, d0), P(t0, y1, d1), P(t1, y1, d1), P(t1, y1, d0), U(t0), 0f, U(t1), dw);
-                Face(joinery, P(t0, y0, d1), P(t0, y0, d0), P(t1, y0, d0), P(t1, y0, d1), U(t0), 0f, U(t1), dw);
-                Face(joinery, P(t0, y0, d1), P(t0, y1, d1), P(t0, y1, d0), P(t0, y0, d0), U(t0), VV(y0), U(t0) + dw, VV(y1));
-                Face(joinery, P(t1, y0, d0), P(t1, y1, d0), P(t1, y1, d1), P(t1, y0, d1), U(t1), VV(y0), U(t1) + dw, VV(y1));
-            }
-
             // The moving leaf is NOT part of this mesh (issue #50): doors and garage
             // panels become OpeningLeafView children, so opening them is transform-only.
             // Here we just collect the leaf anchors while P() is in scope.
@@ -312,6 +299,26 @@ namespace RoomPlanner.Walls
             var depthW = P(0.5f, 0f, 1f) - P(0.5f, 0f, 0f); depthW.y = 0f;   // inner → outer
             bool frameOk = alongW.sqrMagnitude > 1e-8f && depthW.sqrMagnitude > 1e-8f;
             if (frameOk) { alongW.Normalize(); depthW.Normalize(); }
+
+            // A free-standing joinery block (frame bar / door leaf), RECTIFIED: the raw
+            // P(t,y,d) interpolates between the inner and outer face lines, which have
+            // different lengths at a mitred wall end — frames near corners came out
+            // skewed ("элементы под 45°", fitting round 4). The centerline is always
+            // straight, so a block is anchored there and extruded along the TRUE depth
+            // normal — a rectangular box whatever the corner does.
+            void Box(float t0, float t1, float y0, float y1, float d0, float d1)
+            {
+                Vector3 PR(float t, float y, float d) => frameOk
+                    ? P(t, y, 0.5f) + depthW * ((d - 0.5f) * thickness)
+                    : P(t, y, d);
+                float dw = Mathf.Abs(d1 - d0) * wu;   // metric depth of the block
+                Face(joinery, PR(t0, y0, d0), PR(t0, y1, d0), PR(t1, y1, d0), PR(t1, y0, d0), U(t0), VV(y0), U(t1), VV(y1));
+                Face(joinery, PR(t0, y1, d1), PR(t0, y0, d1), PR(t1, y0, d1), PR(t1, y1, d1), U(t0), VV(y1), U(t1), VV(y0));
+                Face(joinery, PR(t0, y1, d0), PR(t0, y1, d1), PR(t1, y1, d1), PR(t1, y1, d0), U(t0), 0f, U(t1), dw);
+                Face(joinery, PR(t0, y0, d1), PR(t0, y0, d0), PR(t1, y0, d0), PR(t1, y0, d1), U(t0), 0f, U(t1), dw);
+                Face(joinery, PR(t0, y0, d1), PR(t0, y1, d1), PR(t0, y1, d0), PR(t0, y0, d0), U(t0), VV(y0), U(t0) + dw, VV(y1));
+                Face(joinery, PR(t1, y0, d0), PR(t1, y1, d0), PR(t1, y1, d1), PR(t1, y0, d1), U(t1), VV(y0), U(t1) + dw, VV(y1));
+            }
 
             void AddLeafData(float t0, float t1, float ys, float yh, WallOpening src)
             {

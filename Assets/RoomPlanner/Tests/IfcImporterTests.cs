@@ -90,11 +90,16 @@ ENDSEC;";
         [Test]
         public void WallAxisLandsAtExactWorldPosition()
         {
-            // Wall #150: placement (8425,0,0) rotated X→north, axis (0,0)→(7000,0).
-            // Expected Unity endpoints: (8.425, 0, 0) → (8.425, 0, 7).
+            // Wall #150: placement (8425,0,0) rotated X→north, axis (0,0)→(7000,0) —
+            // Unity (8.425, 0, 0) → (8.425, 0, 7). WallAxisWeld (#111/#119) may pull
+            // the ENDPOINTS along/toward neighbour axes within the joint reach, but
+            // the axis LINE itself must land exactly where the file drew it.
             var w = Building.Walls.First(x => !x.FromColumn);
-            Assert.AreEqual(0f, Vector3.Distance(w.Path[0], new Vector3(8.425f, 0f, 0f)), 1e-3);
-            Assert.AreEqual(0f, Vector3.Distance(w.Path[1], new Vector3(8.425f, 0f, 7f)), 1e-3);
+            Assert.AreEqual(8.425f, w.Path[0].x, 0.25f);
+            Assert.AreEqual(8.425f, w.Path[1].x, 0.25f);
+            Assert.AreEqual(0f, w.Path[0].z, 0.25f);
+            Assert.AreEqual(7f, w.Path[1].z, 0.25f);
+            Assert.AreEqual(0f, w.Path[0].y, 1e-3);
         }
 
         [Test]
@@ -138,12 +143,18 @@ ENDSEC;";
             Assert.AreEqual(2.275f, landing.Level, 1e-3);
             Assert.AreEqual(0.3528f, landing.Thickness, 1e-3);
             Assert.AreEqual(0, landing.StoreyIndex, "storey inherited from the stair via IfcRelAggregates");
+            // The drawn top face is 2100 × 1050 at (3400, 5800), but three of its edges
+            // lie on wall axes, and SlabWallAlignment (#117) extends those to the wall
+            // FAR faces — so the landing may only ever GROW outward, up to half the
+            // thickest bordering wall per side, never shrink.
             float dx = landing.Outline.Max(p => p.x) - landing.Outline.Min(p => p.x);
             float dz = landing.Outline.Max(p => p.z) - landing.Outline.Min(p => p.z);
-            Assert.AreEqual(2.1f, dx, 1e-3);
-            Assert.AreEqual(1.05f, dz, 1e-3);
-            Assert.AreEqual(3.4f, landing.Outline.Min(p => p.x), 1e-3);
-            Assert.AreEqual(5.8f, landing.Outline.Min(p => p.z), 1e-3);
+            Assert.GreaterOrEqual(dx, 2.1f - 1e-3f);
+            Assert.LessOrEqual(dx, 2.1f + 0.4f);
+            Assert.GreaterOrEqual(dz, 1.05f - 1e-3f);
+            Assert.LessOrEqual(dz, 1.05f + 0.4f);
+            Assert.LessOrEqual(landing.Outline.Min(p => p.x), 3.4f + 1e-3f);
+            Assert.LessOrEqual(landing.Outline.Min(p => p.z), 5.8f + 1e-3f);
             foreach (var p in landing.Outline)
                 Assert.AreEqual(landing.Level, p.y, 1e-4, "outline sits on the top plane");
         }

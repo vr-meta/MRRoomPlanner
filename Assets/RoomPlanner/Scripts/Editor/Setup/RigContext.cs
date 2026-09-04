@@ -46,6 +46,7 @@ namespace RoomPlanner.EditorTools
         public Material GroundMat, GlassMat, StairMat, JoineryMat, PlumbingMat, SkyMat;
         public Material FurnitureMat, ProxyMat, RailingMat, ScreenMat;
         public Material WireMat, FixtureMat, FixtureAccentMat, FixtureMetalMat;
+        public Material PipeMat;
         public UnityEngine.Object Ssao;   // ScreenSpaceAmbientOcclusion renderer feature
         public Light Sun;                 // the shadow-casting directional (Rendering page toggle)
     }

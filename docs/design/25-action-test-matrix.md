@@ -43,6 +43,13 @@
 | Electric | жест: розетка триггером по стене | — | |
 | Electric | жест: продолжение трассы от свободного конца | ✓ | `WireGesturePlayTests` |
 | Electric | жест: трасса с нуля + клик по терминалу | — | |
+| Plumb | жест: стояк кликом в пол (пол→потолок) | ✓ | `PlumbGesturePlayTests` |
+| Plumb | жест: труба со снапом к оси стояка (id-связь) | ✓ | `PlumbGesturePlayTests` |
+| Plumb | жест: вывод по стене на пресет-высоте | ✓ | `PlumbGesturePlayTests` |
+| Plumb | жест: трап по полу | ✓ | `PlumbGesturePlayTests` |
+| Plumb | персист v5: save→clear→load, id-связи | ✓ | `PlumbGesturePlayTests` |
+| Plumb | математика/смета (колена, OrthoLow, оси) | ✓ | `PipeMathTests`, `PlumbingBomTests` |
+| Plumb | продолжение трубы от свободного конца | — | (код — паттерн #81) |
 | Import | build/replace/electrical-очистка | к | `ImportPlayTests` |
 | Import | маркер: IFC в точку, проект — нет | ✓ | `ImportMarkerPlayTests` |
 | Import | материалы: части по стилям, имя → отделка, box-UV | к | `ObjectMaterialTests` |

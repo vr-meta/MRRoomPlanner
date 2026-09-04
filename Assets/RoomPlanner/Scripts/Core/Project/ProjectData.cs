@@ -185,6 +185,32 @@ namespace RoomPlanner.Core.Project
         public int Anchor;                // FurnitureAnchor as int
     }
 
+    // ---- v6: the native plumbing layer (design/30). ProjectMep "Plumbing" above is
+    // the UNRELATED legacy list of baked IFC meshes — these are parametric. ----
+
+    [Serializable]
+    public class ProjectPlumbFixture
+    {
+        /// <summary>SceneModel id, kept verbatim — pipe ends re-attach by this id.</summary>
+        public string Id;
+        public int Kind;                  // PlumbFixtureKind as int
+        public int Angle;                 // OutletAngle as int
+        public Vector3 Position;
+        public Quaternion Rotation = Quaternion.identity;
+        public float BaseLevel;
+    }
+
+    [Serializable]
+    public class ProjectPipe
+    {
+        public string Id;
+        public List<Vector3> Points = new();
+        public int Diameter;              // PipeDiameter as int
+        public bool IsRiser;
+        public int Reserve = -1;          // riser BOM reserve %; -1 = default
+        public string StartId, EndId;     // attached fixture/riser ids; null/empty = free end
+    }
+
     [Serializable]
     public class ProjectData
     {
@@ -193,9 +219,10 @@ namespace RoomPlanner.Core.Project
         /// ProjectWall.Finish is the INNER side and FinishB the outer, while a v2
         /// file's single Finish paints the whole wall; 4 = + placed furniture
         /// (design/27); 5 = + per-material parts and box UVs of imported elements
-        /// (design/29). Readers accept anything up to this and refuse newer — an
-        /// older build silently dropping the furniture would be worse than refusing.</summary>
-        public const int CurrentVersion = 5;
+        /// (design/29); 6 = + the native plumbing layer (design/30). Readers accept
+        /// anything up to this and refuse newer — an older build silently dropping
+        /// a layer would be worse than refusing.</summary>
+        public const int CurrentVersion = 6;
 
         public int Version = CurrentVersion;
         public List<ProjectNode> Nodes = new();
@@ -207,6 +234,8 @@ namespace RoomPlanner.Core.Project
         public List<ProjectWire> Wires = new();
         public List<ProjectMeasure> Measures = new();
         public List<ProjectFurniture> Furniture = new();
+        public List<ProjectPlumbFixture> PlumbFixtures = new();
+        public List<ProjectPipe> Pipes = new();
 
         // blueprint placement travels with the project — the plan image is a file next to it
         public float PlanScale = 5f;

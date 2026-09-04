@@ -411,20 +411,30 @@ namespace RoomPlanner.Tools
 
             walls.HealTJunctions();   // imported T-touches must split before the face walk
             var rooms = RoomFinder.FindRooms(walls.Graph);
+            // the SMALLEST containing ring is the room — a welded imported graph also
+            // yields the storey's outer boundary ring, which contains every click
             RoomRing room = null;
             foreach (var r in rooms)
-                if (Mathf.Abs(r.Level - floor.Level) < 1.5f && r.ContainsXZ(point))
-                {
+                if (Mathf.Abs(r.Level - floor.Level) < 1.5f && r.ContainsXZ(point)
+                    && (room == null || r.Area < room.Area))
                     room = r;
-                    break;
-                }
-            if (room == null) return false;
+            if (room == null)
+            {
+                // #111 diagnostics: whole-storey repaint means one of these guards fired —
+                // the headset log tells us which (imported graphs are the suspects)
+                Debug.Log($"[PaintRoom] fallback: no ring contains ({point.x:0.##},{point.z:0.##}) among {rooms.Count} rooms at level {floor.Level:0.##}");
+                return false;
+            }
 
             // the slab already IS this room (an earlier carve) — plain paint suffices
             if (Mathf.Abs(floor.Area - room.Area) < room.Area * 0.1f) return false;
 
             var ring = RoomFinder.Inset(room.Polygon, 0.02f);
-            if (!floor.CanAddHole(ring)) return false;
+            if (!floor.CanAddHole(ring))
+            {
+                Debug.Log($"[PaintRoom] fallback: CanAddHole refused a {room.Area:0.0} m² ring (existing holes: {floor.Holes.Count})");
+                return false;
+            }
 
             sceneModel.History.Execute(new PaintRoomCommand(
                 floors, floor, sel, ring, finish, texture, normal));

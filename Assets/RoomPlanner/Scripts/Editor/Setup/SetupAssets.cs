@@ -115,6 +115,12 @@ namespace RoomPlanner.EditorTools
                 TextureDownloader.NormalPathFor("Objects", "metal-brushed"));
             ApplyNormalMap(ctx.FixtureMetalMat, metalNormal, 0.35f, 20f);
 
+            // Native plumbing (design/30): gray PP drain pipe — risers, runs, stub-outs
+            // and the drain body all share the trade-plastic look; the blue LayerPlumbing
+            // token stays a UI accent, never the object color.
+            ctx.PipeMat = CreatePlainLitMat("Plumb_Pipe", new Color(0.58f, 0.60f, 0.62f));
+            MakeGlossy(ctx.PipeMat, 0.40f);
+
             ctx.PanelMat = CreateMat("Menu_Panel", UiTokens.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiTokens.PanelRim);
             ctx.BtnMat = CreateMat("Menu_Button", UiTokens.ButtonBg);

@@ -175,6 +175,19 @@ namespace RoomPlanner.Core.Ifc
         public int StoreyIndex = -1;
     }
 
+    /// <summary>A drain pipe segment recovered natively from IfcFlowSegment (#118):
+    /// one straight run of the axis with its circle radius — becomes an editable
+    /// PipeRoute of the plumbing layer instead of a frozen baked mesh.</summary>
+    public sealed class ImportedPipe
+    {
+        public string Name;
+        /// <summary>Axis endpoints, Unity world metres.</summary>
+        public Vector3 Start, End;
+        /// <summary>Circle profile radius, metres.</summary>
+        public float Radius;
+        public int StoreyIndex = -1;
+    }
+
     public sealed class ImportedBuilding
     {
         public List<ImportedStorey> Storeys = new();
@@ -184,6 +197,7 @@ namespace RoomPlanner.Core.Ifc
         public List<ImportedStair> Stairs = new();
         public List<ImportedMep> Plumbing = new();
         public List<ImportedOutlet> Outlets = new();
+        public List<ImportedPipe> Pipes = new();
 
         // Honest import status: what the MVP subset could not represent (shown in UI).
         public int SkippedWalls;

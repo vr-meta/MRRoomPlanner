@@ -39,6 +39,7 @@ namespace RoomPlanner.Tools
         [SerializeField] private RoomPlanner.Walls.OpeningsController openings;
         [SerializeField] private RoomPlanner.Import.ProjectsController projects;
         [SerializeField] private RoomPlanner.Furniture.FurnitureController furniture;
+        [SerializeField] private RoomPlanner.Plumbing.PlumbController plumb;
         [SerializeField] private TeleportLocomotion locomotion;
         [SerializeField] private GroundService ground;
         [SerializeField] private float wallThickness = 0.2f;
@@ -131,7 +132,7 @@ namespace RoomPlanner.Tools
             // Heating's reserve slot went to Projects (#58) — heating will ship as a
             // tab of a future MEP tool (07-mep-layers), not as its own radial sector.
             ("projects", "folder", "Projects", new Color(0.91f, 0.93f, 0.96f)),
-            (null, "pipe", "Plumbing", Color.gray),
+            ("plumb", "pipe", "Plumbing", new Color(0.30f, 0.65f, 1f)),               // Plumbing
             ("paint", "paint-roller", "Paint", new Color(0.88f, 0.66f, 0.42f)),       // Interior
         };
 
@@ -219,7 +220,7 @@ namespace RoomPlanner.Tools
         {
             // Registration point: adding a tool = wiring its controller + one entry here
             // (the radial's fixed slot table above maps tools to compass positions).
-            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture };
+            _tools = new ITool[] { select, measure, wall, floor, blueprint, importTool, electric, paint, openings, projects, furniture, plumb };
 
             for (int i = 0; i < _tools.Length && i < RegistryIds.Length; i++)
                 if (_tools[i] != null && _tools[i].Id != RegistryIds[i])
@@ -615,7 +616,15 @@ namespace RoomPlanner.Tools
                 TeleportCommand.CollectFixtures(),
                 TeleportCommand.CollectRoutes(),
                 TeleportCommand.CollectMeasurements(),    // tape stays on the model (feedback 2026-08-10)
-                TeleportCommand.CollectFurniture());      // and so does furniture (feedback 2026-08-12)
+                TeleportCommand.CollectFurniture(),       // and so does furniture (feedback 2026-08-12)
+                TeleportCommand.CollectPlumbFixtures(),   // and the plumbing layer (design/30)
+                TeleportCommand.CollectPipes(),
+                // half-drawn wire/pipe runs shift too (the tape-measure lesson)
+                d =>
+                {
+                    if (electric != null) electric.ShiftDraft(d);
+                    if (plumb != null) plumb.ShiftDraft(d);
+                });
             if (record) sceneModel.History.Execute(cmd);
             else cmd.Do();
             if (ground != null) ground.Invalidate();

@@ -26,8 +26,72 @@ namespace RoomPlanner.Core.Ifc
             ImportColumns(ctx, b);
             ImportSlabs(ctx, b);
             ImportStairs(ctx, b);
+            ImportPipes(ctx, b);
             ImportBakedElements(ctx, b);
+            // drawing-convention normalizations (headset feedback 2026-08-15):
+            // wall axes stop short of their neighbours (#111/#119), slab outlines
+            // follow wall axes (#117), stairwell holes outrun the flights (#116)
+            WallAxisWeld.Apply(b);
+            SlabWallAlignment.Apply(b);
+            StairLandingPatch.Apply(b);
             return b;
+        }
+
+        // ---------------------------------------------------------------- native pipes (#118)
+
+        /// <summary>
+        /// IfcFlowSegment → native drain pipes: Revit exports each straight run as an
+        /// IfcExtrudedAreaSolid over an IfcCircleProfileDef, so the axis endpoints and
+        /// the radius are exact. Segments whose body is not a circle extrusion (mesh-only
+        /// exports) fall back to a baked mesh — nothing vanishes. Fittings stay baked.
+        /// </summary>
+        private static void ImportPipes(Ctx c, ImportedBuilding b)
+        {
+            foreach (int id in c.F.OfType("IFCFLOWSEGMENT"))
+                if (!TryImportPipe(c, b, id) && !BakeProduct(c, b, id, MepCategory.Plumbing))
+                    b.SkippedMep++;
+            foreach (int id in c.F.OfType("IFCFLOWFITTING"))
+                if (!BakeProduct(c, b, id, MepCategory.Plumbing))
+                    b.SkippedMep++;
+        }
+
+        private static bool TryImportPipe(Ctx c, ImportedBuilding b, int id)
+        {
+            var a = c.F.Args(id);
+            if (a == null || a.Count < 7) return false;
+            var items = FindRepresentation(c, a[6], "Body");
+            int solidId = ResolveExtruded(c, items, out Matrix4x4 extra);
+            if (solidId == 0) return false;
+            var sa = c.F.Args(solidId);
+            if (sa == null || sa.Count < 4) return false;
+            if (sa[0].Kind != StepKind.Ref
+                || c.F.TypeOf(sa[0].Ref) != "IFCCIRCLEPROFILEDEF") return false;   // ducts/trays stay baked
+
+            var ring = ProfileOutline(c, sa[0]);
+            if (ring == null || ring.Count < 3) return false;
+            Vector3 center = Vector3.zero;
+            foreach (var p in ring) center += p;
+            center /= ring.Count;
+            float radius = 0f;                        // polygon vertices sit ON the circle
+            foreach (var p in ring) radius += Vector3.Distance(p, center);
+            radius = radius / ring.Count * c.Scale;
+            if (radius < 0.005f || radius > 0.2f) return false;   // not a drain pipe
+
+            var pm = Placement(c, a[5]) * extra * Axis2Placement3D(c, sa[1]);
+            Vector3 dir = Direction(c, sa[2]) * sa[3].AsFloat;
+            Vector3 start = ToUnity(c, pm.MultiplyPoint3x4(center));
+            Vector3 end = ToUnity(c, pm.MultiplyPoint3x4(center + dir));
+            if (Vector3.Distance(start, end) < 0.03f) return false;
+
+            b.Pipes.Add(new ImportedPipe
+            {
+                Name = a[2].Kind == StepKind.Text ? a[2].Text : $"#{id}",
+                Start = start,
+                End = end,
+                Radius = radius,
+                StoreyIndex = c.StoreyOfElement.TryGetValue(id, out int s) ? s : -1,
+            });
+            return true;
         }
 
         // ---------------------------------------------------------------- baked meshes

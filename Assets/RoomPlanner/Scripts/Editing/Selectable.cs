@@ -43,6 +43,8 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Stairs.Stair _stair;
         private RoomPlanner.Electrical.ElectricFixture _fixture;
         private RoomPlanner.Electrical.WireRoute _route;
+        private RoomPlanner.Plumbing.PlumbFixture _plumbFixture;
+        private RoomPlanner.Plumbing.PipeRoute _pipe;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
         private RoomPlanner.Import.MepView _mep;
@@ -90,6 +92,8 @@ namespace RoomPlanner.Editing
             _stair = GetComponent<RoomPlanner.Stairs.Stair>();
             _fixture = GetComponent<RoomPlanner.Electrical.ElectricFixture>();
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
+            _plumbFixture = GetComponent<RoomPlanner.Plumbing.PlumbFixture>();
+            _pipe = GetComponent<RoomPlanner.Plumbing.PipeRoute>();
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
             _mep = GetComponent<RoomPlanner.Import.MepView>();
@@ -106,6 +110,8 @@ namespace RoomPlanner.Editing
             else if (_stair != null) _kind = SelectableKind.Stair;
             else if (_fixture != null) _kind = SelectableKind.Fixture;
             else if (_route != null) _kind = SelectableKind.Wire;
+            else if (_plumbFixture != null) _kind = SelectableKind.PlumbFixture;
+            else if (_pipe != null) _kind = SelectableKind.Pipe;
             else _kind = SelectableKind.Measurement;
             _settingsProvider = GetComponent<ISettingsProvider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
@@ -442,6 +448,8 @@ namespace RoomPlanner.Editing
             else if (_stair != null) _stair.MoveBy(delta);
             else if (_fixture != null) MoveFixture(delta);
             else if (_route != null) _route.MoveBy(delta);
+            else if (_plumbFixture != null) MovePlumb(delta);
+            else if (_pipe != null) MovePipe(delta);
             else if (_measurement != null) _measurement.MoveBy(delta);
         }
 
@@ -463,10 +471,45 @@ namespace RoomPlanner.Editing
             }
         }
 
+        /// <summary>Moving a plumb fixture drags the pipe ends logically attached to it
+        /// (the electrical id-link pattern).</summary>
+        private void MovePlumb(Vector3 delta)
+        {
+            _plumbFixture.MoveBy(delta);
+            DragAttachedPipeEnds(delta);
+        }
+
+        /// <summary>Moving a pipe (a riser above all) drags the ends of OTHER pipes teed
+        /// into it by id.</summary>
+        private void MovePipe(Vector3 delta)
+        {
+            _pipe.MoveBy(delta);
+            DragAttachedPipeEnds(delta);
+        }
+
+        private void DragAttachedPipeEnds(Vector3 delta)
+        {
+            var model = SceneModel.Instance;
+            if (model == null || string.IsNullOrEmpty(Id)) return;
+            var items = model.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item == null || !item.IsAlive) continue;
+                if (item is Selectable s && s.Kind == SelectableKind.Pipe && s._pipe != null
+                    && s._pipe != _pipe)
+                    s._pipe.TryMoveAttachedEnd(Id, delta);
+            }
+        }
+
         /// <summary>Typed accessors for electrical tooling (terminal snap, BOM) — cached in
         /// Resolve so per-frame loops never call GetComponent.</summary>
         internal RoomPlanner.Electrical.ElectricFixture Fixture { get { Resolve(); return _fixture; } }
         internal RoomPlanner.Electrical.WireRoute Route { get { Resolve(); return _route; } }
+
+        /// <summary>Typed accessors for plumbing tooling (terminal/riser snap, BOM).</summary>
+        internal RoomPlanner.Plumbing.PlumbFixture Plumb { get { Resolve(); return _plumbFixture; } }
+        internal RoomPlanner.Plumbing.PipeRoute Pipe { get { Resolve(); return _pipe; } }
 
         /// <summary>The door/garage leaf this Selectable wraps (trigger toggle, issue #50).</summary>
         internal OpeningLeafView LeafView { get { Resolve(); return _leafView; } }
@@ -561,6 +604,10 @@ namespace RoomPlanner.Editing
                     return _route != null
                         ? $"{RoomPlanner.Electrical.Cable.Label(_route.Cable)} · {RoomPlanner.Electrical.ElectricalBom.FormatMeters(_route.Length)}"
                         : "Wire";
+                case SelectableKind.PlumbFixture:
+                    return DescribePlumbFixture();
+                case SelectableKind.Pipe:
+                    return DescribePipe();
                 default:
                     return _measurement != null ? $"{_measurement.Distance * 100f:0} cm" : "Measurement";
             }
@@ -639,6 +686,69 @@ namespace RoomPlanner.Editing
                     return _bomDescription;
                 }
             }
+        }
+
+        private string DescribePlumbFixture()
+        {
+            if (_plumbFixture == null) return "Plumbing";
+            string angle = _plumbFixture.Angle switch
+            {
+                RoomPlanner.Plumbing.OutletAngle.Deg45 => "45°↓",
+                RoomPlanner.Plumbing.OutletAngle.Deg45Up => "45°↑",
+                _ => "90°",
+            };
+            return _plumbFixture.Kind switch
+            {
+                RoomPlanner.Plumbing.PlumbFixtureKind.ToiletOutlet =>
+                    $"Toilet outlet D110 {angle}, h {_plumbFixture.HeightAboveLevel * 100f:0} cm",
+                RoomPlanner.Plumbing.PlumbFixtureKind.SinkOutlet =>
+                    $"Sink outlet D50 {angle}, h {_plumbFixture.HeightAboveLevel * 100f:0} cm",
+                _ => $"Floor drain {PlumbingDrainLabel()}",
+            };
+        }
+
+        private static string PlumbingDrainLabel() =>
+            $"{RoomPlanner.Plumbing.PlumbingDefaults.DrainSize * 100f:0}×{RoomPlanner.Plumbing.PlumbingDefaults.DrainSize * 100f:0} cm";
+
+        /// <summary>A riser's description IS the plumbing BOM (docs/design/30-plumbing.md),
+        /// the electrical-panel precedent; an ordinary pipe reports its own size and length.
+        /// Selection-time only — the allocation here never runs per frame.</summary>
+        private string DescribePipe()
+        {
+            if (_pipe == null) return "Pipe";
+            if (!_pipe.IsRiser)
+                return $"D{RoomPlanner.Plumbing.PipeSpec.Label(_pipe.Diameter)} · {RoomPlanner.Plumbing.PlumbingBom.FormatMeters(_pipe.Length)}";
+
+            var model = SceneModel.Instance;
+            var entries = new System.Collections.Generic.List<RoomPlanner.Plumbing.PipeBomEntry>();
+            if (model != null)
+            {
+                var items = model.Items;
+                // an end attached to a DELETED peer must not bill a connection allowance
+                // (the audit 08 §Б3 lesson from electrical): resolve ids against live objects
+                var liveIds = new System.Collections.Generic.HashSet<string>();
+                for (int i = 0; i < items.Count; i++)
+                {
+                    var item = items[i];
+                    if (item == null || !item.IsAlive || item.IsHidden) continue;
+                    if (item is Selectable p && !string.IsNullOrEmpty(p.Id)
+                        && (p.Kind == SelectableKind.PlumbFixture || p.Kind == SelectableKind.Pipe))
+                        liveIds.Add(p.Id);
+                }
+                for (int i = 0; i < items.Count; i++)
+                {
+                    var item = items[i];
+                    if (item == null || !item.IsAlive || item.IsHidden) continue;
+                    if (item is not Selectable s || s.Kind != SelectableKind.Pipe || s._pipe == null) continue;
+                    var r = s._pipe;
+                    int liveEnds =
+                        (!string.IsNullOrEmpty(r.StartFixtureId) && liveIds.Contains(r.StartFixtureId) ? 1 : 0)
+                        + (!string.IsNullOrEmpty(r.EndFixtureId) && liveIds.Contains(r.EndFixtureId) ? 1 : 0);
+                    RoomPlanner.Plumbing.PipeMath.CountElbows(r.Points, out int e90, out int e45);
+                    entries.Add(new RoomPlanner.Plumbing.PipeBomEntry(r.Diameter, r.Length, liveEnds, e90, e45));
+                }
+            }
+            return "Riser · " + RoomPlanner.Plumbing.PlumbingBom.Describe(entries, _pipe.ReservePercent);
         }
 
         private float WallLength()

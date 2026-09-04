@@ -195,6 +195,37 @@ namespace RoomPlanner.Import
                             Anchor = (int)view.Anchor,
                         });
                     }
+                    else if (s.Kind == Editing.SelectableKind.PlumbFixture)
+                    {
+                        // v6 (design/30): the native plumbing layer
+                        var plumb = s.GetComponent<Plumbing.PlumbFixture>();
+                        if (plumb == null) continue;
+                        data.PlumbFixtures.Add(new ProjectPlumbFixture
+                        {
+                            Id = s.Id,
+                            Kind = (int)plumb.Kind,
+                            Angle = (int)plumb.Angle,
+                            Position = plumb.transform.position,
+                            Rotation = plumb.transform.rotation,
+                            BaseLevel = plumb.BaseLevel,
+                        });
+                    }
+                    else if (s.Kind == Editing.SelectableKind.Pipe)
+                    {
+                        var pipe = s.GetComponent<Plumbing.PipeRoute>();
+                        if (pipe == null) continue;
+                        var pp = new ProjectPipe
+                        {
+                            Id = s.Id,
+                            Diameter = (int)pipe.Diameter,
+                            IsRiser = pipe.IsRiser,
+                            Reserve = pipe.ReservePercent,
+                            StartId = pipe.StartFixtureId,
+                            EndId = pipe.EndFixtureId,
+                        };
+                        pp.Points.AddRange(pipe.Points);
+                        data.Pipes.Add(pp);
+                    }
                     else if (s.Kind == Editing.SelectableKind.Measurement)
                     {
                         // Kind falls back to Measurement for unknown components (MEP views
@@ -223,6 +254,7 @@ namespace RoomPlanner.Import
             import.ClearScene();
             import.BuildScene(ToBuilding(data));
             RestoreElectrical(data);
+            RestorePlumbing(data);
             RestoreMeasurements(data);
             RestoreFurniture(data);
             if (blueprint != null)
@@ -246,6 +278,24 @@ namespace RoomPlanner.Import
             }
             foreach (var f in data.Fixtures) electric.RestoreFixture(f);
             foreach (var w in data.Wires) electric.RestoreWire(w);
+        }
+
+        /// <summary>
+        /// Recreate the plumbing layer (format v6, design/30). Same late-binding as the
+        /// electrical layer. Fixtures restore first so pipe ends re-attach by id.
+        /// Public for round-trip tests.
+        /// </summary>
+        public static void RestorePlumbing(ProjectData data)
+        {
+            if (data.PlumbFixtures.Count == 0 && data.Pipes.Count == 0) return;
+            var plumb = Object.FindFirstObjectByType<Plumbing.PlumbController>();
+            if (plumb == null)
+            {
+                Debug.LogWarning("[Project] file carries plumbing data but the rig has no PlumbController");
+                return;
+            }
+            foreach (var f in data.PlumbFixtures) plumb.RestorePlumbFixture(f);
+            foreach (var p in data.Pipes) plumb.RestorePipe(p);
         }
 
         /// <summary>

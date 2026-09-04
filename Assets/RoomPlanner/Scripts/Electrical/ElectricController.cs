@@ -670,6 +670,15 @@ namespace RoomPlanner.Electrical
             for (int i = 0; i < _previewPts.Count; i++) previewLine.SetPosition(i, _previewPts[i]);
         }
 
+        /// <summary>Teleport moves the model; a half-drawn wire run is model data too —
+        /// the tape-measure lesson. Called from the TeleportCommand.</summary>
+        public void ShiftDraft(Vector3 delta)
+        {
+            for (int i = 0; i < _pts.Count; i++) _pts[i] += delta;
+            if (_continuedBefore != null)
+                for (int i = 0; i < _continuedBefore.Count; i++) _continuedBefore[i] += delta;
+        }
+
         private static string FixtureId(ElectricFixture fx)
         {
             var sel = fx.GetComponent<Selectable>();

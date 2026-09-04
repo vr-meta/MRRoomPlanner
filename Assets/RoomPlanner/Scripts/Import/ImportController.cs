@@ -454,6 +454,7 @@ namespace RoomPlanner.Import
                     + $"vertices: {vertsBefore} → {vertsAfter} (sharp-edge split)");
 
             int outletCount = SpawnImportedOutlets(building);
+            int pipeCount = SpawnImportedPipes(building);
 
             // One undo entry for the whole import (objects are already live → Record).
             if (sceneModel != null && _created.Count > 0)
@@ -463,10 +464,12 @@ namespace RoomPlanner.Import
                 + building.SkippedOpenings + building.SkippedStairs + building.SkippedMep;
             _status = $"{wallCount}w {slabCount}s {openingCount}o {holeCount}h {stairCount}st {mepCount}p"
                 + (outletCount > 0 ? $" {outletCount}el" : "")
+                + (pipeCount > 0 ? $" {pipeCount}pi" : "")
                 + (headroomFixes > 0 ? $" {headroomFixes}hr" : "")
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
-                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, {outletCount} outlets, skipped {skipped}");
+                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, {outletCount} outlets, "
+                + $"{pipeCount} pipes, skipped {skipped}");
         }
 
         /// <summary>
@@ -505,6 +508,47 @@ namespace RoomPlanner.Import
                 made++;
             }
             return made;
+        }
+
+        /// <summary>
+        /// Native plumbing from the IFC (#118): IfcFlowSegment axes arrive as start/end
+        /// + radius and leave as REAL PipeRoutes — editable, snappable, in the riser
+        /// BOM. Vertical runs become risers; the radius maps to the nearest catalog
+        /// diameter. Reuses the persistence factory (RestorePipe), so an imported pipe
+        /// is indistinguishable from a hand-drawn one, round-trip included.
+        /// </summary>
+        private int SpawnImportedPipes(ImportedBuilding building)
+        {
+            if (building.Pipes.Count == 0) return 0;
+            var plumb = FindFirstObjectByType<Plumbing.PlumbController>();
+            if (plumb == null)
+            {
+                Debug.LogWarning("[Import] file carries pipes but the rig has no PlumbController");
+                return 0;
+            }
+            int made = 0;
+            foreach (var p in building.Pipes)
+            {
+                Vector3 dir = (p.End - p.Start).normalized;
+                var route = plumb.RestorePipe(new Core.Project.ProjectPipe
+                {
+                    Points = new List<Vector3> { p.Start, p.End },
+                    Diameter = (int)DiameterFor(p.Radius),
+                    IsRiser = Mathf.Abs(dir.y) > 0.7f && Vector3.Distance(p.Start, p.End) > 1f,
+                });
+                if (route == null) continue;
+                var sel = route.GetComponent<Selectable>();
+                if (sel != null) _created.Add((sel, p.StoreyIndex));
+                made++;
+            }
+            return made;
+        }
+
+        /// <summary>Nearest catalog size for an imported circle radius.</summary>
+        private static Plumbing.PipeDiameter DiameterFor(float radius)
+        {
+            if (radius >= 0.04f) return Plumbing.PipeDiameter.D110;
+            return radius >= 0.0225f ? Plumbing.PipeDiameter.D50 : Plumbing.PipeDiameter.D40;
         }
 
         /// <summary>Mounting direction: the plate's thin axis, signed AWAY from the
@@ -850,6 +894,7 @@ namespace RoomPlanner.Import
             foreach (var m in TeleportCommand.CollectMeasurements())
                 if (m != null) Destroy(m.gameObject);
             ClearElectrical();
+            ClearPlumbing();
             ClearFurniture();
             _created.Clear();
             _importedSegments.Clear();
@@ -868,6 +913,18 @@ namespace RoomPlanner.Import
             foreach (var item in new List<ISelectable>(sceneModel.Items))
                 if (item is Selectable s && s.IsAlive
                     && (s.Kind == SelectableKind.Fixture || s.Kind == SelectableKind.Wire))
+                    Destroy(s.gameObject);
+        }
+
+        /// <summary>Destroy the plumbing layer (design/30, v6 projects) — same rule as
+        /// the electrical one: registered risers/pipes/stub-outs/drains only, the parked
+        /// prefab template and the tool's ghost preview survive.</summary>
+        private void ClearPlumbing()
+        {
+            if (sceneModel == null) return;
+            foreach (var item in new List<ISelectable>(sceneModel.Items))
+                if (item is Selectable s && s.IsAlive
+                    && (s.Kind == SelectableKind.PlumbFixture || s.Kind == SelectableKind.Pipe))
                     Destroy(s.gameObject);
         }
 
