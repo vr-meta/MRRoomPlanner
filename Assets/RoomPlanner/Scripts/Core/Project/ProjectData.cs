@@ -55,6 +55,9 @@ namespace RoomPlanner.Core.Project
         public int NodeA, NodeB;              // indices into ProjectData.Nodes
         public float Thickness, Height, BaseHeight, SideSign;
         public int Offset, Join;
+        /// <summary>Optional since v5: imported rectangular columns reuse wall geometry
+        /// but paint as one object. Absent in older files and therefore false.</summary>
+        public bool FromColumn;
         public bool Painted;
         public Color Paint;
         /// <summary>v3: the INNER side (v2 readers treated it as the whole wall).</summary>

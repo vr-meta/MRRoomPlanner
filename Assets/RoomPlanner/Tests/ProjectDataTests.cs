@@ -34,7 +34,7 @@ namespace RoomPlanner.Tests
             var wall = new ProjectWall
             {
                 NodeA = 0, NodeB = 1, Thickness = 0.15f, Height = 2.7f,
-                SideSign = -1f, Offset = 1, Join = 2,
+                SideSign = -1f, Offset = 1, Join = 2, FromColumn = true,
             };
             wall.Openings.Add(new ProjectOpening { Along = 0.4f, Width = 0.9f, Height = 2.1f, Sill = 0f, IsDoor = true });
             data.Walls.Add(wall);
@@ -63,6 +63,7 @@ namespace RoomPlanner.Tests
             Assert.AreEqual(0.15f, w.Thickness, 1e-6);
             Assert.AreEqual(-1f, w.SideSign, 1e-6);
             Assert.AreEqual(2, w.Join);
+            Assert.IsTrue(w.FromColumn, "the column paint semantic survives JSON");
             Assert.AreEqual(0.9f, w.Openings[0].Width, 1e-6);
             Assert.IsTrue(w.Openings[0].IsDoor, "door/window type survives");
             Assert.AreEqual(3, round.Floors[0].Outline.Count);

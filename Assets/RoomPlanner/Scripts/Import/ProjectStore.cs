@@ -46,6 +46,7 @@ namespace RoomPlanner.Import
                         SideSign = s.SideSign,
                         Offset = (int)s.Offset,
                         Join = (int)s.Join,
+                        FromColumn = s.IsColumn,
                         Painted = sel != null && sel.IsPainted,
                         Paint = sel != null && sel.IsPainted ? sel.Paint : Color.clear,
                         // v3 (issue #34): Finish = inner side, FinishB = outer side
@@ -330,6 +331,7 @@ namespace RoomPlanner.Import
                     OffsetOverride = w.Offset,
                     JoinOverride = w.Join,
                     SideSignOverride = w.SideSign,
+                    FromColumn = w.FromColumn,
                     HasPaint = w.Painted,
                     PaintColor = w.Paint,
                     Finish = ToFinish(w.Finish),

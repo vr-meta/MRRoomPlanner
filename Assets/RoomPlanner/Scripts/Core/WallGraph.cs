@@ -110,6 +110,10 @@ namespace RoomPlanner.Walls
         public WallOffsetMode Offset = WallOffsetMode.Outer;
         public WallJoin Join = WallJoin.Miter;
 
+        /// <summary>An IFC rectangular column uses the wall mesh for geometry, but is
+        /// one finishable object: painting any face must cover all four sides and rims.</summary>
+        public bool IsColumn;
+
         /// <summary>
         /// A deleted-but-undoable wall: it stays in the graph (undo restores it with its
         /// identity) but must not shape its neighbours' joints, snap, or count toward a
@@ -182,6 +186,7 @@ namespace RoomPlanner.Walls
             Offset = s.Offset;
             Join = s.Join;
             SideSign = s.SideSign;
+            IsColumn = s.IsColumn;
         }
 
         public override string ToString() => $"Seg#{Id}({A.Id}->{B.Id}) len={Length:0.##}";
