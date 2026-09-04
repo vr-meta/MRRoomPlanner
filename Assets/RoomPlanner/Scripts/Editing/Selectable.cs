@@ -44,6 +44,7 @@ namespace RoomPlanner.Editing
         private RoomPlanner.Electrical.WireRoute _route;
         private OpeningLeafView _leafView;   // door/garage leaf child (issue #50)
         private RoomPlanner.Furniture.FurnitureItemView _furniture;
+        private RoomPlanner.Import.MepView _mep;
         private ISettingsProvider _settingsProvider;
         private Renderer[] _renderers;
         private Color[] _ownColors;   // each renderer's material color, cached for lerp-tinting
@@ -82,7 +83,9 @@ namespace RoomPlanner.Editing
             _route = GetComponent<RoomPlanner.Electrical.WireRoute>();
             _leafView = GetComponent<OpeningLeafView>();
             _furniture = GetComponent<RoomPlanner.Furniture.FurnitureItemView>();
+            _mep = GetComponent<RoomPlanner.Import.MepView>();
             if (_furniture != null) _kind = SelectableKind.Furniture;
+            else if (_mep != null) _kind = SelectableKind.Mep;
             else if (_wall != null) _kind = SelectableKind.Wall;
             else if (_leafView != null) _kind = SelectableKind.Door;
             else if (_floor != null) _kind = SelectableKind.Floor;
@@ -357,6 +360,7 @@ namespace RoomPlanner.Editing
             Resolve();
             if (_leafView != null) return;   // doors move with the Openings tool, not Select
             if (_furniture != null) _furniture.MoveBy(delta);
+            else if (_mep != null) _mep.MoveBy(delta);
             else if (_wall != null) _wall.MoveBy(delta);
             else if (_floor != null) _floor.MoveBy(delta);
             else if (_stair != null) _stair.MoveBy(delta);
@@ -426,6 +430,8 @@ namespace RoomPlanner.Editing
                     return "Floor";
                 case SelectableKind.Furniture:
                     return _furniture != null ? _furniture.Describe() : "Furniture";
+                case SelectableKind.Mep:
+                    return _mep != null ? gameObject.name : "Imported object";
                 case SelectableKind.Fixture:
                     return DescribeFixture();
                 case SelectableKind.Wire:

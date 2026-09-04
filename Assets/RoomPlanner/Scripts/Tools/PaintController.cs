@@ -238,6 +238,7 @@ namespace RoomPlanner.Tools
                 case "Floors": return kind == SelectableKind.Floor || kind == SelectableKind.Stair;
                 case "Tiles": return kind == SelectableKind.Wall || kind == SelectableKind.Floor;
                 case "Ceiling": return kind == SelectableKind.Floor;
+                case "Objects": return kind == SelectableKind.Mep || kind == SelectableKind.Furniture;
                 default: return true;   // Color tab (null) — anything paintable
             }
         }

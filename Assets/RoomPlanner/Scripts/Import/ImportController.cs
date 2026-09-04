@@ -361,10 +361,13 @@ namespace RoomPlanner.Import
             if (headroomFixes > 0)
                 Debug.Log($"[Import] stair headroom: widened/created {headroomFixes} slab opening(s)");
 
-            int mepCount = 0;
+            int mepCount = 0, mepColliderCount = 0;
             foreach (var mep in building.Plumbing)
             {
-                var go = new GameObject($"{mep.Category} {mep.Name}");
+                var go = new GameObject($"{mep.Category} {mep.Name}")
+                {
+                    layer = SelectableLayer,
+                };
                 go.transform.SetParent(transform, false);
                 go.transform.position = mep.Origin;
                 var mesh = new Mesh { name = "MepMesh" };
@@ -373,6 +376,8 @@ namespace RoomPlanner.Import
                 mesh.RecalculateNormals();
                 mesh.RecalculateBounds();
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                go.AddComponent<MeshCollider>().sharedMesh = mesh;
+                mepColliderCount++;
                 var mr = go.AddComponent<MeshRenderer>();
                 var mat = MaterialFor(mep);
                 if (mat != null) mr.sharedMaterial = mat;
@@ -381,14 +386,13 @@ namespace RoomPlanner.Import
                 view.Transparency = mep.Transparency;
                 view.StoreyIndex = mep.StoreyIndex;   // survives capture — storey filter after load (B6)
                 view.ApplyShadowMode();   // interior objects cast sun shadows (toggleable)
-                // Selectable only for the hide/show machinery (undo, storey filter) — no
-                // collider, so it is invisible to picking and never registered for it.
                 var sel = go.AddComponent<Selectable>();
                 // The file's own colour rides the paint machinery: one visual writer,
                 // undo-able, round-trips through the project format.
                 if (!ApplyFinish(sel, mep.Finish) && mep.HasColor)
                     sel.SetPaint(new Color(mep.Color.r, mep.Color.g, mep.Color.b,
                         1f - Mathf.Clamp01(mep.Transparency)));
+                if (sceneModel != null) sceneModel.Register(sel);
                 _created.Add((sel, mep.StoreyIndex));
                 mepCount++;
             }
@@ -406,7 +410,8 @@ namespace RoomPlanner.Import
                 + (headroomFixes > 0 ? $" {headroomFixes}hr" : "")
                 + (skipped > 0 ? $" ({skipped} skip)" : "");
             Debug.Log($"[Import] built {wallCount} wall segments, {slabCount} slabs, {openingCount} openings, "
-                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing, {outletCount} outlets, skipped {skipped}");
+                + $"{holeCount} holes, {stairCount} stairs, {mepCount} plumbing "
+                + $"({mepColliderCount} mesh colliders), {outletCount} outlets, skipped {skipped}");
         }
 
         /// <summary>

@@ -176,8 +176,8 @@ namespace RoomPlanner.Import
                     }
                     else if (s.Kind == Editing.SelectableKind.Measurement)
                     {
-                        // Kind falls back to Measurement for unknown components (MEP views
-                        // among them) — the component check keeps them out of this section.
+                        // Only real tape measurements belong in this section. Imported baked
+                        // elements have their own Mep kind and are captured above.
                         var meas = s.GetComponent<Measure.Measurement>();
                         if (meas != null)
                             data.Measures.Add(new ProjectMeasure { A = meas.PointA, B = meas.PointB });

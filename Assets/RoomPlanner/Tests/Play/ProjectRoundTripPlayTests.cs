@@ -124,6 +124,39 @@ namespace RoomPlanner.Tests.Play
         }
 
         [UnityTest]
+        public IEnumerator ImportedElement_IsPickableDeletableAndSkippedWhenHidden()
+        {
+            var (import, walls, model) = MakeRig();
+            import.BuildScene(SampleBuilding());
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+
+            var mep = Object.FindFirstObjectByType<MepView>();
+            Assert.IsNotNull(mep);
+            var selectable = mep.GetComponent<Selectable>();
+            var collider = mep.GetComponent<MeshCollider>();
+            Assert.IsNotNull(collider, "the baked import needs a picking collider");
+            Assert.AreSame(mep.GetComponent<MeshFilter>().sharedMesh, collider.sharedMesh);
+            Assert.AreEqual(6, mep.gameObject.layer, "the import belongs on the Selectable layer");
+            Assert.AreEqual(SelectableKind.Mep, selectable.Kind);
+            CollectionAssert.Contains(model.Items, selectable, "the import must join SceneModel");
+
+            var ray = new Ray(new Vector3(4f, 0.2f, 4f), Vector3.up);
+            Assert.IsTrue(model.TryPick(ray, out var picked, out _));
+            Assert.AreSame(selectable, picked);
+
+            model.History.Execute(new DeleteCommand(selectable));
+            Assert.IsTrue(selectable.IsHidden);
+            Assert.AreEqual(0, ProjectStore.Capture(walls, null).Plumbing.Count,
+                "a deleted imported element must stay out of the project file");
+
+            model.History.Undo();
+            Assert.IsFalse(selectable.IsHidden);
+            Assert.AreEqual(1, ProjectStore.Capture(walls, null).Plumbing.Count,
+                "undo restores both the object and its persistence");
+        }
+
+        [UnityTest]
         public IEnumerator ElectricalLayer_SurvivesTheRoundTrip()
         {
             // Format v2 (audit B1): the autosave used to drop every outlet and wire
