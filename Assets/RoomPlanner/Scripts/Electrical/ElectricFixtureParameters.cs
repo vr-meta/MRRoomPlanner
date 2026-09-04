@@ -16,6 +16,12 @@ namespace RoomPlanner.Electrical
         private SettingsSchema _schema;
         private FixtureKind _schemaKind;
 
+        private static readonly Color[] FixtureVariants =
+        {
+            ElectricFixture.WhitePlastic,
+            ElectricFixture.BlackPlastic,
+        };
+
         private ElectricFixture Fx => _fixture != null ? _fixture : _fixture = GetComponent<ElectricFixture>();
 
         public SettingsSchema GetSettings()
@@ -38,20 +44,25 @@ namespace RoomPlanner.Electrical
                     s.Stepper("fposts", "Posts", () => $"{Fx.Posts}",
                         () => ApplyPosts(Fx.Posts - 1), () => ApplyPosts(Fx.Posts + 1));
                     AddHeightRow(s, ElectricalDefaults.MinOutletHeight);
+                    AddVariantRow(s);
                     break;
                 case FixtureKind.Switch:
                     s.Stepper("fkeys", "Keys", () => $"{Fx.Keys}",
                         () => ApplyKeys(Fx.Keys - 1), () => ApplyKeys(Fx.Keys + 1));
                     AddHeightRow(s, ElectricalDefaults.MinSwitchHeight);
+                    AddVariantRow(s);
                     break;
                 case FixtureKind.Junction:
                     // no height preset and nothing to configure — show what branches here
                     s.Readout("fjwires", "Wires", () => $"{AttachedRoutes()}");
+                    AddVariantRow(s);
                     break;
                 default:
                     s.Stepper("fres", "Reserve", () => $"{Fx.ReservePercent} %",
                         () => ApplyReserve(Fx.ReservePercent - ElectricalDefaults.ReserveStep),
                         () => ApplyReserve(Fx.ReservePercent + ElectricalDefaults.ReserveStep));
+                    AddVariantRow(s);
+                    s.Toggle("fopen", "Door open", () => Fx.PanelOpen, ApplyPanelOpen);
                     break;
             }
             return s;
@@ -65,6 +76,10 @@ namespace RoomPlanner.Electrical
                 (_, v) => ApplyHeightAbsolute(min, v),
                 () => $"{Fx.HeightAboveLevel * 100f:0} cm", displayScale: 100f);
 
+        private void AddVariantRow(SettingsSchema s) =>
+            s.Swatch("ffinish", "Finish", FixtureVariants,
+                () => Fx.BlackVariant ? 1 : 0, i => ApplyBlackVariant(i == 1));
+
         private void ApplyPosts(int value) =>
             Apply(FixtureParamCommand.ForPosts(this, Mathf.Clamp(value, 1, ElectricalDefaults.MaxPosts)));
 
@@ -73,6 +88,12 @@ namespace RoomPlanner.Electrical
 
         private void ApplyReserve(int value) =>
             Apply(FixtureParamCommand.ForReserve(this, Mathf.Clamp(value, 0, ElectricalDefaults.MaxReservePercent)));
+
+        private void ApplyBlackVariant(bool black) =>
+            Apply(FixtureParamCommand.ForVariant(this, black));
+
+        private void ApplyPanelOpen(bool open) =>
+            Apply(FixtureParamCommand.ForPanelOpen(this, open));
 
         private void ApplyHeightAbsolute(float min, float relValue)
         {
@@ -119,7 +140,7 @@ namespace RoomPlanner.Electrical
     /// </summary>
     public sealed class FixtureParamCommand : ICommand, ISelectableCommand
     {
-        private enum Kind { Posts, Keys, Reserve, Height }
+        private enum Kind { Posts, Keys, Reserve, Height, Variant, PanelOpen }
 
         private readonly ElectricFixtureParameters _params;
         private readonly Kind _kind;
@@ -142,6 +163,14 @@ namespace RoomPlanner.Electrical
         public static FixtureParamCommand ForHeight(ElectricFixtureParameters p, float y) =>
             new(p, Kind.Height, p.Target != null ? p.Target.transform.position.y : 0f, y);
 
+        public static FixtureParamCommand ForVariant(ElectricFixtureParameters p, bool black) =>
+            new(p, Kind.Variant, p.Target != null && p.Target.BlackVariant ? 1f : 0f,
+                black ? 1f : 0f);
+
+        public static FixtureParamCommand ForPanelOpen(ElectricFixtureParameters p, bool open) =>
+            new(p, Kind.PanelOpen, p.Target != null && p.Target.PanelOpen ? 1f : 0f,
+                open ? 1f : 0f);
+
         public string Name => $"Fixture {_kind}";
         public ISelectable Target => _params != null ? _params.Owner : null;
 
@@ -153,14 +182,22 @@ namespace RoomPlanner.Electrical
             if (_params == null) return;
             var fx = _params.Target;
             if (fx == null) return;                   // destroyed since the command was recorded
+            var owner = _params.Owner;
             switch (_kind)
             {
                 case Kind.Posts: fx.Build(fx.Kind, (int)value, fx.Keys); break;
                 case Kind.Keys: fx.Build(fx.Kind, fx.Posts, (int)value); break;
                 case Kind.Reserve: fx.ReservePercent = (int)value; break;
+                case Kind.Variant:
+                    fx.SetBlackVariant(value > 0.5f);
+                    (owner as Selectable)?.RefreshVisual();
+                    break;
+                case Kind.PanelOpen:
+                    fx.SetPanelOpen(value > 0.5f);
+                    (owner as Selectable)?.RefreshVisual();
+                    break;
                 case Kind.Height:
                     float dy = value - fx.transform.position.y;
-                    var owner = _params.Owner;
                     // through the selection adapter so attached wire ends ride along
                     if (owner != null && owner.IsAlive) owner.MoveBy(new Vector3(0f, dy, 0f));
                     else fx.MoveBy(new Vector3(0f, dy, 0f));

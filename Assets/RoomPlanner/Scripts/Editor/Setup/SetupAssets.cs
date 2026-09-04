@@ -3,6 +3,7 @@ using System.IO;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
+using RoomPlanner.Electrical;
 using RoomPlanner.Tools;
 
 namespace RoomPlanner.EditorTools
@@ -77,8 +78,17 @@ namespace RoomPlanner.EditorTools
             // outlets/switches = glossy trade plastic, wires = satin PVC sheath.
             ctx.WireMat = CreatePlainLitMat("Electric_Wire", new Color(0.102f, 0.102f, 0.102f));
             MakeGlossy(ctx.WireMat, 0.30f);
-            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", new Color(0.92f, 0.92f, 0.91f));
+            Texture2D plasticNormal = CreateElectricalNormalTexture("Electric_PlasticNormal", false);
+            Texture2D metalNormal = CreateElectricalNormalTexture("Electric_BrushedNormal", true);
+            ctx.FixtureMat = CreatePlainLitMat("Electric_Fixture", ElectricFixture.WhitePlastic);
             MakeGlossy(ctx.FixtureMat, 0.55f);
+            ApplyNormalMap(ctx.FixtureMat, plasticNormal, 0.22f, 12f);
+            ctx.FixtureDetailMat = CreatePlainLitMat("Electric_Detail", ElectricFixture.DarkDetail);
+            MakeGlossy(ctx.FixtureDetailMat, 0.12f);
+            ctx.FixtureMetalMat = CreatePlainLitMat("Electric_Metal", ElectricFixture.BrushedMetal);
+            MakeGlossy(ctx.FixtureMetalMat, 0.38f);
+            if (ctx.FixtureMetalMat.HasProperty("_Metallic")) ctx.FixtureMetalMat.SetFloat("_Metallic", 0.65f);
+            ApplyNormalMap(ctx.FixtureMetalMat, metalNormal, 0.35f, 20f);
 
             ctx.PanelMat = CreateMat("Menu_Panel", UiColors.PanelBg);   // opaque (no shader-variant stripping on device)
             ctx.RimMat = CreateMat("Menu_Rim", UiColors.PanelRim);
@@ -295,6 +305,16 @@ namespace RoomPlanner.EditorTools
             mat.mainTextureScale = Vector2.one;   // scale lives in the metric UVs, not here
         }
 
+        private static void ApplyNormalMap(Material mat, Texture2D normal, float strength,
+            float repeatsPerMetre)
+        {
+            if (mat == null || normal == null || !mat.HasProperty("_BumpMap")) return;
+            mat.SetTexture("_BumpMap", normal);
+            mat.SetTextureScale("_BumpMap", Vector2.one * repeatsPerMetre);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", strength);
+            mat.EnableKeyword("_NORMALMAP");
+        }
+
         /// <summary>
         /// Seamless concrete: a few octaves of PERIODIC value noise plus fine speckle. Periodic
         /// means the lattice wraps, so the tile repeats without a visible seam — which matters
@@ -335,6 +355,43 @@ namespace RoomPlanner.EditorTools
             tex.SetPixels(px);
             tex.Apply();
 
+            AssetDatabase.CreateAsset(tex, path);
+            return tex;
+        }
+
+        /// <summary>Small deterministic tangent-space relief. Plastic gets a quiet grain;
+        /// metal gets directional brushing. Kept procedural so no binary texture is added.</summary>
+        private static Texture2D CreateElectricalNormalTexture(string name, bool brushed)
+        {
+            string path = $"{MatDir}/{name}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 32;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, true)
+            {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                anisoLevel = 4,
+                name = name,
+            };
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float noiseX = Hash(x * 73856093 ^ y * 19349663) - 0.5f;
+                float noiseY = Hash(x * 83492791 ^ y * 297121507) - 0.5f;
+                float nx = brushed ? noiseX * 0.025f : noiseX * 0.055f;
+                float ny = brushed
+                    ? Mathf.Sin(y * Mathf.PI * 0.5f) * 0.09f + noiseY * 0.018f
+                    : noiseY * 0.055f;
+                float nz = Mathf.Sqrt(Mathf.Max(0.001f, 1f - nx * nx - ny * ny));
+                float ex = nx * 0.5f + 0.5f;
+                pixels[y * size + x] = new Color(ex, ny * 0.5f + 0.5f,
+                    nz * 0.5f + 0.5f, ex); // R and A both carry X (RGB/DXT5nm paths)
+            }
+            tex.SetPixels(pixels);
+            tex.Apply();
             AssetDatabase.CreateAsset(tex, path);
             return tex;
         }

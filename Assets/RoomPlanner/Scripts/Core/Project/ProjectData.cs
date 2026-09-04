@@ -119,6 +119,8 @@ namespace RoomPlanner.Core.Project
         public int Kind;                  // FixtureKind as int
         public int Posts = 1, Keys = 1;
         public int Reserve = -1;          // panel BOM reserve %; -1 = default
+        public bool Black;                // white trade plastic / matte-black variant
+        public bool PanelOpen;            // panel door pose; false for legacy files
         public Vector3 Position;
         public Quaternion Rotation = Quaternion.identity;
         public float BaseLevel;

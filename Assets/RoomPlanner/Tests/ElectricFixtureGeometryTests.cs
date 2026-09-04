@@ -61,9 +61,11 @@ namespace RoomPlanner.Tests
             _fixture.Build(FixtureKind.Switch, 1, 1);
             int oneKey = Mesh.vertexCount;
             _fixture.Build(FixtureKind.Switch, 1, 3);
-            Assert.AreEqual(oneKey + 2 * 24, Mesh.vertexCount, "each key is one more box (24 verts)");
+            Assert.Greater(Mesh.vertexCount, oneKey, "each key adds a separate chamfered rocker");
             Assert.AreEqual(ElectricalDefaults.PostModule, Mesh.bounds.size.x, 1e-4,
                 "multi-key switch keeps the single-module frame");
+            Assert.Greater(ElectricFixture.SwitchKeyGap, 0f);
+            Assert.Greater(ElectricFixture.RockerTiltDegrees, 0f);
         }
 
         [Test]
@@ -108,15 +110,88 @@ namespace RoomPlanner.Tests
         public void Meshes_AreWoundOutward_PositiveVolume()
         {
             _fixture.Build(FixtureKind.Outlet, 2, 1);
-            float expected = 2 * ElectricalDefaults.PostModule * ElectricalDefaults.PostModule
-                * ElectricalDefaults.PlateDepth + 2 * 0.06f * 0.06f * 0.006f;
-            Assert.AreEqual(expected, SignedVolume(), expected * 0.01f,
-                "negative/short volume = inverted faces (rule 1.1)");
+            Assert.Greater(SignedVolume(), 0f,
+                "negative volume = inverted chamfer/cup faces (rule 1.1)");
 
             _fixture.Build(FixtureKind.Panel, 1, 1);
             Assert.Greater(SignedVolume(), 0f);
             _fixture.Build(FixtureKind.Switch, 1, 2);
             Assert.Greater(SignedVolume(), 0f);
+        }
+
+        [Test]
+        public void Outlet_HasChamferedPlateRecessedCupAndVisiblePinHoles()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            Assert.AreEqual(ElectricFixture.SubmeshCount, Mesh.subMeshCount);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.PlasticSubmesh).Length, 36,
+                "plate plus recessed cup needs more geometry than a raw box");
+            Assert.GreaterOrEqual(Mesh.GetTriangles(ElectricFixture.DetailSubmesh).Length, 60,
+                "two ten-sided pin holes are carried by the dark detail material");
+            Assert.Greater(ElectricFixture.PlateChamfer, 0f);
+            Assert.Greater(ElectricFixture.SocketCupDepth, 0f);
+        }
+
+        [Test]
+        public void PlateChamferFaces_AreAllWoundOutward()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            var vertices = Mesh.vertices;
+            var plateTriangles = Mesh.GetTriangles(ElectricFixture.PlasticSubmesh);
+            var plateCenter = new Vector3(0f, 0f, ElectricalDefaults.PlateDepth * 0.5f);
+            const int plateIndexCount = 10 * 6; // ten quads in AddFrontChamferedBox
+            for (int i = 0; i < plateIndexCount; i += 3)
+            {
+                Vector3 a = vertices[plateTriangles[i]];
+                Vector3 b = vertices[plateTriangles[i + 1]];
+                Vector3 c = vertices[plateTriangles[i + 2]];
+                Vector3 normal = Vector3.Cross(b - a, c - a);
+                Vector3 fromCenter = (a + b + c) / 3f - plateCenter;
+                Assert.Greater(Vector3.Dot(normal, fromCenter), 0f,
+                    $"plate triangle {i / 3} points inward");
+            }
+        }
+
+        [Test]
+        public void FixtureUvs_AreMetric_NotNormalizedPerObject()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1);
+            var uv = Mesh.uv;
+            float max = 0f;
+            foreach (var p in uv) max = Mathf.Max(max, p.x, p.y);
+            Assert.Greater(max, 0.20f, "a 45 cm panel must span a comparable UV distance");
+            Assert.Less(max, 1f, "fixture UVs are metres, not a full 0..1 tile per face");
+        }
+
+        [Test]
+        public void PanelOpen_RevealsDinRailsAndBreakers_AndDoorSwingsOut()
+        {
+            _fixture.Build(FixtureKind.Panel, 1, 1, false, false);
+            int closedVertices = Mesh.vertexCount;
+            float closedDepth = Mesh.bounds.size.z;
+
+            _fixture.SetPanelOpen(true);
+
+            Assert.IsTrue(_fixture.PanelOpen);
+            Assert.Greater(Mesh.vertexCount, closedVertices, "open panel adds DIN rails and breakers");
+            Assert.Greater(Mesh.bounds.size.z, closedDepth, "the hinged door swings into the room");
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.MetalSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.DetailSubmesh).Length, 0);
+            Assert.Greater(Mesh.GetTriangles(ElectricFixture.PlasticSubmesh).Length, 0);
+        }
+
+        [Test]
+        public void BlackVariant_UsesPropertyBlocksWithoutRebuilding()
+        {
+            _fixture.Build(FixtureKind.Outlet, 1, 1);
+            var before = Mesh;
+            _fixture.SetBlackVariant(true);
+
+            Assert.IsTrue(_fixture.BlackVariant);
+            Assert.AreSame(before, Mesh);
+            var block = new MaterialPropertyBlock();
+            _go.GetComponent<MeshRenderer>().GetPropertyBlock(block, ElectricFixture.PlasticSubmesh);
+            Assert.AreEqual(ElectricFixture.BlackPlastic, block.GetColor("_BaseColor"));
         }
 
         [Test]

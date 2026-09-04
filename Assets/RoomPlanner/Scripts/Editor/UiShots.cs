@@ -39,6 +39,7 @@ namespace RoomPlanner.EditorTools
                 ShotInspectorShowcase(cam, ctx);
                 ShotNumpad(cam, ctx);
                 ShotEveryTool(cam, ctx);
+                ShotElectricalFixtures(cam, ctx);
 
                 Debug.Log("[CI] ui-shots saved to Build/ui-shots");
             }
@@ -50,6 +51,46 @@ namespace RoomPlanner.EditorTools
         }
 
         // ---- compositions ----
+
+        private static void ShotElectricalFixtures(Camera cam, RigContext ctx)
+        {
+            var root = new GameObject("ElectricalFixturesShot");
+            var lightGo = new GameObject("FixtureKeyLight");
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Directional;
+            light.intensity = 1.25f;
+            lightGo.transform.rotation = Quaternion.Euler(35f, -25f, 0f);
+
+            var specs = new[]
+            {
+                (RoomPlanner.Electrical.FixtureKind.Outlet, 2, 1, false, false,
+                    new Vector3(-0.42f, 0.10f, 0f)),
+                (RoomPlanner.Electrical.FixtureKind.Switch, 1, 3, false, false,
+                    new Vector3(-0.15f, 0.10f, 0f)),
+                (RoomPlanner.Electrical.FixtureKind.Outlet, 1, 1, true, false,
+                    new Vector3(0.10f, 0.10f, 0f)),
+                (RoomPlanner.Electrical.FixtureKind.Panel, 1, 1, false, true,
+                    new Vector3(0.48f, 0f, 0f)),
+            };
+            foreach (var spec in specs)
+            {
+                var go = new GameObject(spec.Item1.ToString());
+                go.transform.SetParent(root.transform, false);
+                go.transform.localPosition = spec.Item6;
+                go.AddComponent<MeshFilter>();
+                go.AddComponent<MeshRenderer>().sharedMaterials = new[]
+                {
+                    ctx.FixtureMat, ctx.FixtureDetailMat, ctx.FixtureMetalMat,
+                };
+                go.AddComponent<RoomPlanner.Electrical.ElectricFixture>()
+                    .Build(spec.Item1, spec.Item2, spec.Item3, spec.Item4, spec.Item5);
+            }
+
+            Shoot(cam, new Vector3(0f, 0.18f, 1.65f), new Vector3(0.08f, 0.05f, 0f),
+                "electrical-fixtures", 1600, 900);
+            UnityEngine.Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(lightGo);
+        }
 
         private static void ShotRadial(Camera cam, RigContext ctx)
         {
@@ -279,6 +320,11 @@ namespace RoomPlanner.EditorTools
             ctx.IconMat = Load("Ui_Icon");
             ctx.InsetMat = Load("Ui_Inset");
             ctx.ScrimMat = Load("Ui_RadialScrim");
+            ctx.FixtureMat = Load("Electric_Fixture");
+            ctx.FixtureDetailMat = AssetDatabase.LoadAssetAtPath<Material>(
+                $"{SetupAssets.MatDir}/Electric_Detail.mat") ?? ctx.FixtureMat;
+            ctx.FixtureMetalMat = AssetDatabase.LoadAssetAtPath<Material>(
+                $"{SetupAssets.MatDir}/Electric_Metal.mat") ?? ctx.FixtureMat;
         }
 
         private static void Shoot(Camera cam, Vector3 from, Vector3 at, string name,
